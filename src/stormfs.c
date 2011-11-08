@@ -10,6 +10,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -22,18 +23,20 @@ enum {
   KEY_FOREGROUND,
 };
 
-struct stormfs {
+struct options {
+  char *url;
+  char *bucket;
   int foreground;
-  int url;
-};
+} options;
 
-static struct stormfs stormfs;
+#define STORMFS_OPT(t, p, v) { t, offsetof(struct options, p), v }
 
-#define STORMFS_OPT_KEY(t, p, v) { t, offsetof(struct stormfs, p), v }
 static struct fuse_opt stormfs_opts[] = 
 {
-  // STORMFS_OPT_KEY("url=%s",   url,  0),
+  STORMFS_OPT("url=%s",   url,  0),
 
+  FUSE_OPT_KEY("-d",            KEY_FOREGROUND),
+  FUSE_OPT_KEY("debug",         KEY_FOREGROUND),
   FUSE_OPT_KEY("-f",            KEY_FOREGROUND),
   FUSE_OPT_KEY("--foreground",  KEY_FOREGROUND),
   FUSE_OPT_KEY("-h",            KEY_HELP),
@@ -78,6 +81,32 @@ stormfs_read(const char *path, char *buf, size_t size, off_t offset,
 }
 
 static int
+stormfs_opt_proc(void *data, const char *arg, int key,
+                 struct fuse_args *outargs)
+{
+  switch(key) {
+    case FUSE_OPT_KEY_OPT:
+      return 1;
+
+    case FUSE_OPT_KEY_NONOPT:
+      if(!options.bucket) {
+        options.bucket = strdup(arg);
+        return 0;
+      }
+
+      return 1;
+
+    case KEY_FOREGROUND:
+      options.foreground = 1;
+      return 1;
+
+    default:
+      fprintf(stderr, "error parsing options\n");
+      exit(EXIT_FAILURE);
+  }
+}
+
+static int
 stormfs_fuse_main(struct fuse_args *args)
 {
   return fuse_main(args->argc, args->argv, &stormfs_oper, NULL);
@@ -89,11 +118,11 @@ main(int argc, char *argv[])
   int status;
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-  memset(&stormfs, 0, sizeof(struct stormfs));
-  if(fuse_opt_parse(&args, &stormfs, stormfs_opts, NULL) == -1)
+  memset(&options, 0, sizeof(struct options));
+  if(fuse_opt_parse(&args, &options, stormfs_opts, stormfs_opt_proc) == -1)
     return EXIT_FAILURE;
 
-  status = fuse_main(args.argc, args.argv, &stormfs_oper, NULL);
+  status = stormfs_fuse_main(&args);
 
   fuse_opt_free_args(&args);
 
