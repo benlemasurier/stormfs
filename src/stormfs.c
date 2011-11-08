@@ -134,7 +134,11 @@ main(int argc, char *argv[])
 
   DEBUG("STORMFS version: %s\n", PACKAGE_VERSION);
 
-  stormfs_curl_init();
+  if((status = stormfs_curl_init()) != 0) {
+    fprintf(stderr, "unable to initialize libcurl\n");
+    return EXIT_FAILURE;
+  }
+
   status = stormfs_fuse_main(&args);
 
   fuse_opt_free_args(&args);

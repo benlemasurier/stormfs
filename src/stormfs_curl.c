@@ -26,5 +26,11 @@ stormfs_curl_init()
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
     return -1;
 
+  stormfs_curl = curl_easy_init();
+  if(stormfs_curl == NULL)
+    return -1;
+
+  curl_easy_setopt(stormfs_curl, CURLOPT_NOPROGRESS, 1L);
+
   return 0;
 }
