@@ -141,6 +141,7 @@ main(int argc, char *argv[])
 
   status = stormfs_fuse_main(&args);
 
+  stormfs_curl_destroy();
   fuse_opt_free_args(&args);
 
   return status;

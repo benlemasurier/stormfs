@@ -34,3 +34,9 @@ stormfs_curl_init()
 
   return 0;
 }
+
+void
+stormfs_curl_destroy()
+{
+  curl_easy_cleanup(stormfs_curl);
+}
