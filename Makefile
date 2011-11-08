@@ -34,7 +34,7 @@ POST_UNINSTALL = :
 subdir = .
 DIST_COMMON = $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
-	$(top_srcdir)/configure AUTHORS COPYING NEWS depcomp \
+	$(top_srcdir)/configure AUTHORS COPYING INSTALL NEWS depcomp \
 	install-sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -107,7 +107,7 @@ AUTOMAKE = ${SHELL} /home/ben/code/stormfs/missing --run automake-1.11
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2
+CFLAGS = -g -O2 -Wall -W
 CPPFLAGS = 
 CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
@@ -125,7 +125,7 @@ INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LDFLAGS = 
 LIBOBJS = 
-LIBS = 
+LIBS = -lfuse -lcurl
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} /home/ben/code/stormfs/missing --run makeinfo
 MKDIR_P = /bin/mkdir -p

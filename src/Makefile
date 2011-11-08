@@ -47,7 +47,8 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_stormfs_OBJECTS = stormfs-stormfs.$(OBJEXT)
 stormfs_OBJECTS = $(am_stormfs_OBJECTS)
-stormfs_DEPENDENCIES =
+am__DEPENDENCIES_1 =
+stormfs_DEPENDENCIES = $(am__DEPENDENCIES_1)
 stormfs_LINK = $(CCLD) $(stormfs_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
 DEFAULT_INCLUDES = -I. -I$(top_builddir)
@@ -71,7 +72,7 @@ AUTOMAKE = ${SHELL} /home/ben/code/stormfs/missing --run automake-1.11
 AWK = gawk
 CC = gcc
 CCDEPMODE = depmode=gcc3
-CFLAGS = -g -O2
+CFLAGS = -g -O2 -Wall -W
 CPPFLAGS = 
 CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
@@ -89,7 +90,7 @@ INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LDFLAGS = 
 LIBOBJS = 
-LIBS = 
+LIBS = -lfuse -lcurl
 LTLIBOBJS = 
 MAKEINFO = ${SHELL} /home/ben/code/stormfs/missing --run makeinfo
 MKDIR_P = /bin/mkdir -p
@@ -152,8 +153,8 @@ top_build_prefix = ../
 top_builddir = ..
 top_srcdir = ..
 stormfs_SOURCES = stormfs.c
-stormfs_LDADD = -lfuse
-stormfs_CFLAGS = -D_FILE_OFFSET_BITS=64
+stormfs_LDADD = $(LIBS)
+stormfs_CFLAGS = -D_REENTRANT -DFUSE_USE_VERSION=26 -D_FILE_OFFSET_BITS=64 
 all: all-am
 
 .SUFFIXES:

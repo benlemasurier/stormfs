@@ -7,7 +7,9 @@
  */
 
 #define FUSE_USE_VERSION 26
+#define _GNU_SOURCE
 
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -24,16 +26,18 @@ enum {
 };
 
 struct options {
+  int debug;
+  int foreground;
   char *url;
   char *bucket;
-  int foreground;
 } options;
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct options, p), v }
 
 static struct fuse_opt stormfs_opts[] = 
 {
-  STORMFS_OPT("url=%s",   url,  0),
+  STORMFS_OPT("url=%s",        url,    0),
+  STORMFS_OPT("stormfs_debug", debug,  1),
 
   FUSE_OPT_KEY("-d",            KEY_FOREGROUND),
   FUSE_OPT_KEY("debug",         KEY_FOREGROUND),
@@ -45,6 +49,10 @@ static struct fuse_opt stormfs_opts[] =
   FUSE_OPT_KEY("--version",     KEY_VERSION),
   FUSE_OPT_END
 };
+
+
+#define DEBUG(format, args...) \
+        do { if (options.debug) fprintf(stderr, format, args); } while(0)
 
 static struct 
 fuse_operations stormfs_oper = {
@@ -121,6 +129,8 @@ main(int argc, char *argv[])
   memset(&options, 0, sizeof(struct options));
   if(fuse_opt_parse(&args, &options, stormfs_opts, stormfs_opt_proc) == -1)
     return EXIT_FAILURE;
+
+  DEBUG("STORMFS version %s\n", PACKAGE_VERSION);
 
   status = stormfs_fuse_main(&args);
 
