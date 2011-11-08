@@ -6,10 +6,11 @@ depcomp
 install-sh
 missing
 .deps/
-stormfs.o
+stormfs*.o
 stamp-h1
 config.*
 config.status
 Makefile.in
+stormfs
 
 src/Makefile.in
