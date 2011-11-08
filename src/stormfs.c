@@ -25,7 +25,8 @@ enum {
   KEY_FOREGROUND,
 };
 
-struct options {
+struct
+options {
   int debug;
   int foreground;
   char *url;
@@ -34,7 +35,8 @@ struct options {
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct options, p), v }
 
-static struct fuse_opt stormfs_opts[] = 
+static struct 
+fuse_opt stormfs_opts[] = 
 {
   STORMFS_OPT("url=%s",        url,    0),
   STORMFS_OPT("stormfs_debug", debug,  1),
@@ -49,7 +51,6 @@ static struct fuse_opt stormfs_opts[] =
   FUSE_OPT_KEY("--version",     KEY_VERSION),
   FUSE_OPT_END
 };
-
 
 #define DEBUG(format, args...) \
         do { if (options.debug) fprintf(stderr, format, args); } while(0)
@@ -130,7 +131,7 @@ main(int argc, char *argv[])
   if(fuse_opt_parse(&args, &options, stormfs_opts, stormfs_opt_proc) == -1)
     return EXIT_FAILURE;
 
-  DEBUG("STORMFS version %s\n", PACKAGE_VERSION);
+  DEBUG("STORMFS version: %s\n", PACKAGE_VERSION);
 
   status = stormfs_fuse_main(&args);
 
