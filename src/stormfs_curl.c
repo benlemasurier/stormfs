@@ -16,7 +16,6 @@
 #include <curl/easy.h>
 #include "stormfs_curl.h"
 
-static unsigned char CURL_INITIALIZED = 0;
 static CURL *stormfs_curl;
 
 int
@@ -26,8 +25,6 @@ stormfs_curl_init()
 
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
     return -1;
-
-  CURL_INITIALIZED = 1;
 
   return 0;
 }
