@@ -25,6 +25,8 @@
 #include <fcntl.h>
 #include <fuse.h>
 
+#include "stormfs.h"
+
 static int stormfs_getattr(const char *path, struct stat *stbuf)
 {
   return -ENOENT;
@@ -47,14 +49,15 @@ static int stormfs_read(const char *path, char *buf, size_t size, off_t offset,
   return -ENOENT;
 }
 
-static struct fuse_operations stormfs_oper = {
-    .getattr	= stormfs_getattr,
-    .readdir	= stormfs_readdir,
-    .open	= stormfs_open,
-    .read	= stormfs_read,
-};
-
 int main(int argc, char *argv[])
 {
-    return fuse_main(argc, argv, &stormfs_oper, NULL);
+  // map FUSE bindings
+  memset(&stormfs_oper, 0, sizeof(stormfs_oper));
+  stormfs_oper.getattr = stormfs_getattr;
+  stormfs_oper.readdir = stormfs_readdir;
+  stormfs_oper.open    = stormfs_open;
+  stormfs_oper.read    = stormfs_read;
+
+  // hand off control to FUSE
+  return fuse_main(argc, argv, &stormfs_oper, NULL);
 }
