@@ -1,5 +1,5 @@
 /*
- * stormfs - A FUSE abstraction layer for "cloud" drives
+ * stormfs - A FUSE abstraction layer for cloud storage
  * Copyright (C) 2011 Ben LeMasurier <ben.lemasurier@gmail.com>
  * 
  * This program is free software; you can redistribute it and/or
@@ -27,29 +27,34 @@
 
 #include "stormfs.h"
 
-static int stormfs_getattr(const char *path, struct stat *stbuf)
+static int
+stormfs_getattr(const char *path, struct stat *stbuf)
 {
   return -ENOENT;
 }
 
-static int stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
+static int
+stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
                            off_t offset, struct fuse_file_info *fi)
 {
   return -ENOENT;
 }
 
-static int stormfs_open(const char *path, struct fuse_file_info *fi)
+static int
+stormfs_open(const char *path, struct fuse_file_info *fi)
 {
   return -ENOENT;
 }
 
-static int stormfs_read(const char *path, char *buf, size_t size, off_t offset,
+static int
+stormfs_read(const char *path, char *buf, size_t size, off_t offset,
                         struct fuse_file_info *fi)
 {
   return -ENOENT;
 }
 
-int main(int argc, char *argv[])
+int
+main(int argc, char *argv[])
 {
   // map FUSE bindings
   memset(&stormfs_oper, 0, sizeof(stormfs_oper));
