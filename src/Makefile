@@ -45,7 +45,8 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_stormfs_OBJECTS = stormfs-stormfs.$(OBJEXT)
+am_stormfs_OBJECTS = stormfs-stormfs_curl.$(OBJEXT) \
+	stormfs-stormfs.$(OBJEXT)
 stormfs_OBJECTS = $(am_stormfs_OBJECTS)
 am__DEPENDENCIES_1 =
 stormfs_DEPENDENCIES = $(am__DEPENDENCIES_1)
@@ -152,7 +153,7 @@ target_alias =
 top_build_prefix = ../
 top_builddir = ..
 top_srcdir = ..
-stormfs_SOURCES = stormfs.c
+stormfs_SOURCES = stormfs_curl.c stormfs.c
 stormfs_LDADD = $(LIBS)
 stormfs_CFLAGS = -D_REENTRANT -DFUSE_USE_VERSION=26 -D_FILE_OFFSET_BITS=64 
 all: all-am
@@ -237,6 +238,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 include ./$(DEPDIR)/stormfs-stormfs.Po
+include ./$(DEPDIR)/stormfs-stormfs_curl.Po
 
 .c.o:
 	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -251,6 +253,20 @@ include ./$(DEPDIR)/stormfs-stormfs.Po
 #	source='$<' object='$@' libtool=no \
 #	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
 #	$(COMPILE) -c `$(CYGPATH_W) '$<'`
+
+stormfs-stormfs_curl.o: stormfs_curl.c
+	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stormfs_CFLAGS) $(CFLAGS) -MT stormfs-stormfs_curl.o -MD -MP -MF $(DEPDIR)/stormfs-stormfs_curl.Tpo -c -o stormfs-stormfs_curl.o `test -f 'stormfs_curl.c' || echo '$(srcdir)/'`stormfs_curl.c
+	$(am__mv) $(DEPDIR)/stormfs-stormfs_curl.Tpo $(DEPDIR)/stormfs-stormfs_curl.Po
+#	source='stormfs_curl.c' object='stormfs-stormfs_curl.o' libtool=no \
+#	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
+#	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stormfs_CFLAGS) $(CFLAGS) -c -o stormfs-stormfs_curl.o `test -f 'stormfs_curl.c' || echo '$(srcdir)/'`stormfs_curl.c
+
+stormfs-stormfs_curl.obj: stormfs_curl.c
+	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stormfs_CFLAGS) $(CFLAGS) -MT stormfs-stormfs_curl.obj -MD -MP -MF $(DEPDIR)/stormfs-stormfs_curl.Tpo -c -o stormfs-stormfs_curl.obj `if test -f 'stormfs_curl.c'; then $(CYGPATH_W) 'stormfs_curl.c'; else $(CYGPATH_W) '$(srcdir)/stormfs_curl.c'; fi`
+	$(am__mv) $(DEPDIR)/stormfs-stormfs_curl.Tpo $(DEPDIR)/stormfs-stormfs_curl.Po
+#	source='stormfs_curl.c' object='stormfs-stormfs_curl.obj' libtool=no \
+#	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) \
+#	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stormfs_CFLAGS) $(CFLAGS) -c -o stormfs-stormfs_curl.obj `if test -f 'stormfs_curl.c'; then $(CYGPATH_W) 'stormfs_curl.c'; else $(CYGPATH_W) '$(srcdir)/stormfs_curl.c'; fi`
 
 stormfs-stormfs.o: stormfs.c
 	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(stormfs_CFLAGS) $(CFLAGS) -MT stormfs-stormfs.o -MD -MP -MF $(DEPDIR)/stormfs-stormfs.Tpo -c -o stormfs-stormfs.o `test -f 'stormfs.c' || echo '$(srcdir)/'`stormfs.c

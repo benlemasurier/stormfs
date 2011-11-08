@@ -18,6 +18,7 @@
 #include <fcntl.h>
 #include <fuse.h>
 #include "stormfs.h"
+#include "stormfs_curl.h"
 
 enum {
   KEY_HELP,
@@ -133,6 +134,7 @@ main(int argc, char *argv[])
 
   DEBUG("STORMFS version: %s\n", PACKAGE_VERSION);
 
+  stormfs_curl_init();
   status = stormfs_fuse_main(&args);
 
   fuse_opt_free_args(&args);
