@@ -34,8 +34,8 @@ POST_UNINSTALL = :
 subdir = .
 DIST_COMMON = $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
-	$(top_srcdir)/configure AUTHORS NEWS depcomp install-sh \
-	missing
+	$(top_srcdir)/configure AUTHORS COPYING NEWS depcomp \
+	install-sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -112,6 +112,8 @@ CPPFLAGS =
 CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
 DEPDIR = .deps
+DEPS_CFLAGS = -D_FILE_OFFSET_BITS=64 -I/usr/include/fuse  
+DEPS_LIBS = -pthread -lfuse -lrt -ldl -lcurl  
 ECHO_C = 
 ECHO_N = -n
 ECHO_T = 
@@ -136,6 +138,9 @@ PACKAGE_TARNAME = stormfs
 PACKAGE_URL = 
 PACKAGE_VERSION = 0.01
 PATH_SEPARATOR = :
+PKG_CONFIG = /usr/bin/pkg-config
+PKG_CONFIG_LIBDIR = 
+PKG_CONFIG_PATH = 
 SET_MAKE = 
 SHELL = /bin/bash
 STRIP = 

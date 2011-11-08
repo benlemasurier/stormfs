@@ -10,4 +10,6 @@ AC_PROG_INSTALL
 
 AC_CONFIG_FILES([Makefile src/Makefile])
 
+PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4, libcurl >= 7.0])
+
 AC_OUTPUT
