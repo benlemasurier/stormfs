@@ -28,10 +28,12 @@ enum {
 
 struct
 options {
+  int ssl;
   int debug;
   int foreground;
   char *url;
   char *bucket;
+  char *virtual_url;
 } options;
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct options, p), v }
@@ -40,6 +42,7 @@ static struct
 fuse_opt stormfs_opts[] = 
 {
   STORMFS_OPT("url=%s",        url,    0),
+  STORMFS_OPT("use_ssl",       ssl,    1),
   STORMFS_OPT("stormfs_debug", debug,  1),
 
   FUSE_OPT_KEY("-d",            KEY_FOREGROUND),
@@ -122,6 +125,29 @@ stormfs_fuse_main(struct fuse_args *args)
   return fuse_main(args->argc, args->argv, &stormfs_oper, NULL);
 }
 
+char *
+stormfs_virtual_url(char *url, char *bucket)
+{
+  char *tmp;
+  char v[strlen(url) + strlen(bucket) + 9];
+
+  if(options.ssl || (strcasestr(url, "https://")) != NULL) {
+    strcpy(v, "https://");
+    strncat(v, bucket, strlen(bucket));
+    strncat(v, ".", 1);
+    strncat(v, url + 8, strlen(url) - 8);
+  } else {
+    strcpy(v, "http://");
+    strncat(v, bucket, strlen(bucket));
+    strncat(v, ".", 1);
+    strncat(v, url + 7, strlen(url) - 7);
+  }
+
+  tmp = strdup(v);
+
+  return tmp;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -132,9 +158,17 @@ main(int argc, char *argv[])
   if(fuse_opt_parse(&args, &options, stormfs_opts, stormfs_opt_proc) == -1)
     return EXIT_FAILURE;
 
-  DEBUG("STORMFS version: %s\n", PACKAGE_VERSION);
+  if(!options.url)
+    options.url = "http://s3.amazonaws.com";
 
-  if((status = stormfs_curl_init()) != 0) {
+  options.virtual_url = stormfs_virtual_url(options.url, options.bucket);
+
+  DEBUG("STORMFS version:     %s\n", PACKAGE_VERSION);
+  DEBUG("STORMFS url:         %s\n", options.url);
+  DEBUG("STORMFS bucket:      %s\n", options.bucket);
+  DEBUG("STORMFS virtual url: %s\n", options.virtual_url);
+
+  if((status = stormfs_curl_init(options.url)) != 0) {
     fprintf(stderr, "unable to initialize libcurl\n");
     return EXIT_FAILURE;
   }
@@ -143,6 +177,7 @@ main(int argc, char *argv[])
 
   stormfs_curl_destroy();
   fuse_opt_free_args(&args);
+  free(options.virtual_url);
 
   return status;
 }

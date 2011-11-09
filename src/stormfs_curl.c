@@ -18,8 +18,12 @@
 
 static CURL *stormfs_curl;
 
+struct options {
+  char *url;
+} options;
+
 int
-stormfs_curl_init()
+stormfs_curl_init(const char *url)
 {
   CURLcode result;
 
