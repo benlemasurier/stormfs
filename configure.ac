@@ -11,6 +11,7 @@ AC_PROG_INSTALL
 CFLAGS="$CFLAGS -Wall -W"
 LIBS="-lfuse -lcurl"
 
+AM_PATH_LIBGCRYPT
 PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4, libcurl >= 7.0])
 
 AC_CONFIG_FILES([Makefile src/Makefile])

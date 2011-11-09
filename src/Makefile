@@ -49,7 +49,7 @@ am_stormfs_OBJECTS = stormfs-stormfs_curl.$(OBJEXT) \
 	stormfs-stormfs.$(OBJEXT)
 stormfs_OBJECTS = $(am_stormfs_OBJECTS)
 am__DEPENDENCIES_1 =
-stormfs_DEPENDENCIES = $(am__DEPENDENCIES_1)
+stormfs_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 stormfs_LINK = $(CCLD) $(stormfs_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
 	$(LDFLAGS) -o $@
 DEFAULT_INCLUDES = -I. -I$(top_builddir)
@@ -90,6 +90,9 @@ INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LDFLAGS = 
+LIBGCRYPT_CFLAGS = 
+LIBGCRYPT_CONFIG = /usr/bin/libgcrypt-config
+LIBGCRYPT_LIBS = -L/lib/x86_64-linux-gnu -lgcrypt
 LIBOBJS = 
 LIBS = -lfuse -lcurl
 LTLIBOBJS = 
@@ -154,7 +157,7 @@ top_build_prefix = ../
 top_builddir = ..
 top_srcdir = ..
 stormfs_SOURCES = stormfs_curl.c stormfs.c
-stormfs_LDADD = $(LIBS)
+stormfs_LDADD = $(LIBS) $(LIBGCRYPT_LIBS)
 stormfs_CFLAGS = -D_REENTRANT -DFUSE_USE_VERSION=26 -D_FILE_OFFSET_BITS=64 
 all: all-am
 
