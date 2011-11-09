@@ -26,8 +26,7 @@ enum {
   KEY_FOREGROUND,
 };
 
-struct
-stormfs {
+struct stormfs {
   int ssl;
   int debug;
   int foreground;
@@ -38,9 +37,7 @@ stormfs {
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
 
-static struct 
-fuse_opt stormfs_opts[] = 
-{
+static struct fuse_opt stormfs_opts[] = {
   STORMFS_OPT("url=%s",        url,    0),
   STORMFS_OPT("use_ssl",       ssl,    1),
   STORMFS_OPT("stormfs_debug", debug,  1),
@@ -59,8 +56,7 @@ fuse_opt stormfs_opts[] =
 #define DEBUG(format, args...) \
         do { if (stormfs.debug) fprintf(stderr, format, args); } while(0)
 
-static struct 
-fuse_operations stormfs_oper = {
+static struct fuse_operations stormfs_oper = {
     .getattr  = stormfs_getattr,
     .readdir  = stormfs_readdir,
     .open     = stormfs_open,
@@ -70,6 +66,10 @@ fuse_operations stormfs_oper = {
 static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
+  DEBUG("getattr: %s\n", path);
+
+  stormfs_curl_get(path);
+
   return -ENOTSUP;
 }
 
@@ -77,12 +77,14 @@ static int
 stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
                            off_t offset, struct fuse_file_info *fi)
 {
+  DEBUG("readdir: %s\n", path);
   return -ENOTSUP;
 }
 
 static int
 stormfs_open(const char *path, struct fuse_file_info *fi)
 {
+  DEBUG("open: %s\n", path);
   return -ENOTSUP;
 }
 
@@ -90,6 +92,7 @@ static int
 stormfs_read(const char *path, char *buf, size_t size, off_t offset,
                         struct fuse_file_info *fi)
 {
+  DEBUG("read: %s\n", path);
   return -ENOTSUP;
 }
 
@@ -178,7 +181,7 @@ main(int argc, char *argv[])
   DEBUG("STORMFS bucket:      %s\n", stormfs.bucket);
   DEBUG("STORMFS virtual url: %s\n", stormfs.virtual_url);
 
-  if((status = stormfs_curl_init(stormfs.url)) != 0) {
+  if((status = stormfs_curl_init(stormfs.virtual_url)) != 0) {
     fprintf(stderr, "unable to initialize libcurl\n");
     return EXIT_FAILURE;
   }
