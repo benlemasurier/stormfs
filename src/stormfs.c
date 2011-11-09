@@ -27,16 +27,16 @@ enum {
 };
 
 struct
-options {
+stormfs {
   int ssl;
   int debug;
   int foreground;
   char *url;
   char *bucket;
   char *virtual_url;
-} options;
+} stormfs;
 
-#define STORMFS_OPT(t, p, v) { t, offsetof(struct options, p), v }
+#define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
 
 static struct 
 fuse_opt stormfs_opts[] = 
@@ -57,7 +57,7 @@ fuse_opt stormfs_opts[] =
 };
 
 #define DEBUG(format, args...) \
-        do { if (options.debug) fprintf(stderr, format, args); } while(0)
+        do { if (stormfs.debug) fprintf(stderr, format, args); } while(0)
 
 static struct 
 fuse_operations stormfs_oper = {
@@ -102,15 +102,15 @@ stormfs_opt_proc(void *data, const char *arg, int key,
       return 1;
 
     case FUSE_OPT_KEY_NONOPT:
-      if(!options.bucket) {
-        options.bucket = strdup(arg);
+      if(!stormfs.bucket) {
+        stormfs.bucket = strdup(arg);
         return 0;
       }
 
       return 1;
 
     case KEY_FOREGROUND:
-      options.foreground = 1;
+      stormfs.foreground = 1;
       return 1;
 
     default:
@@ -131,7 +131,7 @@ stormfs_virtual_url(char *url, char *bucket)
   char *tmp;
   char v[strlen(url) + strlen(bucket) + 9];
 
-  if(options.ssl || (strcasestr(url, "https://")) != NULL) {
+  if(stormfs.ssl || (strcasestr(url, "https://")) != NULL) {
     strcpy(v, "https://");
     strncat(v, bucket, strlen(bucket));
     strncat(v, ".", 1);
@@ -148,36 +148,44 @@ stormfs_virtual_url(char *url, char *bucket)
   return tmp;
 }
 
+static int
+stormfs_destroy(struct fuse_args *args)
+{
+  stormfs_curl_destroy();
+  fuse_opt_free_args(args);
+  free(stormfs.virtual_url);
+
+  return 0;
+}
+
 int
 main(int argc, char *argv[])
 {
   int status;
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-  memset(&options, 0, sizeof(struct options));
-  if(fuse_opt_parse(&args, &options, stormfs_opts, stormfs_opt_proc) == -1)
+  memset(&stormfs, 0, sizeof(struct stormfs));
+  if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1)
     return EXIT_FAILURE;
 
-  if(!options.url)
-    options.url = "http://s3.amazonaws.com";
+  if(!stormfs.url)
+    stormfs.url = "http://s3.amazonaws.com";
 
-  options.virtual_url = stormfs_virtual_url(options.url, options.bucket);
+  stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
 
   DEBUG("STORMFS version:     %s\n", PACKAGE_VERSION);
-  DEBUG("STORMFS url:         %s\n", options.url);
-  DEBUG("STORMFS bucket:      %s\n", options.bucket);
-  DEBUG("STORMFS virtual url: %s\n", options.virtual_url);
+  DEBUG("STORMFS url:         %s\n", stormfs.url);
+  DEBUG("STORMFS bucket:      %s\n", stormfs.bucket);
+  DEBUG("STORMFS virtual url: %s\n", stormfs.virtual_url);
 
-  if((status = stormfs_curl_init(options.url)) != 0) {
+  if((status = stormfs_curl_init(stormfs.url)) != 0) {
     fprintf(stderr, "unable to initialize libcurl\n");
     return EXIT_FAILURE;
   }
 
   status = stormfs_fuse_main(&args);
 
-  stormfs_curl_destroy();
-  fuse_opt_free_args(&args);
-  free(options.virtual_url);
+  stormfs_destroy(&args);
 
   return status;
 }
