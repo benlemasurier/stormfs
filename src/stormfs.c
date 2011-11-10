@@ -208,6 +208,8 @@ main(int argc, char *argv[])
     abort();
   }
 
+  stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
+
   status = stormfs_fuse_main(&args);
 
   stormfs_destroy(&args);

@@ -21,6 +21,8 @@
 
 struct stormfs_curl {
   const char *url;
+  const char *access_key;
+  const char *secret_key;
 } stormfs_curl;
 
 struct stormfs_curl_memory {
@@ -137,6 +139,15 @@ stormfs_curl_init(const char *url)
     return -1;
 
   gcry_control(GCRYCTL_DISABLE_SECMEM, 0);
+
+  return 0;
+}
+
+int
+stormfs_curl_set_auth(const char *access_key, const char *secret_key)
+{
+  stormfs_curl.access_key = access_key;
+  stormfs_curl.secret_key = secret_key;
 
   return 0;
 }
