@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fuse.h>
+#include <glib.h>
 #include "stormfs.h"
 #include "stormfs_curl.h"
 
@@ -181,8 +182,10 @@ main(int argc, char *argv[])
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
   memset(&stormfs, 0, sizeof(struct stormfs));
-  if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1)
-    return EXIT_FAILURE;
+  if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
+    fprintf(stderr, "error parsing command-line options\n");
+    abort();
+  }
 
   if(!stormfs.url)
     stormfs.url = "http://s3.amazonaws.com";
@@ -198,7 +201,7 @@ main(int argc, char *argv[])
 
   if((status = stormfs_curl_init(stormfs.virtual_url)) != 0) {
     fprintf(stderr, "unable to initialize libcurl\n");
-    return EXIT_FAILURE;
+    abort();
   }
 
   status = stormfs_fuse_main(&args);
