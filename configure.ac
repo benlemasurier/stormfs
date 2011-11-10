@@ -6,6 +6,7 @@ AC_CONFIG_SRCDIR([src/stormfs.c])
 AC_CONFIG_HEADERS([config.h])
 
 AC_PROG_CC
+AM_PROG_CC_C_O
 AC_PROG_INSTALL
 
 CFLAGS="$CFLAGS -Wall -W"
