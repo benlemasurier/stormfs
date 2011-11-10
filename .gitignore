@@ -8,7 +8,6 @@ missing
 .deps/
 stormfs*.o
 stamp-h1
-config.*
 config.status
 Makefile.in
 stormfs
