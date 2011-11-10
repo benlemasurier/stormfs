@@ -170,7 +170,7 @@ stormfs_destroy(struct fuse_args *args)
 {
   stormfs_curl_destroy();
   fuse_opt_free_args(args);
-  free(stormfs.virtual_url);
+  g_free(stormfs.virtual_url);
 
   return 0;
 }

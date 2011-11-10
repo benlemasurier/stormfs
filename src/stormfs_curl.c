@@ -146,7 +146,7 @@ stormfs_curl_get(const char *path)
   char *url = stormfs_curl_get_url(path);
   struct curl_slist *headers = NULL; 
   struct stormfs_curl_memory data;
-  data.memory = malloc(1);
+  data.memory = g_malloc(1);
   data.size = 0;
 
   headers = curl_slist_append(headers, stormfs_curl_rfc2822_timestamp());
@@ -165,9 +165,9 @@ stormfs_curl_get(const char *path)
   printf("DATA:\n%s\n", data.memory);
 
   if(data.memory)
-    free(data.memory);
+    g_free(data.memory);
 
-  free(url);
+  g_free(url);
   curl_easy_cleanup(c);
   curl_slist_free_all(headers);
 
