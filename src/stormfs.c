@@ -152,6 +152,19 @@ stormfs_virtual_url(char *url, char *bucket)
 }
 
 static int
+stormfs_get_credentials()
+{
+  char *access_key = NULL;
+  char *secret_key = NULL;
+
+  access_key = getenv("AWS_ACCESS_KEY");
+  secret_key = getenv("AWS_SECRET_KEY");
+
+  printf("ACCESS_KEY: %s\n", access_key);
+  printf("SECRET_KEY: %s\n", secret_key);
+}
+
+static int
 stormfs_destroy(struct fuse_args *args)
 {
   stormfs_curl_destroy();
@@ -180,6 +193,8 @@ main(int argc, char *argv[])
   DEBUG("STORMFS url:         %s\n", stormfs.url);
   DEBUG("STORMFS bucket:      %s\n", stormfs.bucket);
   DEBUG("STORMFS virtual url: %s\n", stormfs.virtual_url);
+
+  stormfs_get_credentials();
 
   if((status = stormfs_curl_init(stormfs.virtual_url)) != 0) {
     fprintf(stderr, "unable to initialize libcurl\n");
