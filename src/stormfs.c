@@ -203,7 +203,7 @@ main(int argc, char *argv[])
     abort();
   }
 
-  if((status = stormfs_curl_init(stormfs.virtual_url)) != 0) {
+  if((status = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
     fprintf(stderr, "unable to initialize libcurl\n");
     abort();
   }
