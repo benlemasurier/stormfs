@@ -29,7 +29,8 @@ struct stormfs_curl_memory {
 };
 
 static int
-stormfs_curl_sign_request(struct curl_slist *headers, const char *path)
+stormfs_curl_sign_request(const char *method, 
+                          struct curl_slist *headers, const char *path)
 {
   // TODO:
   char *to_sign = "TEST"; 
@@ -151,7 +152,7 @@ stormfs_curl_get(const char *path)
   data.size = 0;
 
   headers = curl_slist_append(headers, stormfs_curl_rfc2822_timestamp());
-  stormfs_curl_sign_request(headers, path);
+  stormfs_curl_sign_request("GET", headers, path);
 
   c = curl_easy_init();
   stormfs_curl_set_defaults(&c);

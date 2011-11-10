@@ -34,6 +34,8 @@ struct stormfs {
   char *url;
   char *bucket;
   char *virtual_url;
+  char *access_key;
+  char *secret_key;
 } stormfs;
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
@@ -153,16 +155,15 @@ stormfs_virtual_url(char *url, char *bucket)
 }
 
 static int
-stormfs_get_credentials()
+stormfs_get_credentials(char **access_key, char **secret_key)
 {
-  char *access_key = NULL;
-  char *secret_key = NULL;
+  *access_key = getenv("AWS_ACCESS_KEY_ID");
+  *secret_key = getenv("AWS_SECRET_ACCESS_KEY");
 
-  access_key = getenv("AWS_ACCESS_KEY");
-  secret_key = getenv("AWS_SECRET_KEY");
+  if(*access_key == NULL || *secret_key == NULL)
+    return -1;
 
-  printf("ACCESS_KEY: %s\n", access_key);
-  printf("SECRET_KEY: %s\n", secret_key);
+  return 0;
 }
 
 static int
@@ -197,7 +198,10 @@ main(int argc, char *argv[])
   DEBUG("STORMFS bucket:      %s\n", stormfs.bucket);
   DEBUG("STORMFS virtual url: %s\n", stormfs.virtual_url);
 
-  stormfs_get_credentials();
+  if(stormfs_get_credentials(&stormfs.access_key, &stormfs.secret_key) != 0) {
+    fprintf(stderr, "missing api credentials\n");
+    abort();
+  }
 
   if((status = stormfs_curl_init(stormfs.virtual_url)) != 0) {
     fprintf(stderr, "unable to initialize libcurl\n");
