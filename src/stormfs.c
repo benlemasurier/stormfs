@@ -69,9 +69,22 @@ static struct fuse_operations stormfs_oper = {
 static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
+  GList *meta, *head, *next;
+
   DEBUG("getattr: %s\n", path);
 
-  stormfs_curl_get(path);
+  //stormfs_curl_get(path);
+  stormfs_curl_head(path, &meta);
+
+  // FIXME: (testing)
+  head = g_list_first(meta);
+  while(head != NULL) {
+    next = head->next;
+    printf("HEADER VALUE: %s\n", (char *) head->data);
+    head = next;
+  }
+
+  g_list_free(meta);
 
   return -ENOTSUP;
 }

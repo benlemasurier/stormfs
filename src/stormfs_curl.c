@@ -232,6 +232,49 @@ write_memory_cb(void *ptr, size_t size, size_t nmemb, void *data)
   return realsize;
 }
 
+static int
+extract_meta(char *headers, GList **meta)
+{
+  char *p;
+
+  p = strtok(headers, "\n");
+  while(p != NULL) {
+    if(strstr(p, "Content-Type"))
+      *meta = g_list_append(*meta, p);
+    else if(strstr(p, "Content-Length"))
+      *meta = g_list_append(*meta, p);
+    else if(strstr(p, "Last-Modified"))
+      *meta = g_list_append(*meta, p);
+    else if(strstr(p, "ETag"))
+      *meta = g_list_append(*meta, p);
+    else if(strstr(p, "x-amz-"))
+      *meta = g_list_append(*meta, p);
+
+    p = strtok(NULL, "\n");
+  }
+
+  return 0;
+}
+
+static CURL *
+get_curl_handle(const char *url)
+{
+  CURL *c;
+  c = curl_easy_init();
+  set_curl_defaults(&c);
+  curl_easy_setopt(c, CURLOPT_URL, url);
+
+  return c;
+}
+
+static int
+destroy_curl_handle(CURL *c)
+{
+  curl_easy_cleanup(c);
+
+  return 0;
+}
+
 int
 stormfs_curl_init(const char *bucket, const char *url)
 {
@@ -257,32 +300,68 @@ stormfs_curl_set_auth(const char *access_key, const char *secret_key)
 int
 stormfs_curl_get(const char *path)
 {
-  CURL *c;
   char *url = get_url(path);
-  struct curl_slist *headers = NULL; 
+  CURL *c = get_curl_handle(url);
+  struct curl_slist *req_headers = NULL; 
   struct stormfs_curl_memory data;
+
   data.memory = g_malloc(1);
   data.size = 0;
 
-  sign_request("GET", &headers, path);
-
-  c = curl_easy_init();
-  set_curl_defaults(&c);
-  curl_easy_setopt(c, CURLOPT_URL, url);
-  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
+  sign_request("GET", &req_headers, path);
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
   curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &data);
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
+  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
   curl_easy_perform(c);
 
-  printf("DATA:\n%s\n", data.memory);
+  // FIXME: (testing)
+  printf("HTTP BODY:\n%s\n", data.memory);
 
   if(data.memory)
     g_free(data.memory);
 
   g_free(url);
-  curl_easy_cleanup(c);
-  curl_slist_free_all(headers);
+  destroy_curl_handle(c);
+  curl_slist_free_all(req_headers);
+
+  return 0;
+}
+
+int
+stormfs_curl_head(const char *path, GList **meta)
+{
+  char *url = get_url(path);
+  char *response_headers;
+  CURL *c = get_curl_handle(url);
+  struct curl_slist *req_headers = NULL;
+  struct stormfs_curl_memory data;
+
+  data.memory = g_malloc(1);
+  data.size = 0;
+
+  sign_request("HEAD", &req_headers, path);
+  curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    // HEAD
+  curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  // Last-Modified
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  curl_easy_setopt(c, CURLOPT_HEADERDATA, (void *) &data);
+  curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+
+  curl_easy_perform(c);
+
+  response_headers = strdup(data.memory);
+  extract_meta(response_headers, &(*meta));
+
+  // FIXME: (testing)
+  printf("HTTP HEADER:\n%s\n", data.memory);
+
+  if(data.memory)
+    g_free(data.memory);
+
+  g_free(url);
+  g_free(response_headers);
+  destroy_curl_handle(c);
+  curl_slist_free_all(req_headers);
 
   return 0;
 }
