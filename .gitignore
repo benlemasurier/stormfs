@@ -13,7 +13,9 @@ missing
 stormfs*.o
 stamp-h1
 config.status
+Makefile
 Makefile.in
 stormfs
 
+src/Makefile
 src/Makefile.in
