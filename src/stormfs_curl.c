@@ -191,11 +191,11 @@ sign_request(const char *method,
 }
 
 static int
-set_curl_defaults(CURL *c)
+set_curl_defaults(CURL **c)
 {
-  // FIXME: why not work?
-  curl_easy_setopt(c, CURLOPT_NOPROGRESS, 1L);
-  curl_easy_setopt(c, CURLOPT_USERAGENT, "stormfs");
+  curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
+  curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
 
   return 0;
 }
@@ -272,7 +272,6 @@ stormfs_curl_get(const char *path)
   curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
   curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &data);
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
-  curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
 
   curl_easy_perform(c);
 
