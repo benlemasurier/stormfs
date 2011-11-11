@@ -69,7 +69,9 @@ static struct fuse_operations stormfs_oper = {
 static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
-  GList *meta, *head, *next;
+  GList *meta = NULL;
+  GList *head = NULL;
+  GList *next = NULL;
 
   DEBUG("getattr: %s\n", path);
 
@@ -80,8 +82,14 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   head = g_list_first(meta);
   while(head != NULL) {
     next = head->next;
-    printf("HEADER VALUE: %s\n", (char *) head->data);
+    struct http_header *header = (struct http_header *) head->data;
+
+    printf("HEADER VALUE: %s: %s\n", header->key, header->value);
+
     head = next;
+
+    g_free(header->key);
+    g_free(header->value);
   }
 
   g_list_free(meta);
@@ -91,7 +99,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
 
 static int
 stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
-                           off_t offset, struct fuse_file_info *fi)
+    off_t offset, struct fuse_file_info *fi)
 {
   DEBUG("readdir: %s\n", path);
   return -ENOTSUP;

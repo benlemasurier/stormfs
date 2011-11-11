@@ -235,20 +235,37 @@ write_memory_cb(void *ptr, size_t size, size_t nmemb, void *data)
 static int
 extract_meta(char *headers, GList **meta)
 {
+  // TODO: make this more dynamic
   char *p;
+  char *to_extract[8] = {
+    "Content-Type",
+    "Content-Length",
+    "Last-Modified",
+    "ETag",
+    "x-amz-meta-gid",
+    "x-amz-meta-uid",
+    "x-amz-meta-mode",
+    "x-amz-meta-mtime"
+  };
 
   p = strtok(headers, "\n");
   while(p != NULL) {
-    if(strstr(p, "Content-Type"))
-      *meta = g_list_append(*meta, p);
-    else if(strstr(p, "Content-Length"))
-      *meta = g_list_append(*meta, p);
-    else if(strstr(p, "Last-Modified"))
-      *meta = g_list_append(*meta, p);
-    else if(strstr(p, "ETag"))
-      *meta = g_list_append(*meta, p);
-    else if(strstr(p, "x-amz-"))
-      *meta = g_list_append(*meta, p);
+    int i;
+
+    for(i = 0; i < 8; i++) {
+      char *key = to_extract[i];
+
+      if(strstr(p, key)) {
+        struct http_header *h = (struct http_header *) g_malloc(sizeof(struct http_header));
+
+        // FIXME: trim whitespace
+        h->key   = strdup(key);
+        h->value = strdup(strstr(p, " "));
+
+        *meta = g_list_append(*meta, h);
+        break;
+      }
+    }
 
     p = strtok(NULL, "\n");
   }
