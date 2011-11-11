@@ -15,11 +15,17 @@
 #include <curl/curl.h>
 #include <curl/types.h>
 #include <curl/easy.h>
-#include <gcrypt.h>
+#include <glib.h>
 #include "stormfs_curl.h"
+
+#define SHA1_BLOCK_SIZE 64
+#define SHA1_LENGTH 20
 
 struct stormfs_curl {
   const char *url;
+  const char *bucket;
+  const char *access_key;
+  const char *secret_key;
 } stormfs_curl;
 
 struct stormfs_curl_memory {
@@ -27,74 +33,175 @@ struct stormfs_curl_memory {
   size_t size;
 };
 
-static int
-stormfs_curl_sign_request(struct curl_slist *headers, const char *path)
+static char *
+hmac_sha1(const char *key, const char *message)
 {
-  // TODO:
-  char *to_sign = "TEST"; 
-  const char *key = "TEST";
+  unsigned int i;
+  GChecksum *checksum;
+  char *real_key;
+  guchar ipad[SHA1_BLOCK_SIZE];
+  guchar opad[SHA1_BLOCK_SIZE];
+  guchar inner[SHA1_LENGTH];
+  guchar digest[SHA1_LENGTH];
+  gsize key_length, inner_length, digest_length;
 
-  int mdlen;
-  size_t n_bytes;
-  gcry_error_t error = 0;
-  gcry_md_hd_t digest = NULL;
-  unsigned char *md_string = NULL;
+  g_return_val_if_fail(key, NULL);
+  g_return_val_if_fail(message, NULL);
 
-  error = gcry_md_open(&digest, GCRY_MD_SHA1, GCRY_MD_FLAG_HMAC);
-  if(error) {
-    fprintf(stderr, "stormfs: %s\n", gcry_strerror(error));
-    abort();
+  checksum = g_checksum_new(G_CHECKSUM_SHA1);
+
+  /* If the key is longer than the block size, hash it first */
+  if(strlen(key) > SHA1_BLOCK_SIZE) {
+    guchar new_key[SHA1_LENGTH];
+
+    key_length = sizeof(new_key);
+
+    g_checksum_update(checksum, (guchar*)key, strlen(key));
+    g_checksum_get_digest(checksum, new_key, &key_length);
+    g_checksum_reset(checksum);
+
+    real_key = g_memdup(new_key, key_length);
+  } else {
+    real_key = g_strdup(key);
+    key_length = strlen(key);
   }
 
-  mdlen = gcry_md_get_algo_dlen(GCRY_MD_SHA1);
+  /* Sanity check the length */
+  g_assert(key_length <= SHA1_BLOCK_SIZE);
 
-  error = gcry_md_setkey(digest, key, strlen(key));
-  if(error) {
-    fprintf(stderr, "stormfs: %s\n", gcry_strerror(error));
-    abort();
+  /* Protect against use of the provided key by NULLing it */
+  key = NULL;
+
+  /* Stage 1 */
+  memset(ipad, 0, sizeof(ipad));
+  memset(opad, 0, sizeof(opad));
+
+  memcpy(ipad, real_key, key_length);
+  memcpy(opad, real_key, key_length);
+
+  /* Stage 2 and 5 */
+  for(i = 0; i < sizeof(ipad); i++) {
+    ipad[i] ^= 0x36;
+    opad[i] ^= 0x5C;
   }
 
-  gcry_md_write(digest, to_sign, strlen(to_sign));
-  md_string = gcry_md_read(digest, 0);
+  /* Stage 3 and 4 */
+  g_checksum_update(checksum, ipad, sizeof(ipad));
+  g_checksum_update(checksum, (guchar*) message, strlen(message));
+  inner_length = sizeof(inner);
+  g_checksum_get_digest(checksum, inner, &inner_length);
+  g_checksum_reset(checksum);
 
-  int i;
-  for(i = 0; i < mdlen; i++)
-    printf("%02x ", md_string[i] & 0xFF);
-  printf("\n");
+  /* Stage 6 and 7 */
+  g_checksum_update(checksum, opad, sizeof(opad));
+  g_checksum_update(checksum, inner, inner_length);
 
-  gcry_md_close(digest);
+  digest_length = sizeof(digest);
+  g_checksum_get_digest(checksum, digest, &digest_length);
 
-  printf("SIGNATURE: %s\n", md_string);
+  g_checksum_free(checksum);
+  g_free(real_key);
 
-  return 0;
+  return g_base64_encode(digest, digest_length);
 }
 
-static const char *
-stormfs_curl_rfc2822_timestamp()
+static char *
+rfc2822_timestamp()
 {
   char s[40];
   char *date;
 
   time_t t = time(NULL);
-  strftime(s, sizeof(s), "Date: %a, %d %b %Y %T %z", gmtime(&t));
+  strftime(s, sizeof(s), "%a, %d %b %Y %T %z", gmtime(&t));
 
   date = strdup(s);
 
   return date;
 }
 
-static int
-stormfs_curl_set_defaults(CURL *c)
+static char *
+get_resource(const char *path)
 {
-  // FIXME: why not work?
-  curl_easy_setopt(c, CURLOPT_NOPROGRESS, 1L);
-  curl_easy_setopt(c, CURLOPT_USERAGENT, "stormfs");
+  int path_len;
+  int bucket_len;
+  char *resource;
+
+  path_len   = strlen(path);
+  bucket_len = strlen(stormfs_curl.bucket);
+  char tmp[1 + path_len + bucket_len + 1];
+
+  strcpy(tmp, "/");
+  strncat(tmp, stormfs_curl.bucket, bucket_len);
+  strncat(tmp, path, path_len);
+  resource = strdup(tmp);
+
+  return resource;
+}
+
+static int
+sign_request(const char *method, 
+                          struct curl_slist **headers, const char *path)
+{
+  char *signature;
+  GString *to_sign;
+  GString *date_header;
+  GString *authorization;
+  struct curl_slist *next;
+  struct curl_slist *header;
+  char *date = rfc2822_timestamp();
+  char *resource = get_resource(path);
+
+  to_sign = g_string_new("");
+  to_sign = g_string_append(to_sign, method);
+  to_sign = g_string_append(to_sign, "\n\n\n");
+  to_sign = g_string_append(to_sign, date);
+  to_sign = g_string_append_c(to_sign, '\n');
+
+  header = *headers;
+  if(header != NULL) {
+    do {
+      next = header->next;
+      to_sign = g_string_append(to_sign, header->data);
+      to_sign = g_string_append_c(to_sign, '\n');
+      header = next;
+    } while(next);
+  }
+
+  to_sign = g_string_append(to_sign, resource);
+
+  signature = hmac_sha1(stormfs_curl.secret_key, to_sign->str);
+
+  authorization = g_string_new("Authorization: AWS ");
+  authorization = g_string_append(authorization, stormfs_curl.access_key);
+  authorization = g_string_append(authorization, ":");
+  authorization = g_string_append(authorization, signature);
+
+  date_header = g_string_new("Date: ");
+  date_header = g_string_append(date_header, date);
+  *headers = curl_slist_append(*headers, date_header->str);
+  *headers = curl_slist_append(*headers, authorization->str);
+
+  free(date);
+  free(resource);
+  g_string_free(to_sign, FALSE);
+  g_string_free(date_header, FALSE);
+  g_string_free(authorization, FALSE);
+
+  return 0;
+}
+
+static int
+set_curl_defaults(CURL **c)
+{
+  curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
+  curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
 
   return 0;
 }
 
 static char *
-stormfs_curl_get_url(const char *path)
+get_url(const char *path)
 {
   char *url;
   char tmp[strlen(stormfs_curl.url) + strlen(path) + 1];
@@ -107,12 +214,12 @@ stormfs_curl_get_url(const char *path)
 }
 
 static size_t
-stormfs_curl_write_memory_cb(void *ptr, size_t size, size_t nmemb, void *data)
+write_memory_cb(void *ptr, size_t size, size_t nmemb, void *data)
 {
   size_t realsize = size * nmemb;
   struct stormfs_curl_memory *mem = (struct stormfs_curl_memory *) data;
 
-  mem->memory = realloc(mem->memory, mem->size + realsize + 1);
+  mem->memory = g_realloc(mem->memory, mem->size + realsize + 1);
   if(mem->memory == NULL) {
     fprintf(stderr, "stormfs: memory allocation failed\n");
     abort();
@@ -125,16 +232,84 @@ stormfs_curl_write_memory_cb(void *ptr, size_t size, size_t nmemb, void *data)
   return realsize;
 }
 
+static int
+extract_meta(char *headers, GList **meta)
+{
+  // TODO: make this more dynamic
+  char *p;
+  char *to_extract[8] = {
+    "Content-Type",
+    "Content-Length",
+    "Last-Modified",
+    "ETag",
+    "x-amz-meta-gid",
+    "x-amz-meta-uid",
+    "x-amz-meta-mode",
+    "x-amz-meta-mtime"
+  };
+
+  p = strtok(headers, "\n");
+  while(p != NULL) {
+    int i;
+
+    for(i = 0; i < 8; i++) {
+      char *key = to_extract[i];
+
+      if(strstr(p, key)) {
+        struct http_header *h = (struct http_header *) g_malloc(sizeof(struct http_header));
+
+        // FIXME: trim whitespace
+        h->key   = strdup(key);
+        h->value = strdup(strstr(p, " "));
+
+        *meta = g_list_append(*meta, h);
+        break;
+      }
+    }
+
+    p = strtok(NULL, "\n");
+  }
+
+  return 0;
+}
+
+static CURL *
+get_curl_handle(const char *url)
+{
+  CURL *c;
+  c = curl_easy_init();
+  set_curl_defaults(&c);
+  curl_easy_setopt(c, CURLOPT_URL, url);
+
+  return c;
+}
+
+static int
+destroy_curl_handle(CURL *c)
+{
+  curl_easy_cleanup(c);
+
+  return 0;
+}
+
 int
-stormfs_curl_init(const char *url)
+stormfs_curl_init(const char *bucket, const char *url)
 {
   CURLcode result;
   stormfs_curl.url = url;
+  stormfs_curl.bucket = bucket;
 
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
     return -1;
 
-  gcry_control(GCRYCTL_DISABLE_SECMEM, 0);
+  return 0;
+}
+
+int
+stormfs_curl_set_auth(const char *access_key, const char *secret_key)
+{
+  stormfs_curl.access_key = access_key;
+  stormfs_curl.secret_key = secret_key;
 
   return 0;
 }
@@ -142,34 +317,68 @@ stormfs_curl_init(const char *url)
 int
 stormfs_curl_get(const char *path)
 {
-  CURL *c;
-  char *url = stormfs_curl_get_url(path);
-  struct curl_slist *headers = NULL; 
+  char *url = get_url(path);
+  CURL *c = get_curl_handle(url);
+  struct curl_slist *req_headers = NULL; 
   struct stormfs_curl_memory data;
-  data.memory = malloc(1);
+
+  data.memory = g_malloc(1);
   data.size = 0;
 
-  headers = curl_slist_append(headers, stormfs_curl_rfc2822_timestamp());
-  stormfs_curl_sign_request(headers, path);
-
-  c = curl_easy_init();
-  stormfs_curl_set_defaults(&c);
-  curl_easy_setopt(c, CURLOPT_URL, url);
-  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, stormfs_curl_write_memory_cb);
+  sign_request("GET", &req_headers, path);
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
   curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &data);
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
-  curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
   curl_easy_perform(c);
 
-  printf("DATA:\n%s\n", data.memory);
+  // FIXME: (testing)
+  printf("HTTP BODY:\n%s\n", data.memory);
 
   if(data.memory)
-    free(data.memory);
+    g_free(data.memory);
 
-  free(url);
-  curl_easy_cleanup(c);
-  curl_slist_free_all(headers);
+  g_free(url);
+  destroy_curl_handle(c);
+  curl_slist_free_all(req_headers);
+
+  return 0;
+}
+
+int
+stormfs_curl_head(const char *path, GList **meta)
+{
+  char *url = get_url(path);
+  char *response_headers;
+  CURL *c = get_curl_handle(url);
+  struct curl_slist *req_headers = NULL;
+  struct stormfs_curl_memory data;
+
+  data.memory = g_malloc(1);
+  data.size = 0;
+
+  sign_request("HEAD", &req_headers, path);
+  curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    // HEAD
+  curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  // Last-Modified
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  curl_easy_setopt(c, CURLOPT_HEADERDATA, (void *) &data);
+  curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+
+  curl_easy_perform(c);
+
+  response_headers = strdup(data.memory);
+  extract_meta(response_headers, &(*meta));
+
+  // FIXME: (testing)
+  printf("HTTP HEADER:\n%s\n", data.memory);
+
+  if(data.memory)
+    g_free(data.memory);
+
+  g_free(url);
+  g_free(response_headers);
+  destroy_curl_handle(c);
+  curl_slist_free_all(req_headers);
 
   return 0;
 }

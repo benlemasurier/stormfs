@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <fuse.h>
+#include <glib.h>
 #include "stormfs.h"
 #include "stormfs_curl.h"
 
@@ -33,6 +34,8 @@ struct stormfs {
   char *url;
   char *bucket;
   char *virtual_url;
+  char *access_key;
+  char *secret_key;
 } stormfs;
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
@@ -66,16 +69,37 @@ static struct fuse_operations stormfs_oper = {
 static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
+  GList *meta = NULL;
+  GList *head = NULL;
+  GList *next = NULL;
+
   DEBUG("getattr: %s\n", path);
 
-  stormfs_curl_get(path);
+  //stormfs_curl_get(path);
+  stormfs_curl_head(path, &meta);
+
+  // FIXME: (testing)
+  head = g_list_first(meta);
+  while(head != NULL) {
+    next = head->next;
+    struct http_header *header = (struct http_header *) head->data;
+
+    printf("HEADER VALUE: %s: %s\n", header->key, header->value);
+
+    head = next;
+
+    g_free(header->key);
+    g_free(header->value);
+  }
+
+  g_list_free(meta);
 
   return -ENOTSUP;
 }
 
 static int
 stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
-                           off_t offset, struct fuse_file_info *fi)
+    off_t offset, struct fuse_file_info *fi)
 {
   DEBUG("readdir: %s\n", path);
   return -ENOTSUP;
@@ -152,16 +176,15 @@ stormfs_virtual_url(char *url, char *bucket)
 }
 
 static int
-stormfs_get_credentials()
+stormfs_get_credentials(char **access_key, char **secret_key)
 {
-  char *access_key = NULL;
-  char *secret_key = NULL;
+  *access_key = getenv("AWS_ACCESS_KEY_ID");
+  *secret_key = getenv("AWS_SECRET_ACCESS_KEY");
 
-  access_key = getenv("AWS_ACCESS_KEY");
-  secret_key = getenv("AWS_SECRET_KEY");
+  if(*access_key == NULL || *secret_key == NULL)
+    return -1;
 
-  printf("ACCESS_KEY: %s\n", access_key);
-  printf("SECRET_KEY: %s\n", secret_key);
+  return 0;
 }
 
 static int
@@ -169,7 +192,7 @@ stormfs_destroy(struct fuse_args *args)
 {
   stormfs_curl_destroy();
   fuse_opt_free_args(args);
-  free(stormfs.virtual_url);
+  g_free(stormfs.virtual_url);
 
   return 0;
 }
@@ -181,8 +204,10 @@ main(int argc, char *argv[])
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
   memset(&stormfs, 0, sizeof(struct stormfs));
-  if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1)
-    return EXIT_FAILURE;
+  if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
+    fprintf(stderr, "error parsing command-line options\n");
+    abort();
+  }
 
   if(!stormfs.url)
     stormfs.url = "http://s3.amazonaws.com";
@@ -194,12 +219,17 @@ main(int argc, char *argv[])
   DEBUG("STORMFS bucket:      %s\n", stormfs.bucket);
   DEBUG("STORMFS virtual url: %s\n", stormfs.virtual_url);
 
-  stormfs_get_credentials();
-
-  if((status = stormfs_curl_init(stormfs.virtual_url)) != 0) {
-    fprintf(stderr, "unable to initialize libcurl\n");
-    return EXIT_FAILURE;
+  if(stormfs_get_credentials(&stormfs.access_key, &stormfs.secret_key) != 0) {
+    fprintf(stderr, "missing api credentials\n");
+    abort();
   }
+
+  if((status = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
+    fprintf(stderr, "unable to initialize libcurl\n");
+    abort();
+  }
+
+  stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
 
   status = stormfs_fuse_main(&args);
 
