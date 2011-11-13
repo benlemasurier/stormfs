@@ -17,6 +17,7 @@
 #include <curl/easy.h>
 #include <glib.h>
 #include "stormfs_curl.h"
+#include "stormfs_util.h"
 
 #define SHA1_BLOCK_SIZE 64
 #define SHA1_LENGTH 20
@@ -235,7 +236,6 @@ write_memory_cb(void *ptr, size_t size, size_t nmemb, void *data)
 static int
 extract_meta(char *headers, GList **meta)
 {
-  // TODO: make this more dynamic
   char *p;
   char *to_extract[8] = {
     "Content-Type",
@@ -253,18 +253,19 @@ extract_meta(char *headers, GList **meta)
     int i;
 
     for(i = 0; i < 8; i++) {
+      struct http_header *h;
       char *key = to_extract[i];
 
-      if(strstr(p, key)) {
-        struct http_header *h = (struct http_header *) g_malloc(sizeof(struct http_header));
+      if(!strstr(p, key))
+        continue;
 
-        // FIXME: trim whitespace
-        h->key   = strdup(key);
-        h->value = strdup(strstr(p, " "));
+      h = (struct http_header *) g_malloc(sizeof(struct http_header));
 
-        *meta = g_list_append(*meta, h);
-        break;
-      }
+      h->key   = strdup(key);
+      h->value = strdup(ltrim(strstr(p, " ")));
+
+      *meta = g_list_append(*meta, h);
+      break;
     }
 
     p = strtok(NULL, "\n");

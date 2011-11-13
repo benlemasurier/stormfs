@@ -16,6 +16,8 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include <fuse.h>
 #include <glib.h>
 #include "stormfs.h"
@@ -36,6 +38,8 @@ struct stormfs {
   char *virtual_url;
   char *access_key;
   char *secret_key;
+  char *mountpoint;
+  mode_t root_mode;
 } stormfs;
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
@@ -66,6 +70,63 @@ static struct fuse_operations stormfs_oper = {
     .read     = stormfs_read,
 };
 
+static uid_t
+get_uid(const char *s)
+{
+  return (uid_t) strtoul(s, (char **) NULL, 10);
+}
+
+static gid_t
+get_gid(const char *s)
+{
+  return (gid_t) strtoul(s, (char **) NULL, 10);
+}
+
+static gid_t
+get_mode(const char *s)
+{
+  return (mode_t) strtoul(s, (char **) NULL, 10);
+}
+
+static time_t
+get_mtime(const char *s)
+{
+  return (time_t) strtoul(s, (char **) NULL, 10);
+}
+
+static off_t
+get_size(const char *s)
+{
+  return (off_t) strtoul(s, (char **) NULL, 10);
+}
+
+blkcnt_t get_blocks(off_t size)
+{
+  return size / 512 + 1;
+}
+
+static int
+validate_mountpoint(const char *path, struct stat *stbuf)
+{
+  DIR *d;
+
+  if(stat(path, &(*stbuf)) == -1) {
+    fprintf(stderr, "unable to stat MOUNTPOINT %s: %s\n",
+        path, strerror(errno));
+    return -1;
+  }
+
+  if((d = opendir(path)) == NULL) {
+    fprintf(stderr, "unable to open MOUNTPOINT %s: %s\n",
+        path, strerror(errno));
+    return -1;
+  }
+
+  closedir(d);
+
+  return 0;
+}
+
 static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
@@ -75,26 +136,55 @@ stormfs_getattr(const char *path, struct stat *stbuf)
 
   DEBUG("getattr: %s\n", path);
 
-  //stormfs_curl_get(path);
-  stormfs_curl_head(path, &meta);
+  memset(stbuf, 0, sizeof(struct stat));
+  stbuf->st_nlink = 1;
 
-  // FIXME: (testing)
+  if(strcmp(path, "/") == 0) {
+    stbuf->st_mode = stormfs.root_mode | S_IFDIR;
+
+    return 0;
+  }
+
+  if(stormfs_curl_head(path, &meta) != 0)
+    return -1;
+
   head = g_list_first(meta);
   while(head != NULL) {
     next = head->next;
     struct http_header *header = (struct http_header *) head->data;
 
-    printf("HEADER VALUE: %s: %s\n", header->key, header->value);
-
-    head = next;
+    if(strcmp(header->key, "x-amz-meta-uid") == 0)
+      stbuf->st_uid = get_uid(header->value);
+    else if(strcmp(header->key, "x-amz-meta-gid") == 0)
+      stbuf->st_uid = get_gid(header->value);
+    else if(strcmp(header->key, "x-amz-meta-mtime") == 0)
+      stbuf->st_mtime = get_mtime(header->value);
+    else if(strcmp(header->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
+      stbuf->st_mtime = get_mtime(header->value);
+    else if(strcmp(header->key, "x-amz-meta-mode") == 0)
+      stbuf->st_mode |= get_mode(header->value);
+    else if(strcmp(header->key, "Content-Length") == 0)
+      stbuf->st_size = get_size(header->value);
+    else if(strcmp(header->key, "Content-Type") == 0) {
+      if(strstr(header->value, "x-directory"))
+        stbuf->st_mode |= S_IFDIR;
+      else
+        stbuf->st_mode |= S_IFREG;
+    }
 
     g_free(header->key);
     g_free(header->value);
+    g_free(header);
+
+    head = next;
   }
+
+  if(S_ISREG(stbuf->st_mode))
+    stbuf->st_blocks = get_blocks(stbuf->st_size);
 
   g_list_free(meta);
 
-  return -ENOTSUP;
+  return 0;
 }
 
 static int
@@ -130,9 +220,16 @@ stormfs_opt_proc(void *data, const char *arg, int key,
 
     case FUSE_OPT_KEY_NONOPT:
       if(!stormfs.bucket) {
-        stormfs.bucket = strdup(arg);
+        stormfs.bucket = (char *) arg;
         return 0;
       }
+
+      struct stat stbuf;
+      if(validate_mountpoint(arg, &stbuf) == -1)
+        abort();
+
+      stormfs.mountpoint = (char *) arg;
+      stormfs.root_mode = stbuf.st_mode;
 
       return 1;
 
