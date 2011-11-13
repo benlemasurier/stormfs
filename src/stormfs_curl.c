@@ -316,28 +316,28 @@ stormfs_curl_set_auth(const char *access_key, const char *secret_key)
 }
 
 int
-stormfs_curl_get(const char *path)
+stormfs_curl_get(const char *path, char **data)
 {
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
   struct curl_slist *req_headers = NULL; 
-  struct stormfs_curl_memory data;
+  struct stormfs_curl_memory body;
 
-  data.memory = g_malloc(1);
-  data.size = 0;
+  body.memory = g_malloc(1);
+  body.size = 0;
 
   sign_request("GET", &req_headers, path);
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
-  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &data);
+  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
   curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
   curl_easy_perform(c);
 
-  // FIXME: (testing)
-  printf("HTTP BODY:\n%s\n", data.memory);
+  *data = g_malloc(body.size);
+  *data = memcpy(*data, body.memory, body.size);
 
-  if(data.memory)
-    g_free(data.memory);
+  if(body.memory)
+    g_free(body.memory);
 
   g_free(url);
   destroy_curl_handle(c);

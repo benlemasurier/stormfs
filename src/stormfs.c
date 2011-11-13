@@ -191,7 +191,18 @@ static int
 stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     off_t offset, struct fuse_file_info *fi)
 {
+  int result;
+  char *data;
+
   DEBUG("readdir: %s\n", path);
+
+  result = stormfs_curl_get(path, &data);
+  if(result != 0)
+    return -EIO;
+
+  printf("READDIR DATA: %s\n", data);
+  g_free(data);
+
   return -ENOTSUP;
 }
 
@@ -239,7 +250,7 @@ stormfs_opt_proc(void *data, const char *arg, int key,
 
     default:
       fprintf(stderr, "error parsing options\n");
-      exit(EXIT_FAILURE);
+      abort();
   }
 }
 
