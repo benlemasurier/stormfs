@@ -35,6 +35,42 @@ struct stormfs_curl_memory {
 };
 
 static char *
+gid_to_s(gid_t gid)
+{
+  char s[100];
+  snprintf(s, 100, "%lu", (unsigned long) gid);
+
+  return strdup(s);
+}
+
+static char *
+uid_to_s(uid_t uid)
+{
+  char s[100];
+  snprintf(s, 100, "%lu", (unsigned long) uid);
+
+  return strdup(s);
+}
+
+static char *
+mode_to_s(mode_t mode)
+{
+  char s[100];
+  snprintf(s, 100, "%lu", (unsigned long) mode);
+
+  return strdup(s);
+}
+
+static char *
+mtime_to_s(time_t mtime)
+{
+  char s[100];
+  snprintf(s, 100, "%ld", (long) mtime);
+
+  return strdup(s);
+}
+
+static char *
 hmac_sha1(const char *key, const char *message)
 {
   unsigned int i;
@@ -164,7 +200,7 @@ http_response_errno(CURL *handle)
 
 static int
 sign_request(const char *method, 
-                          struct curl_slist **headers, const char *path)
+    struct curl_slist **headers, const char *path)
 {
   char *signature;
   GString *to_sign;
@@ -217,7 +253,7 @@ sign_request(const char *method,
 static int
 set_curl_defaults(CURL **c)
 {
-  // curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
   curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
 
@@ -398,7 +434,6 @@ int
 stormfs_curl_head(const char *path, GList **meta)
 {
   int status;
-  long http_response;
   char *url = get_url(path);
   char *response_headers;
   CURL *c = get_curl_handle(url);
@@ -428,6 +463,62 @@ stormfs_curl_head(const char *path, GList **meta)
   g_free(response_headers);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
+
+  return status;
+}
+
+int
+stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t mtime)
+{
+  int status;
+  char *gid_s, *uid_s, *mode_s, *mtime_s;
+  GString *uid_header;
+  GString *gid_header;
+  GString *mode_header;
+  GString *mtime_header;
+  char *url = get_url(path);
+  CURL *c = get_curl_handle(url);
+  struct curl_slist *req_headers = NULL;
+
+  gid_s = gid_to_s(gid);
+  gid_header = g_string_new("x-amz-meta-gid:");
+  gid_header = g_string_append(gid_header, gid_s);
+  req_headers = curl_slist_append(req_headers, gid_header->str);
+
+  mode_s = mode_to_s(mode);
+  mode_header = g_string_new("x-amz-meta-mode:");
+  mode_header = g_string_append(mode_header, mode_s);
+  req_headers = curl_slist_append(req_headers, mode_header->str);
+
+  mtime_s = mtime_to_s(mtime);
+  mtime_header = g_string_new("x-amz-meta-mtime:");
+  mtime_header = g_string_append(mtime_header, mtime_s);
+  req_headers = curl_slist_append(req_headers, mtime_header->str);
+
+  uid_s = uid_to_s(uid);
+  uid_header = g_string_new("x-amz-meta-uid:");
+  uid_header = g_string_append(uid_header, uid_s);
+  req_headers = curl_slist_append(req_headers, uid_header->str);
+
+  sign_request("PUT", &req_headers, path);
+  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
+  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+
+  curl_easy_perform(c);
+  status = http_response_errno(c);
+
+  g_free(gid_s);
+  g_free(uid_s);
+  g_free(mtime_s);
+  g_free(mode_s);
+  g_free(url);
+  destroy_curl_handle(c);
+  curl_slist_free_all(req_headers);
+  g_string_free(uid_header,   FALSE);
+  g_string_free(gid_header,   FALSE);
+  g_string_free(mode_header,  FALSE);
+  g_string_free(mtime_header, FALSE);
 
   return status;
 }

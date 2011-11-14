@@ -69,6 +69,7 @@ static struct fuse_opt stormfs_opts[] = {
         do { if (stormfs.debug) fprintf(stderr, format, args); } while(0)
 
 static struct fuse_operations stormfs_oper = {
+    .create   = stormfs_create,
     .getattr  = stormfs_getattr,
     .open     = stormfs_open,
     .read     = stormfs_read,
@@ -133,7 +134,19 @@ validate_mountpoint(const char *path, struct stat *stbuf)
   return 0;
 }
 
+static int
+stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+{
+  int result;
 
+  DEBUG("create: %s\n", path);
+
+  result = stormfs_curl_create(path, getuid(), getgid(), mode, time(NULL));
+
+  // TODO: open()?, probably stormfs_open(path, fi);
+
+  return result;
+}
 
 static int
 stormfs_getattr(const char *path, struct stat *stbuf)

@@ -1,6 +1,7 @@
 #ifndef stormfs_H
 #define stormfs_H
 
+static int stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi);
 static int stormfs_getattr(const char *path, struct stat *stbuf);
 static int stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
                            off_t offset, struct fuse_file_info *fi);
