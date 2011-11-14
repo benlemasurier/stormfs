@@ -244,9 +244,9 @@ sign_request(const char *method,
   g_free(date);
   g_free(resource);
   g_free(signature);
-  g_string_free(to_sign, FALSE);
-  g_string_free(date_header, FALSE);
-  g_string_free(authorization, FALSE);
+  g_string_free(to_sign, TRUE);
+  g_string_free(date_header, TRUE);
+  g_string_free(authorization, TRUE);
 
   return 0;
 }
@@ -515,10 +515,10 @@ stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t 
   g_free(url);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
-  g_string_free(uid_header,   FALSE);
-  g_string_free(gid_header,   FALSE);
-  g_string_free(mode_header,  FALSE);
-  g_string_free(mtime_header, FALSE);
+  g_string_free(uid_header,   TRUE);
+  g_string_free(gid_header,   TRUE);
+  g_string_free(mode_header,  TRUE);
+  g_string_free(mtime_header, TRUE);
 
   return status;
 }
