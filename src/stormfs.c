@@ -20,6 +20,10 @@
 #include <dirent.h>
 #include <fuse.h>
 #include <glib.h>
+#include <libxml/xpath.h>
+#include <libxml/xpathInternals.h>
+#include <libxml/parser.h>
+#include <libxml/tree.h>
 #include "stormfs.h"
 #include "stormfs_curl.h"
 
@@ -127,9 +131,12 @@ validate_mountpoint(const char *path, struct stat *stbuf)
   return 0;
 }
 
+
+
 static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
+  int status;
   GList *meta = NULL;
   GList *head = NULL;
   GList *next = NULL;
@@ -145,8 +152,8 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     return 0;
   }
 
-  if(stormfs_curl_head(path, &meta) != 0)
-    return -1;
+  if((status = stormfs_curl_head(path, &meta)) != 0)
+    return status;
 
   head = g_list_first(meta);
   while(head != NULL) {
@@ -197,13 +204,59 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   DEBUG("readdir: %s\n", path);
 
   result = stormfs_curl_get(path, &data);
-  if(result != 0)
+  if(result != 0) {
+    g_free(data);
     return -EIO;
+  }
 
   printf("READDIR DATA: %s\n", data);
+
+  // TODO: clean this up (testing).
+  xmlDocPtr doc;
+  xmlXPathContextPtr ctx;
+  xmlXPathObjectPtr contents_xp;
+  xmlNodeSetPtr content_nodes;
+
+  if((doc = xmlReadMemory(data, strlen(data), "", NULL, 0)) == NULL)
+    return -EIO;
+
+  ctx = xmlXPathNewContext(doc);
+  xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
+    (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
+
+  contents_xp = xmlXPathEvalExpression((xmlChar *) "//s3:Contents", ctx);
+  content_nodes = contents_xp->nodesetval;
+
+  int i;
+  for(i = 0; i < content_nodes->nodeNr; i++) {
+    ctx->node = content_nodes->nodeTab[i];
+
+    // name
+    xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *) "s3:Key", ctx);
+    xmlNodeSetPtr key_nodes = key->nodesetval;
+    
+    // return (char *) mybasename((char *) xmlNodeListGetString(doc, node, 1)).c_str();
+    char *name = (char *) xmlNodeListGetString(doc, key_nodes->nodeTab[0]->xmlChildrenNode, 1);
+
+    struct stat st;
+    memset(&st, 0, sizeof(struct stat));
+    st.st_nlink = 1;
+    char *fullpath = strcat(strdup(name), "/");
+    // stormfs_getattr(name, &st);
+
+    g_free(fullpath);
+    xmlXPathFreeObject(key);
+
+    filler(buf, name, 0, 0);
+  }
+
+  xmlXPathFreeObject(contents_xp);
+  xmlXPathFreeContext(ctx);
+  xmlFreeDoc(doc);
+
   g_free(data);
 
-  return -ENOTSUP;
+  return 0;
 }
 
 static int

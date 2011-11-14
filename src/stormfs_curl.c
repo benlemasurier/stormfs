@@ -140,6 +140,29 @@ get_resource(const char *path)
 }
 
 static int
+http_response_errno(CURL *handle)
+{
+  long http_response;
+
+  if(curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &http_response) != 0)
+    return -EIO;
+
+  if(http_response == 401)
+    return -EACCES;
+
+  if(http_response == 403)
+    return -EACCES;
+
+  if(http_response == 404)
+    return -ENOENT;
+
+  if(http_response >= 400)
+    return -EIO; 
+
+  return 0;
+}
+
+static int
 sign_request(const char *method, 
                           struct curl_slist **headers, const char *path)
 {
@@ -206,6 +229,8 @@ get_url(const char *path)
 {
   char *url;
   char tmp[strlen(stormfs_curl.url) + strlen(path) + 1];
+
+  printf("GOT I GOT: %s\n", path);
 
   strcpy(tmp, stormfs_curl.url);
   strncat(tmp, path, strlen(path) + 1);
@@ -318,6 +343,7 @@ stormfs_curl_set_auth(const char *access_key, const char *secret_key)
 int
 stormfs_curl_get(const char *path, char **data)
 {
+  int result;
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
   struct curl_slist *req_headers = NULL; 
@@ -332,6 +358,7 @@ stormfs_curl_get(const char *path, char **data)
   curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
   curl_easy_perform(c);
+  result = http_response_errno(c);
 
   *data = g_malloc(body.size);
   *data = memcpy(*data, body.memory, body.size);
@@ -343,12 +370,14 @@ stormfs_curl_get(const char *path, char **data)
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
 
-  return 0;
+  return result;
 }
 
 int
 stormfs_curl_head(const char *path, GList **meta)
 {
+  int status;
+  long http_response;
   char *url = get_url(path);
   char *response_headers;
   CURL *c = get_curl_handle(url);
@@ -366,6 +395,7 @@ stormfs_curl_head(const char *path, GList **meta)
   curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
 
   curl_easy_perform(c);
+  status = http_response_errno(c);
 
   response_headers = strdup(data.memory);
   extract_meta(response_headers, &(*meta));
@@ -381,7 +411,7 @@ stormfs_curl_head(const char *path, GList **meta)
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
 
-  return 0;
+  return status;
 }
 
 void

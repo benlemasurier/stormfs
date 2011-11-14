@@ -1,0 +1,6 @@
+Installation Requirements:
+  - libxml2 ([sudo] apt-get install libxml2-dev)
+  - libfuse
+  - libcurl
+  - glib2
+  - autotools
