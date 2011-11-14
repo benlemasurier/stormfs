@@ -241,8 +241,9 @@ sign_request(const char *method,
   *headers = curl_slist_append(*headers, date_header->str);
   *headers = curl_slist_append(*headers, authorization->str);
 
-  free(date);
-  free(resource);
+  g_free(date);
+  g_free(resource);
+  g_free(signature);
   g_string_free(to_sign, FALSE);
   g_string_free(date_header, FALSE);
   g_string_free(authorization, FALSE);
