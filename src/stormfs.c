@@ -16,6 +16,7 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <dirent.h>
 #include <fuse.h>
@@ -209,8 +210,6 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return -EIO;
   }
 
-  printf("READDIR DATA: %s\n", data);
-
   // TODO: clean this up (testing).
   xmlDocPtr doc;
   xmlXPathContextPtr ctx;
@@ -256,8 +255,27 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 static int
 stormfs_open(const char *path, struct fuse_file_info *fi)
 {
+  int fd;
+  int result;
+
   DEBUG("open: %s\n", path);
-  return -ENOTSUP;
+
+  if((fd = fileno(tmpfile())) == -1)
+    return -errno;
+
+  if((result = stormfs_curl_get_fd(path, fd)) != 0) {
+    if(fd > 0)
+      close(fd);
+
+    return result;
+  }
+
+  if(fsync(fd) != 0)
+    return -errno;
+
+  fi->fh = fd;
+  
+  return 0;
 }
 
 static int
