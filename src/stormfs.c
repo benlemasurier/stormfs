@@ -260,7 +260,6 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   xmlXPathFreeObject(contents_xp);
   xmlXPathFreeContext(ctx);
   xmlFreeDoc(doc);
-
   g_free(data);
 
   return 0;

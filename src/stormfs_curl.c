@@ -254,7 +254,7 @@ sign_request(const char *method,
 static int
 set_curl_defaults(CURL **c)
 {
-  curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  // curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
   curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
 
@@ -395,8 +395,7 @@ stormfs_curl_get(const char *path, char **data)
   curl_easy_perform(c);
   result = http_response_errno(c);
 
-  *data = g_malloc(body.size);
-  *data = memcpy(*data, body.memory, body.size);
+  *data = strdup(body.memory);
 
   if(body.memory)
     g_free(body.memory);
