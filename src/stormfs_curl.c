@@ -230,8 +230,6 @@ get_url(const char *path)
   char *url;
   char tmp[strlen(stormfs_curl.url) + strlen(path) + 1];
 
-  printf("GOT I GOT: %s\n", path);
-
   strcpy(tmp, stormfs_curl.url);
   strncat(tmp, path, strlen(path) + 1);
   url = strdup(tmp);

@@ -229,25 +229,19 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
   int i;
   for(i = 0; i < content_nodes->nodeNr; i++) {
+    char *name;
+
     ctx->node = content_nodes->nodeTab[i];
 
-    // name
+    // extract the items name from xml
     xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *) "s3:Key", ctx);
     xmlNodeSetPtr key_nodes = key->nodesetval;
-    
-    // return (char *) mybasename((char *) xmlNodeListGetString(doc, node, 1)).c_str();
-    char *name = (char *) xmlNodeListGetString(doc, key_nodes->nodeTab[0]->xmlChildrenNode, 1);
-
-    struct stat st;
-    memset(&st, 0, sizeof(struct stat));
-    st.st_nlink = 1;
-    char *fullpath = strcat(strdup(name), "/");
-    // stormfs_getattr(name, &st);
-
-    g_free(fullpath);
-    xmlXPathFreeObject(key);
+    name = (char *) xmlNodeListGetString(doc, key_nodes->nodeTab[0]->xmlChildrenNode, 1);
 
     filler(buf, name, 0, 0);
+
+    g_free(name);
+    xmlXPathFreeObject(key);
   }
 
   xmlXPathFreeObject(contents_xp);
