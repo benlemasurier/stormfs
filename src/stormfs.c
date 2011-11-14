@@ -70,9 +70,10 @@ static struct fuse_opt stormfs_opts[] = {
 
 static struct fuse_operations stormfs_oper = {
     .getattr  = stormfs_getattr,
-    .readdir  = stormfs_readdir,
     .open     = stormfs_open,
     .read     = stormfs_read,
+    .readdir  = stormfs_readdir,
+    .release  = stormfs_release,
 };
 
 static uid_t
@@ -255,20 +256,22 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 static int
 stormfs_open(const char *path, struct fuse_file_info *fi)
 {
+  FILE *f;
   int fd;
   int result;
 
   DEBUG("open: %s\n", path);
 
-  if((fd = fileno(tmpfile())) == -1)
+  if((f = tmpfile()) == NULL)
     return -errno;
 
-  if((result = stormfs_curl_get_fd(path, fd)) != 0) {
-    if(fd > 0)
-      close(fd);
-
+  if((result = stormfs_curl_get_file(path, f)) != 0) {
+    fclose(f);
     return result;
   }
+
+  if((fd = fileno(f)) == -1)
+    return -errno;
 
   if(fsync(fd) != 0)
     return -errno;
@@ -280,10 +283,25 @@ stormfs_open(const char *path, struct fuse_file_info *fi)
 
 static int
 stormfs_read(const char *path, char *buf, size_t size, off_t offset,
-                        struct fuse_file_info *fi)
+    struct fuse_file_info *fi)
 {
-  DEBUG("read: %s\n", path);
-  return -ENOTSUP;
+  int result;
+
+  if((result = pread(fi->fh, buf, size, offset)) == -1)
+    return -errno;
+
+  return result;
+}
+
+static int
+stormfs_release(const char *path, struct fuse_file_info *fi)
+{
+  DEBUG("release: %s\n", path);
+
+  if(close(fi->fh) == -1)
+    return -errno;
+
+  return 0;
 }
 
 static int

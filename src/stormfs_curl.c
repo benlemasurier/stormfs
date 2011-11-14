@@ -217,7 +217,7 @@ sign_request(const char *method,
 static int
 set_curl_defaults(CURL **c)
 {
-  curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  // curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
   curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
 
@@ -235,12 +235,6 @@ get_url(const char *path)
   url = strdup(tmp);
 
   return(url);
-}
-
-static size_t
-write_data_cb(void *ptr, size_t size, size_t nmemb, void *data)
-{
-  return fwrite(ptr, size, nmemb, (FILE *) data);
 }
 
 static size_t
@@ -378,24 +372,20 @@ stormfs_curl_get(const char *path, char **data)
 }
 
 int
-stormfs_curl_get_fd(const char *path, int fd)
+stormfs_curl_get_file(const char *path, FILE *f)
 {
   int result;
-  FILE *data;
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
   struct curl_slist *req_headers = NULL; 
 
-  if((data = fdopen(fd, "w+")) == NULL)
-    return -errno;
-
   sign_request("GET", &req_headers, path);
+  curl_easy_setopt(c, CURLOPT_WRITEDATA, f);
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
-  curl_easy_setopt(c, CURLOPT_WRITEDATA, data);
-  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_data_cb);
 
   curl_easy_perform(c);
   result = http_response_errno(c);
+  rewind(f);
 
   g_free(url);
   destroy_curl_handle(c);
@@ -430,9 +420,6 @@ stormfs_curl_head(const char *path, GList **meta)
 
   response_headers = strdup(data.memory);
   extract_meta(response_headers, &(*meta));
-
-  // FIXME: (testing)
-  printf("HTTP HEADER:\n%s\n", data.memory);
 
   if(data.memory)
     g_free(data.memory);
