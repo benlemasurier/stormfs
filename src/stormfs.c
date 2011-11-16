@@ -95,7 +95,7 @@ get_gid(const char *s)
   return (gid_t) strtoul(s, (char **) NULL, 10);
 }
 
-static gid_t
+static mode_t
 get_mode(const char *s)
 {
   return (mode_t) strtoul(s, (char **) NULL, 10);
