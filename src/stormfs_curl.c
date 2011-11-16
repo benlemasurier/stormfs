@@ -295,8 +295,6 @@ get_copy_source(const char *path)
   h = g_malloc(sizeof(HTTP_HEADER));
 
   h->key = strdup("x-amz-copy-source");
-  // TODO: IDUNNOWTF.
-  //h->value = url_encode(get_resource(path));
   h->value = get_resource(path);
 
   return h;
