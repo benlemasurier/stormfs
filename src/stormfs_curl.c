@@ -11,13 +11,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
 #include <time.h>
 #include <curl/curl.h>
 #include <curl/types.h>
 #include <curl/easy.h>
 #include <glib.h>
 #include "stormfs_curl.h"
-#include "stormfs_util.h"
 
 #define SHA1_BLOCK_SIZE 64
 #define SHA1_LENGTH 20
@@ -62,12 +62,60 @@ mode_to_s(mode_t mode)
 }
 
 static char *
-mtime_to_s(time_t mtime)
+time_to_s(time_t t)
 {
   char s[100];
-  snprintf(s, 100, "%ld", (long) mtime);
+  snprintf(s, 100, "%ld", (long) t);
 
   return strdup(s);
+}
+
+char
+char_to_hex(char c)
+{
+  static char hex[] = "0123456789abcdef";
+
+  return hex[c & 15];
+}
+
+static int
+cmpstringp(const void *p1, const void *p2)
+{
+  return strcmp(*(char **) p1, *(char **) p2);
+}
+
+char *
+url_encode(char *s)
+{
+  char *p = s;
+  char *buf = g_malloc((strlen(s) * 3) + 1);
+  char *pbuf = buf;
+
+  while(*p) {
+    if(isalnum(*p) || *p == '-' || *p == '_' || *p == '.' || *p == '~') 
+      *pbuf++ = *p;
+    else if(*p == ' ') 
+      *pbuf++ = '+';
+    else 
+      *pbuf++ = '%', *pbuf++ = char_to_hex(*p >> 4), *pbuf++ = char_to_hex(*p & 15);
+
+    p++;
+  }
+
+  *pbuf = '\0';
+  return buf;
+}
+
+char *
+header_to_s(HTTP_HEADER *h)
+{
+  char *s;
+  s = g_malloc(sizeof(char) * strlen(h->key) + strlen(h->value) + 2);
+  s = strcpy(s, h->key);
+  s = strcat(s, ":");
+  s = strncat(s, h->value, strlen(h->value));
+
+  return s;
 }
 
 static char *
@@ -198,6 +246,84 @@ http_response_errno(CURL *handle)
   return 0;
 }
 
+GList *
+strip_header(GList *headers, const char *key)
+{
+  GList *new = NULL;
+  GList *head = NULL;
+  GList *next = NULL;
+
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+    HTTP_HEADER *header = head->data;
+
+    if(strstr(header->key, key) != NULL) {
+      g_free(header->key);
+      g_free(header->value);
+      g_free(header);
+
+      head = next;
+      continue;
+    }
+
+    HTTP_HEADER *h;
+    h = g_malloc(sizeof(HTTP_HEADER));
+    h->key   = strdup(header->key);
+    h->value = strdup(header->value);
+
+    g_free(header->key);
+    g_free(header->value);
+    g_free(header);
+
+    new = g_list_append(new, h);
+    head = next;
+  }
+
+  g_list_free(headers);
+
+  return new;
+}
+
+HTTP_HEADER *
+get_copy_source(const char *path)
+{
+  HTTP_HEADER *h;
+  h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key = strdup("x-amz-copy-source");
+  // TODO: IDUNNOWTF.
+  //h->value = url_encode(get_resource(path));
+  h->value = get_resource(path);
+
+  return h;
+}
+
+HTTP_HEADER *
+get_mtime_header(time_t t)
+{
+  HTTP_HEADER *h;
+  char *s = time_to_s(t);
+  h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key = strdup("x-amz-meta-mtime");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+get_replace_header()
+{
+  HTTP_HEADER *h;
+  h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("x-amz-metadata-directive");
+  h->value = strdup("REPLACE");
+
+  return h;
+}
+
 static int
 sign_request(const char *method, 
     struct curl_slist **headers, const char *path)
@@ -221,8 +347,10 @@ sign_request(const char *method,
   if(header != NULL) {
     do {
       next = header->next;
-      to_sign = g_string_append(to_sign, header->data);
-      to_sign = g_string_append_c(to_sign, '\n');
+      if(strstr(header->data, "x-amz") != NULL) {
+        to_sign = g_string_append(to_sign, header->data);
+        to_sign = g_string_append_c(to_sign, '\n');
+      }
       header = next;
     } while(next);
   }
@@ -230,7 +358,7 @@ sign_request(const char *method,
   to_sign = g_string_append(to_sign, resource);
 
   signature = hmac_sha1(stormfs_curl.secret_key, to_sign->str);
-
+  
   authorization = g_string_new("Authorization: AWS ");
   authorization = g_string_append(authorization, stormfs_curl.access_key);
   authorization = g_string_append(authorization, ":");
@@ -313,16 +441,19 @@ extract_meta(char *headers, GList **meta)
     int i;
 
     for(i = 0; i < 8; i++) {
-      struct http_header *h;
+      HTTP_HEADER *h;
       char *key = to_extract[i];
+      char *value;
 
       if(!strstr(p, key))
         continue;
 
-      h = (struct http_header *) g_malloc(sizeof(struct http_header));
-
-      h->key   = strdup(key);
-      h->value = strdup(ltrim(strstr(p, " ")));
+      h = g_malloc(sizeof(HTTP_HEADER));
+      h->key = strdup(key);
+      value = strstr(p, " ");
+      value++;                         // remove leading space
+      value[strlen(value) - 1] = '\0'; // remove trailing '\r'
+      h->value = strdup(value);
 
       *meta = g_list_append(*meta, h);
       break;
@@ -490,7 +621,7 @@ stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t 
   mode_header = g_string_append(mode_header, mode_s);
   req_headers = curl_slist_append(req_headers, mode_header->str);
 
-  mtime_s = mtime_to_s(mtime);
+  mtime_s = time_to_s(mtime);
   mtime_header = g_string_new("x-amz-meta-mtime:");
   mtime_header = g_string_append(mtime_header, mtime_s);
   req_headers = curl_slist_append(req_headers, mtime_header->str);
@@ -519,6 +650,64 @@ stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t 
   g_string_free(gid_header,   TRUE);
   g_string_free(mode_header,  TRUE);
   g_string_free(mtime_header, TRUE);
+
+  return status;
+}
+
+int
+stormfs_curl_utimens(const char *path, time_t t)
+{
+  int status;
+  char *url = get_url(path);
+  CURL *c = get_curl_handle(url);
+  struct curl_slist *req_headers = NULL;
+
+  // TODO: mygodcleanthisupshitman
+  GList *meta = NULL;
+  GList *head = NULL;
+  GList *next = NULL;
+
+  // get metadata from original object
+  if((status = stormfs_curl_head(path, &meta)) != 0) {
+    g_free(url);
+    destroy_curl_handle(c);
+
+    return status;
+  }
+
+  meta = strip_header(meta, "x-amz-meta-mtime");
+  meta = g_list_append(meta, get_copy_source(path));
+  meta = g_list_append(meta, get_mtime_header(t));
+  meta = g_list_sort(meta, (GCompareFunc) cmpstringp);
+  meta = g_list_append(meta, get_replace_header());
+
+  head = g_list_first(meta);
+  while(head != NULL) {
+    next = head->next;
+
+    HTTP_HEADER *header = head->data;
+
+    if(strstr(header->key, "x-amz-") != NULL)
+      req_headers = curl_slist_append(req_headers, header_to_s(header));
+
+    g_free(header->key);
+    g_free(header->value);
+    g_free(header);
+
+    head = next;
+  }
+
+  sign_request("PUT", &req_headers, path);
+  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
+  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+
+  curl_easy_perform(c);
+  status = http_response_errno(c);
+
+  g_free(url);
+  destroy_curl_handle(c);
+  curl_slist_free_all(req_headers);
 
   return status;
 }

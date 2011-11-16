@@ -75,6 +75,7 @@ static struct fuse_operations stormfs_oper = {
     .read     = stormfs_read,
     .readdir  = stormfs_readdir,
     .release  = stormfs_release,
+    .utimens  = stormfs_utimens,
 };
 
 static uid_t
@@ -116,6 +117,8 @@ static int
 validate_mountpoint(const char *path, struct stat *stbuf)
 {
   DIR *d;
+
+  DEBUG("validating mountpoint: %s\n", path);
 
   if(stat(path, &(*stbuf)) == -1) {
     fprintf(stderr, "unable to stat MOUNTPOINT %s: %s\n",
@@ -173,7 +176,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   head = g_list_first(meta);
   while(head != NULL) {
     next = head->next;
-    struct http_header *header = (struct http_header *) head->data;
+    HTTP_HEADER *header = head->data;
 
     if(strcmp(header->key, "x-amz-meta-uid") == 0)
       stbuf->st_uid = get_uid(header->value);
@@ -314,6 +317,18 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     return -errno;
 
   return 0;
+}
+
+static int
+stormfs_utimens(const char *path, const struct timespec ts[2])
+{
+  int result;
+
+  DEBUG("utimens: %s\n", path);
+
+  result = stormfs_curl_utimens(path, ts[1].tv_sec); 
+
+  return result;
 }
 
 static int

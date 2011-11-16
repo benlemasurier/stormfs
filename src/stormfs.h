@@ -9,6 +9,7 @@ static int stormfs_open(const char *path, struct fuse_file_info *fi);
 static int stormfs_read(const char *path, char *buf, size_t size, off_t offset,
                         struct fuse_file_info *fi);
 static int stormfs_release(const char *path, struct fuse_file_info *fi);
+static int stormfs_utimens(const char *path, const struct timespec ts[2]);
 
 char *stormfs_virtual_url(char *url, char *bucket);
 static int stormfs_destroy(struct fuse_args *args);
