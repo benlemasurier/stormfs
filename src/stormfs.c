@@ -177,7 +177,7 @@ stormfs_flush(const char *path, struct fuse_file_info *fi)
 {
   DEBUG("flush: %s\n", path);
 
-  if(fsync(fi->fh) != 0)
+  if(fi->fh > 0 && fsync(fi->fh) != 0)
     return -errno;
 
   return 0;

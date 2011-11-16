@@ -421,7 +421,7 @@ sign_request(const char *method,
 static int
 set_curl_defaults(CURL **c)
 {
-  // curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  //curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
   curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
 
@@ -475,7 +475,7 @@ extract_meta(char *headers, GList **meta)
     "x-amz-meta-mtime"
   };
 
-  p = strtok(headers, "\n");
+  p = strtok(headers, "\r\n");
   while(p != NULL) {
     int i;
 
@@ -490,15 +490,14 @@ extract_meta(char *headers, GList **meta)
       h = g_malloc(sizeof(HTTP_HEADER));
       h->key = strdup(key);
       value = strstr(p, " ");
-      value++;                         // remove leading space
-      value[strlen(value) - 1] = '\0'; // remove trailing '\r'
+      value++; // remove leading space
       h->value = strdup(value);
 
       *meta = g_list_append(*meta, h);
       break;
     }
 
-    p = strtok(NULL, "\n");
+    p = strtok(NULL, "\r\n");
   }
 
   return 0;
