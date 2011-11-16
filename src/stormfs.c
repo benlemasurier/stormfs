@@ -150,8 +150,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   DEBUG("create: %s\n", path);
 
   result = stormfs_curl_create(path, getuid(), getgid(), mode, time(NULL));
-
-  // TODO: open()?, probably stormfs_open(path, fi);
+  stormfs_open(path, fi);
 
   return result;
 }
@@ -177,7 +176,7 @@ stormfs_flush(const char *path, struct fuse_file_info *fi)
 {
   DEBUG("flush: %s\n", path);
 
-  if(fi->fh > 0 && fsync(fi->fh) != 0)
+  if(fsync(fi->fh) != 0)
     return -errno;
 
   return 0;
