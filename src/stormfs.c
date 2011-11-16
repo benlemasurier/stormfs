@@ -289,6 +289,8 @@ stormfs_read(const char *path, char *buf, size_t size, off_t offset,
 {
   int result;
 
+  DEBUG("read: %s\n", path);
+
   if((result = pread(fi->fh, buf, size, offset)) == -1)
     return -errno;
 
