@@ -685,10 +685,8 @@ stormfs_curl_utimens(const char *path, time_t t)
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
   struct curl_slist *req_headers = NULL;
+  GList *meta = NULL, *head = NULL, *next = NULL;
   HTTP_RESPONSE body;
-  GList *meta = NULL;
-  GList *head = NULL;
-  GList *next = NULL;
 
   body.memory = g_malloc(1);
   body.size = 0;
