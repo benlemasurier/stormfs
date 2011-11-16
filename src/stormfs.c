@@ -19,6 +19,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <pwd.h>
+#include <grp.h>
 #include <fuse.h>
 #include <glib.h>
 #include <libxml/xpath.h>
@@ -174,7 +176,36 @@ stormfs_chmod(const char *path, mode_t mode)
 static int
 stormfs_chown(const char *path, uid_t uid, gid_t gid)
 {
-  return -ENOTSUP;
+  int result = 0;
+  struct group *g;
+  struct passwd *p;
+  GList *headers = NULL;
+  errno = 0;
+
+  if((result = stormfs_curl_head(path, &headers)) != 0)
+    return result;
+
+  if((p = getpwuid(uid)) != NULL) {
+    headers = strip_header(headers, "x-amz-meta-uid");
+    headers = g_list_append(headers, get_uid_header((*p).pw_uid));
+  } else {
+    result = -errno;
+  }
+
+  if((g = getgrgid(gid)) != NULL) {
+    headers = strip_header(headers, "x-amz-meta-gid");
+    headers = g_list_append(headers, get_gid_header((*g).gr_gid));
+  } else {
+    result = -errno;
+  }
+
+  if(result != 0)
+    return result;
+
+  result = stormfs_curl_set_meta(path, headers);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
+
+  return result;
 }
 
 static int
@@ -214,7 +245,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     if(strcmp(header->key, "x-amz-meta-uid") == 0)
       stbuf->st_uid = get_uid(header->value);
     else if(strcmp(header->key, "x-amz-meta-gid") == 0)
-      stbuf->st_uid = get_gid(header->value);
+      stbuf->st_gid = get_gid(header->value);
     else if(strcmp(header->key, "x-amz-meta-mtime") == 0)
       stbuf->st_mtime = get_mtime(header->value);
     else if(strcmp(header->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
