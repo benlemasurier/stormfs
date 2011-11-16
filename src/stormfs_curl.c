@@ -300,6 +300,42 @@ get_copy_source(const char *path)
 }
 
 HTTP_HEADER *
+get_gid_header(gid_t gid)
+{
+  char *s = gid_to_s(gid);
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("x-amz-meta-gid");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+get_uid_header(uid_t uid)
+{
+  char *s = uid_to_s(uid);
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("x-amz-meta-uid");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+get_mode_header(mode_t mode)
+{
+  char *s = mode_to_s(mode);
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("x-amz-meta-mode");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
 get_mtime_header(time_t t)
 {
   HTTP_HEADER *h;
@@ -602,34 +638,30 @@ int
 stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t mtime)
 {
   int status;
-  char *gid_s, *uid_s, *mode_s, *mtime_s;
-  GString *uid_header;
-  GString *gid_header;
-  GString *mode_header;
-  GString *mtime_header;
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
   struct curl_slist *req_headers = NULL;
+  GList *headers = NULL, *head = NULL, *next = NULL;
 
-  gid_s = gid_to_s(gid);
-  gid_header = g_string_new("x-amz-meta-gid:");
-  gid_header = g_string_append(gid_header, gid_s);
-  req_headers = curl_slist_append(req_headers, gid_header->str);
+  headers = g_list_append(headers, get_gid_header(gid));
+  headers = g_list_append(headers, get_uid_header(uid));
+  headers = g_list_append(headers, get_mode_header(mode));
+  headers = g_list_append(headers, get_mtime_header(mtime));
+  headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
 
-  mode_s = mode_to_s(mode);
-  mode_header = g_string_new("x-amz-meta-mode:");
-  mode_header = g_string_append(mode_header, mode_s);
-  req_headers = curl_slist_append(req_headers, mode_header->str);
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+    HTTP_HEADER *header = head->data;
 
-  mtime_s = time_to_s(mtime);
-  mtime_header = g_string_new("x-amz-meta-mtime:");
-  mtime_header = g_string_append(mtime_header, mtime_s);
-  req_headers = curl_slist_append(req_headers, mtime_header->str);
+    req_headers = curl_slist_append(req_headers, header_to_s(header));
 
-  uid_s = uid_to_s(uid);
-  uid_header = g_string_new("x-amz-meta-uid:");
-  uid_header = g_string_append(uid_header, uid_s);
-  req_headers = curl_slist_append(req_headers, uid_header->str);
+    g_free(header->key);
+    g_free(header->value);
+    g_free(header);
+
+    head = next;
+  }
 
   sign_request("PUT", &req_headers, path);
   curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
@@ -639,17 +671,9 @@ stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t 
   curl_easy_perform(c);
   status = http_response_errno(c);
 
-  g_free(gid_s);
-  g_free(uid_s);
-  g_free(mtime_s);
-  g_free(mode_s);
   g_free(url);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
-  g_string_free(uid_header,   TRUE);
-  g_string_free(gid_header,   TRUE);
-  g_string_free(mode_header,  TRUE);
-  g_string_free(mtime_header, TRUE);
 
   return status;
 }
@@ -662,14 +686,12 @@ stormfs_curl_utimens(const char *path, time_t t)
   CURL *c = get_curl_handle(url);
   struct curl_slist *req_headers = NULL;
   HTTP_RESPONSE body;
-
-  body.memory = g_malloc(1);
-  body.size = 0;
-
-  // TODO: mygodcleanthisupshitman
   GList *meta = NULL;
   GList *head = NULL;
   GList *next = NULL;
+
+  body.memory = g_malloc(1);
+  body.size = 0;
 
   // get metadata from original object
   if((status = stormfs_curl_head(path, &meta)) != 0) {
@@ -688,7 +710,6 @@ stormfs_curl_utimens(const char *path, time_t t)
   head = g_list_first(meta);
   while(head != NULL) {
     next = head->next;
-
     HTTP_HEADER *header = head->data;
 
     if(strstr(header->key, "x-amz-") != NULL)
