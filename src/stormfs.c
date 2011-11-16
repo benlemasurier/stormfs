@@ -158,9 +158,34 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 static int
 stormfs_chmod(const char *path, mode_t mode)
 {
+  int result;
+  GList *headers = NULL;
+  GList *head = NULL, *next = NULL;
+
   DEBUG("chmod: %s\n", path);
 
-  return -ENOTSUP;
+  if((result = stormfs_curl_head(path, &headers)) != 0)
+    return result;
+
+  headers = strip_header(headers, "x-amz-meta-mode");
+  headers = g_list_append(headers, get_mode_header(mode));
+
+  result = stormfs_curl_set_meta(path, headers);
+
+  while(head != NULL) {
+    next = head->next;
+
+    HTTP_HEADER *h = head->data;
+    g_free(h->key);
+    g_free(h->value);
+    g_free(h);
+
+    head = next;
+  }
+
+  g_list_free(headers);
+
+  return result;
 }
 
 static int
@@ -442,10 +467,31 @@ static int
 stormfs_utimens(const char *path, const struct timespec ts[2])
 {
   int result;
+  GList *headers = NULL;
+  GList *head = NULL, *next = NULL;
 
   DEBUG("utimens: %s\n", path);
 
-  result = stormfs_curl_utimens(path, ts[1].tv_sec); 
+  if((result = stormfs_curl_head(path, &headers)) != 0)
+    return result;
+
+  headers = strip_header(headers, "x-amz-meta-mtime");
+  headers = g_list_append(headers, get_mtime_header(ts[1].tv_sec));
+
+  result = stormfs_curl_set_meta(path, headers);
+
+  while(head != NULL) {
+    next = head->next;
+
+    HTTP_HEADER *h = head->data;
+    g_free(h->key);
+    g_free(h->value);
+    g_free(h);
+
+    head = next;
+  }
+
+  g_list_free(headers);
 
   return result;
 }

@@ -289,7 +289,7 @@ strip_header(GList *headers, const char *key)
 }
 
 HTTP_HEADER *
-get_copy_source(const char *path)
+get_copy_source_header(const char *path)
 {
   HTTP_HEADER *h;
   h = g_malloc(sizeof(HTTP_HEADER));
@@ -731,43 +731,29 @@ stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t 
 }
 
 int
-stormfs_curl_utimens(const char *path, time_t t)
+stormfs_curl_set_meta(const char *path, GList *headers)
 {
-  int status;
+  int result;
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
   struct curl_slist *req_headers = NULL;
-  GList *meta = NULL, *head = NULL, *next = NULL;
+  GList *head = NULL, *next = NULL;
   HTTP_RESPONSE body;
 
   body.memory = g_malloc(1);
   body.size = 0;
 
-  // get metadata from original object
-  if((status = stormfs_curl_head(path, &meta)) != 0) {
-    g_free(url);
-    destroy_curl_handle(c);
+  headers = g_list_append(headers, get_replace_header());
+  headers = g_list_append(headers, get_copy_source_header(path));
+  headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
 
-    return status;
-  }
-
-  meta = strip_header(meta, "x-amz-meta-mtime");
-  meta = g_list_append(meta, get_copy_source(path));
-  meta = g_list_append(meta, get_mtime_header(t));
-  meta = g_list_sort(meta, (GCompareFunc) cmpstringp);
-  meta = g_list_append(meta, get_replace_header());
-
-  head = g_list_first(meta);
+  head = g_list_first(headers);
   while(head != NULL) {
     next = head->next;
     HTTP_HEADER *header = head->data;
 
     if(strstr(header->key, "x-amz-") != NULL)
       req_headers = curl_slist_append(req_headers, header_to_s(header));
-
-    g_free(header->key);
-    g_free(header->value);
-    g_free(header);
 
     head = next;
   }
@@ -780,7 +766,7 @@ stormfs_curl_utimens(const char *path, time_t t)
   curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
   curl_easy_perform(c);
-  status = http_response_errno(c);
+  result = http_response_errno(c);
 
   if(body.memory)
     g_free(body.memory);
@@ -789,7 +775,7 @@ stormfs_curl_utimens(const char *path, time_t t)
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
 
-  return status;
+  return result;
 }
 
 void
