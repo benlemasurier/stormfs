@@ -421,7 +421,7 @@ sign_request(const char *method,
 static int
 set_curl_defaults(CURL **c)
 {
-  curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  // curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
   curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
 
@@ -640,7 +640,6 @@ stormfs_curl_head(const char *path, GList **meta)
 int
 stormfs_curl_upload(const char *path, GList *headers, int fd)
 {
-  // if size > 5368709120LL -ENOTSUP (>5GB) (need multipart)
   FILE *f;
   int status;
   char *url;
