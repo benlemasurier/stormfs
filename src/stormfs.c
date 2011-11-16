@@ -70,12 +70,16 @@ static struct fuse_opt stormfs_opts[] = {
 
 static struct fuse_operations stormfs_oper = {
     .create   = stormfs_create,
+    .chmod    = stormfs_chmod,
+    .chown    = stormfs_chown,
     .getattr  = stormfs_getattr,
     .open     = stormfs_open,
     .read     = stormfs_read,
     .readdir  = stormfs_readdir,
     .release  = stormfs_release,
+    .truncate = stormfs_truncate,
     .utimens  = stormfs_utimens,
+    .write    = stormfs_write,
 };
 
 static uid_t
@@ -152,6 +156,22 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 }
 
 static int
+stormfs_chmod(const char *path, mode_t mode)
+{
+  DEBUG("chmod: %s\n", path);
+
+  return -ENOTSUP;
+}
+
+static int
+stormfs_chown(const char *path, uid_t uid, gid_t gid)
+{
+  DEBUG("chown: %s\n", path);
+
+  return -ENOTSUP;
+}
+
+static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
   int status;
@@ -213,6 +233,50 @@ stormfs_getattr(const char *path, struct stat *stbuf)
 }
 
 static int
+stormfs_open(const char *path, struct fuse_file_info *fi)
+{
+  FILE *f;
+  int fd;
+  int result;
+
+  DEBUG("open: %s\n", path);
+
+  if((unsigned int) fi->flags & O_TRUNC)
+    if((result = stormfs_truncate(path, 0)) != 0)
+      return result;
+
+  if((f = tmpfile()) == NULL)
+    return -errno;
+
+  if((result = stormfs_curl_get_file(path, f)) != 0) {
+    fclose(f);
+    return result;
+  }
+
+  if((fd = fileno(f)) == -1)
+    return -errno;
+
+  if(fsync(fd) != 0)
+    return -errno;
+
+  fi->fh = fd;
+  
+  return 0;
+}
+
+static int
+stormfs_read(const char *path, char *buf, size_t size, off_t offset,
+    struct fuse_file_info *fi)
+{
+  int result;
+
+  if((result = pread(fi->fh, buf, size, offset)) == -1)
+    return -errno;
+
+  return result;
+}
+
+static int
 stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     off_t offset, struct fuse_file_info *fi)
 {
@@ -269,46 +333,6 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 }
 
 static int
-stormfs_open(const char *path, struct fuse_file_info *fi)
-{
-  FILE *f;
-  int fd;
-  int result;
-
-  DEBUG("open: %s\n", path);
-
-  if((f = tmpfile()) == NULL)
-    return -errno;
-
-  if((result = stormfs_curl_get_file(path, f)) != 0) {
-    fclose(f);
-    return result;
-  }
-
-  if((fd = fileno(f)) == -1)
-    return -errno;
-
-  if(fsync(fd) != 0)
-    return -errno;
-
-  fi->fh = fd;
-  
-  return 0;
-}
-
-static int
-stormfs_read(const char *path, char *buf, size_t size, off_t offset,
-    struct fuse_file_info *fi)
-{
-  int result;
-
-  if((result = pread(fi->fh, buf, size, offset)) == -1)
-    return -errno;
-
-  return result;
-}
-
-static int
 stormfs_release(const char *path, struct fuse_file_info *fi)
 {
   DEBUG("release: %s\n", path);
@@ -317,6 +341,14 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     return -errno;
 
   return 0;
+}
+
+static int
+stormfs_truncate(const char *path, off_t size)
+{
+  DEBUG("truncate: %s\n", path);
+
+  return -ENOTSUP;
 }
 
 static int
@@ -329,6 +361,22 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   result = stormfs_curl_utimens(path, ts[1].tv_sec); 
 
   return result;
+}
+
+static int
+stormfs_write(const char *path, const char *buf, 
+    size_t size, off_t offset, struct fuse_file_info *fi)
+{
+  int result;
+
+  DEBUG("write: %s\n", path);
+
+  /*
+  result = pwrite(fi->fh, buf, size, offset);
+  return result;
+  */
+
+  return -ENOTSUP;
 }
 
 static int
