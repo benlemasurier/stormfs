@@ -87,6 +87,14 @@ cmpstringp(const void *p1, const void *p2)
   return strcmp(*(char **) p1, *(char **) p2);
 }
 
+void
+free_headers(HTTP_HEADER *h)
+{
+  g_free(h->key);
+  g_free(h->value);
+  g_free(h);
+}
+
 char *
 url_encode(char *s)
 {

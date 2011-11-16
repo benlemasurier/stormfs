@@ -11,6 +11,7 @@ HTTP_HEADER *get_uid_header(uid_t uid);
 HTTP_HEADER *get_mode_header(mode_t mode);
 HTTP_HEADER *get_mtime_header(time_t t);
 GList *strip_header(GList *headers, const char *key);
+void free_headers(HTTP_HEADER *h);
 
 int stormfs_curl_init(const char *bucket, const char *url);
 int stormfs_curl_set_auth(const char *access_key, const char *secret_key);

@@ -160,7 +160,6 @@ stormfs_chmod(const char *path, mode_t mode)
 {
   int result;
   GList *headers = NULL;
-  GList *head = NULL, *next = NULL;
 
   DEBUG("chmod: %s\n", path);
 
@@ -171,19 +170,7 @@ stormfs_chmod(const char *path, mode_t mode)
   headers = g_list_append(headers, get_mode_header(mode));
 
   result = stormfs_curl_set_meta(path, headers);
-
-  while(head != NULL) {
-    next = head->next;
-
-    HTTP_HEADER *h = head->data;
-    g_free(h->key);
-    g_free(h->value);
-    g_free(h);
-
-    head = next;
-  }
-
-  g_list_free(headers);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
 
   return result;
 }
@@ -212,8 +199,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
 {
   int status;
   GList *meta = NULL;
-  GList *head = NULL;
-  GList *next = NULL;
+  GList *head = NULL, *next = NULL;
 
   DEBUG("getattr: %s\n", path);
 
@@ -234,6 +220,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     next = head->next;
     HTTP_HEADER *header = head->data;
 
+    // TODO: clean this up.
     if(strcmp(header->key, "x-amz-meta-uid") == 0)
       stbuf->st_uid = get_uid(header->value);
     else if(strcmp(header->key, "x-amz-meta-gid") == 0)
@@ -253,16 +240,13 @@ stormfs_getattr(const char *path, struct stat *stbuf)
         stbuf->st_mode |= S_IFREG;
     }
 
-    g_free(header->key);
-    g_free(header->value);
-    g_free(header);
-
     head = next;
   }
 
   if(S_ISREG(stbuf->st_mode))
     stbuf->st_blocks = get_blocks(stbuf->st_size);
 
+  g_list_free_full(meta, (GDestroyNotify) free_headers); 
   g_list_free(meta);
 
   return 0;
@@ -377,7 +361,7 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
   DEBUG("release: %s\n", path);
 
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
-    GList *headers = NULL, *head = NULL, *next = NULL;
+    GList *headers = NULL;
 
     if((result = stormfs_curl_head(path, &headers)) != 0)
       return result;
@@ -386,19 +370,7 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     headers = g_list_append(headers, get_mtime_header(time(NULL)));
 
     result = stormfs_curl_upload(path, headers, fi->fh);
-
-    head = g_list_first(headers);
-    while(head != NULL) {
-      next = head->next;
-
-      HTTP_HEADER *h = head->data;
-      g_free(h->key);
-      g_free(h->value);
-
-      head = next;
-    }
-
-    g_list_free(headers);
+    g_list_free_full(headers, (GDestroyNotify) free_headers);
   }
 
   if(close(fi->fh) == -1)
@@ -414,7 +386,7 @@ stormfs_truncate(const char *path, off_t size)
   int fd;
   int result;
   struct stat st;
-  GList *headers = NULL, *head = NULL, *next = NULL;
+  GList *headers = NULL;
 
   DEBUG("truncate: %s\n", path);
 
@@ -443,19 +415,7 @@ stormfs_truncate(const char *path, off_t size)
   headers = g_list_append(headers, get_mode_header(st.st_mode));
   headers = g_list_append(headers, get_mtime_header(time(NULL)));
   result = stormfs_curl_upload(path, headers, fd);
-
-  head = g_list_first(headers);
-  while(head != NULL) {
-    next = head->next;
-
-    HTTP_HEADER *h = head->data;
-    g_free(h->key);
-    g_free(h->value);
-
-    head = next;
-  }
-
-  g_list_free(headers);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
 
   if(close(fd) != 0)
     return -errno;
@@ -468,7 +428,6 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
 {
   int result;
   GList *headers = NULL;
-  GList *head = NULL, *next = NULL;
 
   DEBUG("utimens: %s\n", path);
 
@@ -479,19 +438,7 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   headers = g_list_append(headers, get_mtime_header(ts[1].tv_sec));
 
   result = stormfs_curl_set_meta(path, headers);
-
-  while(head != NULL) {
-    next = head->next;
-
-    HTTP_HEADER *h = head->data;
-    g_free(h->key);
-    g_free(h->value);
-    g_free(h);
-
-    head = next;
-  }
-
-  g_list_free(headers);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
 
   return result;
 }
