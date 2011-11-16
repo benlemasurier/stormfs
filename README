@@ -1,6 +1,12 @@
 Installation Requirements:
-  - libxml2 ([sudo] apt-get install libxml2-dev)
-  - libfuse
-  - libcurl
-  - glib2
-  - autotools
+  - libxml2   ([sudo] apt-get install libxml2-dev)
+  - libfuse   ([sudo] apt-get install libfuse-dev libfuse2 fuse-utils)
+  - libcurl   ([sudo] apt-get install (libcurl4-gnutls-dev || libcurl4-openssl-dev) 
+  - glib2     ([sudo] apt-get install libglib2.0-dev)
+  - autotools ([sudo] apt-get install automake)
+
+Build:
+  ./autogen.sh
+  ./configure
+  make
+  [make install]
