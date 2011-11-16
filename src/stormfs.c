@@ -247,7 +247,6 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     stbuf->st_blocks = get_blocks(stbuf->st_size);
 
   g_list_free_full(meta, (GDestroyNotify) free_headers); 
-  g_list_free(meta);
 
   return 0;
 }
