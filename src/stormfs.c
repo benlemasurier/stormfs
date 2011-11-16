@@ -147,8 +147,6 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   int result;
 
-  DEBUG("create: %s\n", path);
-
   result = stormfs_curl_create(path, getuid(), getgid(), mode, time(NULL));
   stormfs_open(path, fi);
 
@@ -160,8 +158,6 @@ stormfs_chmod(const char *path, mode_t mode)
 {
   int result;
   GList *headers = NULL;
-
-  DEBUG("chmod: %s\n", path);
 
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
@@ -178,16 +174,12 @@ stormfs_chmod(const char *path, mode_t mode)
 static int
 stormfs_chown(const char *path, uid_t uid, gid_t gid)
 {
-  DEBUG("chown: %s\n", path);
-
   return -ENOTSUP;
 }
 
 static int
 stormfs_flush(const char *path, struct fuse_file_info *fi)
 {
-  DEBUG("flush: %s\n", path);
-
   if(fsync(fi->fh) != 0)
     return -errno;
 
@@ -200,8 +192,6 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   int status;
   GList *meta = NULL;
   GList *head = NULL, *next = NULL;
-
-  DEBUG("getattr: %s\n", path);
 
   memset(stbuf, 0, sizeof(struct stat));
   stbuf->st_nlink = 1;
@@ -258,8 +248,6 @@ stormfs_open(const char *path, struct fuse_file_info *fi)
   int fd;
   int result;
 
-  DEBUG("open: %s\n", path);
-
   if((unsigned int) fi->flags & O_TRUNC)
     if((result = stormfs_truncate(path, 0)) != 0)
       return result;
@@ -289,8 +277,6 @@ stormfs_read(const char *path, char *buf, size_t size, off_t offset,
 {
   int result;
 
-  DEBUG("read: %s\n", path);
-
   if((result = pread(fi->fh, buf, size, offset)) == -1)
     return -errno;
 
@@ -303,8 +289,6 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 {
   int result;
   char *data;
-
-  DEBUG("readdir: %s\n", path);
 
   result = stormfs_curl_get(path, &data);
   if(result != 0) {
@@ -359,8 +343,6 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
   int flags;
   int result = 0;
 
-  DEBUG("release: %s\n", path);
-
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
     GList *headers = NULL;
 
@@ -388,8 +370,6 @@ stormfs_truncate(const char *path, off_t size)
   int result;
   struct stat st;
   GList *headers = NULL;
-
-  DEBUG("truncate: %s\n", path);
 
   if(stat(path, &st) != 0)
     return -errno;
@@ -430,8 +410,6 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   int result;
   GList *headers = NULL;
 
-  DEBUG("utimens: %s\n", path);
-
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
 
@@ -449,8 +427,6 @@ stormfs_write(const char *path, const char *buf,
     size_t size, off_t offset, struct fuse_file_info *fi)
 {
   int result;
-
-  DEBUG("write: %s\n", path);
 
   return pwrite(fi->fh, buf, size, offset);
 }
