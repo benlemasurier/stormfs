@@ -13,6 +13,9 @@
 #include <errno.h>
 #include <ctype.h>
 #include <time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <curl/curl.h>
 #include <curl/types.h>
 #include <curl/easy.h>
@@ -418,7 +421,7 @@ sign_request(const char *method,
 static int
 set_curl_defaults(CURL **c)
 {
-  // curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
   curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
 
@@ -628,6 +631,59 @@ stormfs_curl_head(const char *path, GList **meta)
 
   g_free(url);
   g_free(response_headers);
+  destroy_curl_handle(c);
+  curl_slist_free_all(req_headers);
+
+  return status;
+}
+
+int
+stormfs_curl_upload(const char *path, GList *headers, int fd)
+{
+  // if size > 5368709120LL -ENOTSUP (>5GB) (need multipart)
+  FILE *f;
+  int status;
+  char *url;
+  CURL *c;
+  GList *head = NULL, *next = NULL;
+  struct curl_slist *req_headers = NULL;
+  struct stat st;
+
+  if(fstat(fd, &st) != 0)
+    return -errno;
+
+  // TODO: support multipart uploads (>5GB files)
+  if(st.st_size > 5368709120LL)
+    return -EFBIG;
+  
+  if((f = fdopen(fd, "rb")) == NULL)
+    return -errno;
+
+  url = get_url(path);
+  c = get_curl_handle(url);
+  headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
+
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+
+    HTTP_HEADER *header = head->data;
+    if(strstr(header->key, "x-amz-") != NULL)
+      req_headers = curl_slist_append(req_headers, header_to_s(header));
+
+    head = next;
+  }
+
+  sign_request("PUT", &req_headers, path);
+  curl_easy_setopt(c, CURLOPT_INFILE, f);
+  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);
+  curl_easy_setopt(c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size); 
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+
+  curl_easy_perform(c);
+  status = http_response_errno(c);
+
+  g_free(url);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
 

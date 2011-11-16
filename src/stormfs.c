@@ -73,6 +73,7 @@ static struct fuse_operations stormfs_oper = {
     .chmod    = stormfs_chmod,
     .chown    = stormfs_chown,
     .getattr  = stormfs_getattr,
+    .flush    = stormfs_flush,
     .open     = stormfs_open,
     .read     = stormfs_read,
     .readdir  = stormfs_readdir,
@@ -169,6 +170,17 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   DEBUG("chown: %s\n", path);
 
   return -ENOTSUP;
+}
+
+static int
+stormfs_flush(const char *path, struct fuse_file_info *fi)
+{
+  DEBUG("flush: %s\n", path);
+
+  if(fsync(fi->fh) != 0)
+    return -errno;
+
+  return 0;
 }
 
 static int
@@ -335,20 +347,96 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 static int
 stormfs_release(const char *path, struct fuse_file_info *fi)
 {
+  int flags;
+  int result = 0;
+
   DEBUG("release: %s\n", path);
+
+  if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
+    GList *headers = NULL, *head = NULL, *next = NULL;
+
+    if((result = stormfs_curl_head(path, &headers)) != 0)
+      return result;
+
+    headers = strip_header(headers, "x-amz-meta-mtime");
+    headers = g_list_append(headers, get_mtime_header(time(NULL)));
+
+    result = stormfs_curl_upload(path, headers, fi->fh);
+
+    head = g_list_first(headers);
+    while(head != NULL) {
+      next = head->next;
+
+      HTTP_HEADER *h = head->data;
+      g_free(h->key);
+      g_free(h->value);
+
+      head = next;
+    }
+
+    g_list_free(headers);
+  }
 
   if(close(fi->fh) == -1)
     return -errno;
 
-  return 0;
+  return result;
 }
 
 static int
 stormfs_truncate(const char *path, off_t size)
 {
+  FILE *f;
+  int fd;
+  int result;
+  struct stat st;
+  GList *headers = NULL, *head = NULL, *next = NULL;
+
   DEBUG("truncate: %s\n", path);
 
-  return -ENOTSUP;
+  if(stat(path, &st) != 0)
+    return -errno;
+
+  if((f = tmpfile()) == NULL)
+    return -errno;
+
+  if((result = stormfs_curl_get_file(path, f)) != 0) {
+    fclose(f);
+    return result;
+  }
+
+  if((fd = fileno(f)) == -1)
+    return -errno;
+
+  if(ftruncate(fd, size) != 0)
+    return -errno;
+
+  if(fsync(fd) != 0)
+    return -errno;
+
+  headers = g_list_append(headers, get_gid_header(getgid()));
+  headers = g_list_append(headers, get_uid_header(getuid()));
+  headers = g_list_append(headers, get_mode_header(st.st_mode));
+  headers = g_list_append(headers, get_mtime_header(time(NULL)));
+  result = stormfs_curl_upload(path, headers, fd);
+
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+
+    HTTP_HEADER *h = head->data;
+    g_free(h->key);
+    g_free(h->value);
+
+    head = next;
+  }
+
+  g_list_free(headers);
+
+  if(close(fd) != 0)
+    return -errno;
+
+  return result;
 }
 
 static int
@@ -371,12 +459,9 @@ stormfs_write(const char *path, const char *buf,
 
   DEBUG("write: %s\n", path);
 
-  /*
   result = pwrite(fi->fh, buf, size, offset);
-  return result;
-  */
 
-  return -ENOTSUP;
+  return result;
 }
 
 static int
