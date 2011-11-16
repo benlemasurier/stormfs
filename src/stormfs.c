@@ -374,7 +374,7 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     g_list_free_full(headers, (GDestroyNotify) free_headers);
   }
 
-  if(close(fi->fh) == -1)
+  if(close(fi->fh) != 0)
     return -errno;
 
   return result;
@@ -452,9 +452,7 @@ stormfs_write(const char *path, const char *buf,
 
   DEBUG("write: %s\n", path);
 
-  result = pwrite(fi->fh, buf, size, offset);
-
-  return result;
+  return pwrite(fi->fh, buf, size, offset);
 }
 
 static int
