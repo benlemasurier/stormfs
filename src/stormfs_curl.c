@@ -29,10 +29,10 @@ struct stormfs_curl {
   const char *secret_key;
 } stormfs_curl;
 
-struct stormfs_curl_memory {
+typedef struct {
   char   *memory;
   size_t size;
-};
+} HTTP_RESPONSE;
 
 static char *
 gid_to_s(gid_t gid)
@@ -406,7 +406,7 @@ static size_t
 write_memory_cb(void *ptr, size_t size, size_t nmemb, void *data)
 {
   size_t realsize = size * nmemb;
-  struct stormfs_curl_memory *mem = (struct stormfs_curl_memory *) data;
+  HTTP_RESPONSE *mem = data;
 
   mem->memory = g_realloc(mem->memory, mem->size + realsize + 1);
   if(mem->memory == NULL) {
@@ -513,7 +513,7 @@ stormfs_curl_get(const char *path, char **data)
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
   struct curl_slist *req_headers = NULL; 
-  struct stormfs_curl_memory body;
+  HTTP_RESPONSE body;
 
   body.memory = g_malloc(1);
   body.size = 0;
@@ -569,7 +569,7 @@ stormfs_curl_head(const char *path, GList **meta)
   char *response_headers;
   CURL *c = get_curl_handle(url);
   struct curl_slist *req_headers = NULL;
-  struct stormfs_curl_memory data;
+  HTTP_RESPONSE data;
 
   data.memory = g_malloc(1);
   data.size = 0;
@@ -661,6 +661,10 @@ stormfs_curl_utimens(const char *path, time_t t)
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
   struct curl_slist *req_headers = NULL;
+  HTTP_RESPONSE body;
+
+  body.memory = g_malloc(1);
+  body.size = 0;
 
   // TODO: mygodcleanthisupshitman
   GList *meta = NULL;
@@ -701,9 +705,14 @@ stormfs_curl_utimens(const char *path, time_t t)
   curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
   curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
+  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
   curl_easy_perform(c);
   status = http_response_errno(c);
+
+  if(body.memory)
+    g_free(body.memory);
 
   g_free(url);
   destroy_curl_handle(c);
