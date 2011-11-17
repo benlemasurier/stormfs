@@ -150,9 +150,10 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   int result;
 
   result = stormfs_curl_create(path, getuid(), getgid(), mode, time(NULL));
-  stormfs_open(path, fi);
+  if(result != 0)
+    return result;
 
-  return result;
+  return stormfs_open(path, fi);
 }
 
 static int
