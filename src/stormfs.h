@@ -22,7 +22,7 @@ static int stormfs_write(const char *path, const char *buf,
                          size_t size, off_t offset, struct fuse_file_info *fi);
 
 char *stormfs_virtual_url(char *url, char *bucket);
-static int stormfs_destroy(struct fuse_args *args);
+static int stormfs_destroy(void *data);
 static int stormfs_opt_proc(void *data, const char *arg, int key,
                             struct fuse_args *outargs);
 static int stormfs_fuse_main(struct fuse_args *args);

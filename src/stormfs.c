@@ -75,6 +75,7 @@ static struct fuse_operations stormfs_oper = {
     .create   = stormfs_create,
     .chmod    = stormfs_chmod,
     .chown    = stormfs_chown,
+    .destroy  = stormfs_destroy,
     .getattr  = stormfs_getattr,
     .init     = stormfs_init,
     .flush    = stormfs_flush,
@@ -620,10 +621,9 @@ stormfs_get_credentials(char **access_key, char **secret_key)
 }
 
 static int
-stormfs_destroy(struct fuse_args *args)
+stormfs_destroy(void *data)
 {
   stormfs_curl_destroy();
-  fuse_opt_free_args(args);
   g_free(stormfs.virtual_url);
 
   return 0;
@@ -664,8 +664,7 @@ main(int argc, char *argv[])
   stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
 
   status = stormfs_fuse_main(&args);
-
-  stormfs_destroy(&args);
+  fuse_opt_free_args(&args);
 
   return status;
 }
