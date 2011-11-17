@@ -76,6 +76,7 @@ static struct fuse_operations stormfs_oper = {
     .chmod    = stormfs_chmod,
     .chown    = stormfs_chown,
     .getattr  = stormfs_getattr,
+    .init     = stormfs_init,
     .flush    = stormfs_flush,
     .mkdir    = stormfs_mkdir,
     .open     = stormfs_open,
@@ -306,6 +307,18 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   g_list_free_full(meta, (GDestroyNotify) free_headers); 
 
   return 0;
+}
+
+static void *
+stormfs_init(struct fuse_conn_info *conn)
+{
+  if(conn->capable & FUSE_CAP_ATOMIC_O_TRUNC)
+    conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
+
+  if(conn->capable & FUSE_CAP_BIG_WRITES)
+    conn->want |= FUSE_CAP_BIG_WRITES;
+
+  return NULL;
 }
 
 static int
