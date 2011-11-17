@@ -8,6 +8,7 @@ static int stormfs_flush(const char *path, struct fuse_file_info *fi);
 static int stormfs_getattr(const char *path, struct stat *stbuf);
 static void *stormfs_init(struct fuse_conn_info *conn);
 static int stormfs_mkdir(const char *path, mode_t mode);
+static int stormfs_mknod(const char *path, mode_t mode, dev_t rdev);
 static int stormfs_open(const char *path, struct fuse_file_info *fi);
 static int stormfs_read(const char *path, char *buf, size_t size, off_t offset,
                         struct fuse_file_info *fi);

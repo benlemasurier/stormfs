@@ -80,6 +80,7 @@ static struct fuse_operations stormfs_oper = {
     .init     = stormfs_init,
     .flush    = stormfs_flush,
     .mkdir    = stormfs_mkdir,
+    .mknod    = stormfs_mknod,
     .open     = stormfs_open,
     .read     = stormfs_read,
     .readdir  = stormfs_readdir,
@@ -253,6 +254,12 @@ stormfs_mkdir(const char *path, mode_t mode)
     return -errno;
 
   return result;
+}
+
+static int
+stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
+{
+  return stormfs_curl_create(path, getuid(), getgid(), mode, time(NULL));
 }
 
 static int
