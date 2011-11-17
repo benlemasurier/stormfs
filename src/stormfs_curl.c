@@ -309,6 +309,18 @@ content_header(const char *type)
 }
 
 HTTP_HEADER *
+copy_meta_header()
+{
+  HTTP_HEADER *h;
+  h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("x-amz-metadata-directive");
+  h->value = strdup("COPY");
+
+  return h;
+}
+
+HTTP_HEADER *
 copy_source_header(const char *path)
 {
   HTTP_HEADER *h;
@@ -760,7 +772,7 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
     return -errno;
 
   // TODO: support multipart uploads (>5GB files)
-  if(st.st_size > 5368709120LL)
+  if(st.st_size >= FIVE_GB)
     return -EFBIG;
   
   if((f = fdopen(fd, "rb")) == NULL)
@@ -887,6 +899,55 @@ stormfs_curl_set_meta(const char *path, GList *headers)
   g_free(url);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
+
+  return result;
+}
+
+int
+stormfs_curl_rename(const char *from, const char *to)
+{
+  int result;
+  char *url = get_url(to);
+  CURL *c = get_curl_handle(url);
+  struct curl_slist *req_headers = NULL;
+  GList *headers = NULL, *head = NULL, *next = NULL;
+  HTTP_RESPONSE body;
+
+  body.memory = g_malloc(1);
+  body.size = 0;
+
+  headers = g_list_append(headers, copy_meta_header());
+  headers = g_list_append(headers, copy_source_header(from));
+  headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
+
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+    HTTP_HEADER *header = head->data;
+
+    if(strstr(header->key, "x-amz-") != NULL)
+      req_headers = curl_slist_append(req_headers, header_to_s(header));
+
+    head = next;
+  }
+
+  sign_request("PUT", &req_headers, to);
+  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
+  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
+  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
+
+  curl_easy_perform(c);
+  result = http_response_errno(c);
+
+  if(body.memory)
+    g_free(body.memory);
+
+  g_free(url);
+  destroy_curl_handle(c);
+  curl_slist_free_all(req_headers);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
 
   return result;
 }

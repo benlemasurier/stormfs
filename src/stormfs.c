@@ -86,6 +86,7 @@ static struct fuse_operations stormfs_oper = {
     .readdir  = stormfs_readdir,
     .readlink = stormfs_readlink,
     .release  = stormfs_release,
+    .rename   = stormfs_rename,
     .rmdir    = stormfs_rmdir,
     .symlink  = stormfs_symlink,
     .truncate = stormfs_truncate,
@@ -499,6 +500,29 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     return -errno;
 
   return result;
+}
+
+static int
+stormfs_rename(const char *from, const char *to)
+{
+  int result;
+  struct stat st;
+
+  if((result = stormfs_getattr(from, &st)) != 0)
+    return -result;
+
+  // TODO:
+  if(S_ISDIR(st.st_mode)) 
+    return -ENOTSUP;
+
+  // TODO:
+  if(st.st_size >= FIVE_GB)
+    return -ENOTSUP;
+
+  if((result = stormfs_curl_rename(from, to)) != 0)
+    return result;
+
+  return stormfs_unlink(from);
 }
 
 static int
