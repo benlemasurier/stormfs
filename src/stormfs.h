@@ -6,11 +6,12 @@ static int stormfs_chmod(const char *path, mode_t mode);
 static int stormfs_chown(const char *path, uid_t uid, gid_t gid);
 static int stormfs_flush(const char *path, struct fuse_file_info *fi);
 static int stormfs_getattr(const char *path, struct stat *stbuf);
-static int stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
-                           off_t offset, struct fuse_file_info *fi);
+static int stormfs_mkdir(const char *path, mode_t mode);
 static int stormfs_open(const char *path, struct fuse_file_info *fi);
 static int stormfs_read(const char *path, char *buf, size_t size, off_t offset,
                         struct fuse_file_info *fi);
+static int stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
+                           off_t offset, struct fuse_file_info *fi);
 static int stormfs_release(const char *path, struct fuse_file_info *fi);
 static int stormfs_truncate(const char *path, off_t size);
 static int stormfs_utimens(const char *path, const struct timespec ts[2]);

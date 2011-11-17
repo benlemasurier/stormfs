@@ -6,10 +6,11 @@ typedef struct {
   char *value;
 } HTTP_HEADER;
 
-HTTP_HEADER *get_gid_header(gid_t gid);
-HTTP_HEADER *get_uid_header(uid_t uid);
-HTTP_HEADER *get_mode_header(mode_t mode);
-HTTP_HEADER *get_mtime_header(time_t t);
+HTTP_HEADER *gid_header(gid_t gid);
+HTTP_HEADER *uid_header(uid_t uid);
+HTTP_HEADER *mode_header(mode_t mode);
+HTTP_HEADER *mtime_header(time_t t);
+HTTP_HEADER *content_header(const char *type);
 GList *strip_header(GList *headers, const char *key);
 void free_headers(HTTP_HEADER *h);
 

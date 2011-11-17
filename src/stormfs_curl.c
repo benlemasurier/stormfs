@@ -309,7 +309,7 @@ get_copy_source_header(const char *path)
 }
 
 HTTP_HEADER *
-get_gid_header(gid_t gid)
+gid_header(gid_t gid)
 {
   char *s = gid_to_s(gid);
   HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
@@ -321,7 +321,7 @@ get_gid_header(gid_t gid)
 }
 
 HTTP_HEADER *
-get_uid_header(uid_t uid)
+uid_header(uid_t uid)
 {
   char *s = uid_to_s(uid);
   HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
@@ -333,7 +333,7 @@ get_uid_header(uid_t uid)
 }
 
 HTTP_HEADER *
-get_mode_header(mode_t mode)
+mode_header(mode_t mode)
 {
   char *s = mode_to_s(mode);
   HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
@@ -345,7 +345,7 @@ get_mode_header(mode_t mode)
 }
 
 HTTP_HEADER *
-get_mtime_header(time_t t)
+mtime_header(time_t t)
 {
   HTTP_HEADER *h;
   char *s = time_to_s(t);
@@ -369,6 +369,18 @@ get_replace_header()
   return h;
 }
 
+HTTP_HEADER *
+content_header(const char *type)
+{
+  HTTP_HEADER *h;
+  h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("Content-Type");
+  h->value = strdup(type);
+
+  return h;
+}
+
 static int
 sign_request(const char *method, 
     struct curl_slist **headers, const char *path)
@@ -376,30 +388,39 @@ sign_request(const char *method,
   char *signature;
   GString *to_sign;
   GString *date_header;
+  GString *amz_headers;
+  GString *content_type;
   GString *authorization;
-  struct curl_slist *next;
-  struct curl_slist *header;
+  struct curl_slist *next = NULL;
+  struct curl_slist *header = NULL;
   char *date = rfc2822_timestamp();
   char *resource = get_resource(path);
 
-  to_sign = g_string_new("");
-  to_sign = g_string_append(to_sign, method);
-  to_sign = g_string_append(to_sign, "\n\n\n");
-  to_sign = g_string_append(to_sign, date);
-  to_sign = g_string_append_c(to_sign, '\n');
-
+  amz_headers  = g_string_new("");
+  content_type = g_string_new("");
   header = *headers;
-  if(header != NULL) {
-    do {
-      next = header->next;
-      if(strstr(header->data, "x-amz") != NULL) {
-        to_sign = g_string_append(to_sign, header->data);
-        to_sign = g_string_append_c(to_sign, '\n');
-      }
-      header = next;
-    } while(next);
+  while(header != NULL) {
+    next = header->next;
+
+    if(strstr(header->data, "x-amz") != NULL) {
+      amz_headers = g_string_append(amz_headers, header->data);
+      amz_headers = g_string_append_c(amz_headers, '\n');
+    } else if(strstr(header->data, "Content-Type") != NULL) {
+      content_type = g_string_append(content_type, 
+        (strstr(header->data, ":") + 1));
+    }
+
+    header = next;
   }
 
+  content_type = g_string_append_c(content_type, '\n');
+  to_sign = g_string_new("");
+  to_sign = g_string_append(to_sign, method);
+  to_sign = g_string_append(to_sign, "\n\n");
+  to_sign = g_string_append(to_sign, content_type->str);
+  to_sign = g_string_append(to_sign, date);
+  to_sign = g_string_append_c(to_sign, '\n');
+  to_sign = g_string_append(to_sign, amz_headers->str);
   to_sign = g_string_append(to_sign, resource);
 
   signature = hmac_sha1(stormfs_curl.secret_key, to_sign->str);
@@ -418,7 +439,9 @@ sign_request(const char *method,
   g_free(resource);
   g_free(signature);
   g_string_free(to_sign, TRUE);
+  g_string_free(amz_headers, TRUE);
   g_string_free(date_header, TRUE);
+  g_string_free(content_type, TRUE);
   g_string_free(authorization, TRUE);
 
   return 0;
@@ -674,6 +697,8 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
     HTTP_HEADER *header = head->data;
     if(strstr(header->key, "x-amz-") != NULL)
       req_headers = curl_slist_append(req_headers, header_to_s(header));
+    if(strstr(header->key, "Content-Type") != NULL)
+      req_headers = curl_slist_append(req_headers, header_to_s(header));
 
     head = next;
   }
@@ -703,10 +728,10 @@ stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t 
   struct curl_slist *req_headers = NULL;
   GList *headers = NULL, *head = NULL, *next = NULL;
 
-  headers = g_list_append(headers, get_gid_header(gid));
-  headers = g_list_append(headers, get_uid_header(uid));
-  headers = g_list_append(headers, get_mode_header(mode));
-  headers = g_list_append(headers, get_mtime_header(mtime));
+  headers = g_list_append(headers, gid_header(gid));
+  headers = g_list_append(headers, uid_header(uid));
+  headers = g_list_append(headers, mode_header(mode));
+  headers = g_list_append(headers, mtime_header(mtime));
   headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
 
   head = g_list_first(headers);

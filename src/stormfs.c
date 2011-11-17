@@ -76,6 +76,7 @@ static struct fuse_operations stormfs_oper = {
     .chown    = stormfs_chown,
     .getattr  = stormfs_getattr,
     .flush    = stormfs_flush,
+    .mkdir    = stormfs_mkdir,
     .open     = stormfs_open,
     .read     = stormfs_read,
     .readdir  = stormfs_readdir,
@@ -166,7 +167,7 @@ stormfs_chmod(const char *path, mode_t mode)
     return result;
 
   headers = strip_header(headers, "x-amz-meta-mode");
-  headers = g_list_append(headers, get_mode_header(mode));
+  headers = g_list_append(headers, mode_header(mode));
 
   result = stormfs_curl_set_meta(path, headers);
   g_list_free_full(headers, (GDestroyNotify) free_headers);
@@ -188,14 +189,14 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
 
   if((p = getpwuid(uid)) != NULL) {
     headers = strip_header(headers, "x-amz-meta-uid");
-    headers = g_list_append(headers, get_uid_header((*p).pw_uid));
+    headers = g_list_append(headers, uid_header((*p).pw_uid));
   } else {
     result = -errno;
   }
 
   if((g = getgrgid(gid)) != NULL) {
     headers = strip_header(headers, "x-amz-meta-gid");
-    headers = g_list_append(headers, get_gid_header((*g).gr_gid));
+    headers = g_list_append(headers, gid_header((*g).gr_gid));
   } else {
     result = -errno;
   }
@@ -216,6 +217,37 @@ stormfs_flush(const char *path, struct fuse_file_info *fi)
     return -errno;
 
   return 0;
+}
+
+static int
+stormfs_mkdir(const char *path, mode_t mode)
+{ 
+  FILE *f;
+  int fd;
+  int result;
+  GList *headers = NULL;
+
+  if((f = tmpfile()) == NULL)
+    return -errno;
+
+  if((fd = fileno(f)) == -1)
+    return -errno;
+
+  if(fsync(fd) != 0)
+    return -errno;
+
+  headers = g_list_append(headers, gid_header(getgid()));
+  headers = g_list_append(headers, uid_header(getuid()));
+  headers = g_list_append(headers, mode_header(mode));
+  headers = g_list_append(headers, mtime_header(time(NULL)));
+  headers = g_list_append(headers, content_header("application/x-directory"));
+  result = stormfs_curl_upload(path, headers, fd);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
+
+  if(close(fd) != 0)
+    return -errno;
+
+  return result;
 }
 
 static int
@@ -382,7 +414,7 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
       return result;
 
     headers = strip_header(headers, "x-amz-meta-mtime");
-    headers = g_list_append(headers, get_mtime_header(time(NULL)));
+    headers = g_list_append(headers, mtime_header(time(NULL)));
 
     result = stormfs_curl_upload(path, headers, fi->fh);
     g_list_free_full(headers, (GDestroyNotify) free_headers);
@@ -423,10 +455,10 @@ stormfs_truncate(const char *path, off_t size)
   if(fsync(fd) != 0)
     return -errno;
 
-  headers = g_list_append(headers, get_gid_header(getgid()));
-  headers = g_list_append(headers, get_uid_header(getuid()));
-  headers = g_list_append(headers, get_mode_header(st.st_mode));
-  headers = g_list_append(headers, get_mtime_header(time(NULL)));
+  headers = g_list_append(headers, gid_header(getgid()));
+  headers = g_list_append(headers, uid_header(getuid()));
+  headers = g_list_append(headers, mode_header(st.st_mode));
+  headers = g_list_append(headers, mtime_header(time(NULL)));
   result = stormfs_curl_upload(path, headers, fd);
   g_list_free_full(headers, (GDestroyNotify) free_headers);
 
@@ -446,7 +478,7 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
     return result;
 
   headers = strip_header(headers, "x-amz-meta-mtime");
-  headers = g_list_append(headers, get_mtime_header(ts[1].tv_sec));
+  headers = g_list_append(headers, mtime_header(ts[1].tv_sec));
 
   result = stormfs_curl_set_meta(path, headers);
   g_list_free_full(headers, (GDestroyNotify) free_headers);
