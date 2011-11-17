@@ -360,7 +360,12 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return -EIO;
   }
 
-  // TODO: clean this up (testing).
+  filler(buf, ".",  0, 0);
+  filler(buf, "..", 0, 0);
+
+  if(strstr(data, "xml") == NULL)
+    return 0;
+
   xmlDocPtr doc;
   xmlXPathContextPtr ctx;
   xmlXPathObjectPtr contents_xp;
