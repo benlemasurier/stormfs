@@ -84,8 +84,10 @@ static struct fuse_operations stormfs_oper = {
     .open     = stormfs_open,
     .read     = stormfs_read,
     .readdir  = stormfs_readdir,
+    .readlink = stormfs_readlink,
     .release  = stormfs_release,
     .rmdir    = stormfs_rmdir,
+    .symlink  = stormfs_symlink,
     .truncate = stormfs_truncate,
     .unlink   = stormfs_unlink,
     .utimens  = stormfs_utimens,
@@ -431,6 +433,50 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 }
 
 static int
+stormfs_readlink(const char *path, char *buf, size_t size)
+{
+  int fd;
+  FILE *f;
+  int result;
+  struct stat st;
+
+  if(size <= 0)
+    return 0;
+
+  --size; // save the null byte
+
+  if((f = tmpfile()) == NULL)
+    return -errno;
+
+  if((result = stormfs_curl_get_file(path, f)) != 0) {
+    fclose(f);
+    return result;
+  }
+
+  if((fd = fileno(f)) == -1)
+    return -errno;
+
+  if(fstat(fd, &st) != 0) {
+    close(fd);
+    return -errno;
+  }
+
+  if(st.st_size < (off_t) size)
+    size = st.st_size;
+
+  if(pread(fd, buf, size, 0) == -1) {
+    close(fd);
+    return -errno;
+  }
+
+  buf[size] = 0;
+  if(close(fd) != 0)
+    return -errno;
+
+  return 0;
+}
+
+static int
 stormfs_release(const char *path, struct fuse_file_info *fi)
 {
   int flags;
@@ -474,6 +520,33 @@ stormfs_rmdir(const char *path)
   g_free(data);
 
   return stormfs_curl_delete(path);
+}
+
+static int
+stormfs_symlink(const char *from, const char *to)
+{
+  int fd;
+  int result;
+  mode_t mode = S_IFLNK;
+  GList *headers = NULL;
+
+  if((fd = fileno(tmpfile())) == -1)
+    return -errno;
+
+  if(pwrite(fd, from, strlen(from), 0) == -1) {
+    close(fd);
+    return -errno;
+  }
+
+  headers = g_list_append(headers, mode_header(mode));
+  headers = g_list_append(headers, mtime_header(time(NULL)));
+  result = stormfs_curl_upload(to, headers, fd);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
+
+  if(close(fd) != 0)
+    return -errno;
+
+  return result;
 }
 
 static int
@@ -627,13 +700,11 @@ stormfs_get_credentials(char **access_key, char **secret_key)
   return 0;
 }
 
-static int
+static void
 stormfs_destroy(void *data)
 {
   stormfs_curl_destroy();
   g_free(stormfs.virtual_url);
-
-  return 0;
 }
 
 int

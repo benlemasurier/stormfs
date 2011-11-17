@@ -297,7 +297,19 @@ strip_header(GList *headers, const char *key)
 }
 
 HTTP_HEADER *
-get_copy_source_header(const char *path)
+content_header(const char *type)
+{
+  HTTP_HEADER *h;
+  h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("Content-Type");
+  h->value = strdup(type);
+
+  return h;
+}
+
+HTTP_HEADER *
+copy_source_header(const char *path)
 {
   HTTP_HEADER *h;
   h = g_malloc(sizeof(HTTP_HEADER));
@@ -315,18 +327,6 @@ gid_header(gid_t gid)
   HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
 
   h->key   = strdup("x-amz-meta-gid");
-  h->value = s;
-
-  return h;
-}
-
-HTTP_HEADER *
-uid_header(uid_t uid)
-{
-  char *s = uid_to_s(uid);
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key   = strdup("x-amz-meta-uid");
   h->value = s;
 
   return h;
@@ -358,7 +358,7 @@ mtime_header(time_t t)
 }
 
 HTTP_HEADER *
-get_replace_header()
+replace_header()
 {
   HTTP_HEADER *h;
   h = g_malloc(sizeof(HTTP_HEADER));
@@ -370,13 +370,13 @@ get_replace_header()
 }
 
 HTTP_HEADER *
-content_header(const char *type)
+uid_header(uid_t uid)
 {
-  HTTP_HEADER *h;
-  h = g_malloc(sizeof(HTTP_HEADER));
+  char *s = uid_to_s(uid);
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
 
-  h->key   = strdup("Content-Type");
-  h->value = strdup(type);
+  h->key   = strdup("x-amz-meta-uid");
+  h->value = s;
 
   return h;
 }
@@ -856,8 +856,8 @@ stormfs_curl_set_meta(const char *path, GList *headers)
   body.memory = g_malloc(1);
   body.size = 0;
 
-  headers = g_list_append(headers, get_replace_header());
-  headers = g_list_append(headers, get_copy_source_header(path));
+  headers = g_list_append(headers, replace_header());
+  headers = g_list_append(headers, copy_source_header(path));
   headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
 
   head = g_list_first(headers);
