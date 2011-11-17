@@ -83,6 +83,7 @@ static struct fuse_operations stormfs_oper = {
     .release  = stormfs_release,
     .rmdir    = stormfs_rmdir,
     .truncate = stormfs_truncate,
+    .unlink   = stormfs_unlink,
     .utimens  = stormfs_utimens,
     .write    = stormfs_write,
 };
@@ -493,6 +494,14 @@ stormfs_truncate(const char *path, off_t size)
     return -errno;
 
   return result;
+}
+
+static int
+stormfs_unlink(const char *path)
+{
+  int result = 0;
+
+  return stormfs_curl_delete(path);
 }
 
 static int
