@@ -21,6 +21,7 @@
 #include <dirent.h>
 #include <pwd.h>
 #include <grp.h>
+#include <libgen.h>
 #include <fuse.h>
 #include <glib.h>
 #include <libxml/xpath.h>
@@ -354,18 +355,18 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
   int result;
-  char *data;
+  char *xml;
 
-  result = stormfs_curl_get(path, &data);
+  result = stormfs_curl_list_bucket(path, &xml);
   if(result != 0) {
-    g_free(data);
+    g_free(xml);
     return -EIO;
   }
 
   filler(buf, ".",  0, 0);
   filler(buf, "..", 0, 0);
 
-  if(strstr(data, "xml") == NULL)
+  if(strstr(xml, "xml") == NULL)
     return 0;
 
   xmlDocPtr doc;
@@ -373,7 +374,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   xmlXPathObjectPtr contents_xp;
   xmlNodeSetPtr content_nodes;
 
-  if((doc = xmlReadMemory(data, strlen(data), "", NULL, 0)) == NULL)
+  if((doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0)) == NULL)
     return -EIO;
 
   ctx = xmlXPathNewContext(doc);
@@ -394,7 +395,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     xmlNodeSetPtr key_nodes = key->nodesetval;
     name = (char *) xmlNodeListGetString(doc, key_nodes->nodeTab[0]->xmlChildrenNode, 1);
 
-    filler(buf, name, 0, 0);
+    filler(buf, basename(name), 0, 0);
 
     g_free(name);
     xmlXPathFreeObject(key);
@@ -403,7 +404,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   xmlXPathFreeObject(contents_xp);
   xmlXPathFreeContext(ctx);
   xmlFreeDoc(doc);
-  g_free(data);
+  g_free(xml);
 
   return 0;
 }

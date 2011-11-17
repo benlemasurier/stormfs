@@ -461,11 +461,41 @@ static char *
 get_url(const char *path)
 {
   char *url;
-  char tmp[strlen(stormfs_curl.url) + strlen(path) + 1];
+  GString *tmp;
 
-  strcpy(tmp, stormfs_curl.url);
-  strncat(tmp, path, strlen(path) + 1);
-  url = strdup(tmp);
+  tmp = g_string_new(stormfs_curl.url);
+  tmp = g_string_append(tmp, path);
+  tmp = g_string_append(tmp, "?delimiter=/");
+  tmp = g_string_append(tmp, "&prefix=");
+
+  if(strlen(path) > 1) {
+    tmp = g_string_append(tmp, (path + 1));
+    tmp = g_string_append(tmp, "/");
+  }
+
+  url = strdup(tmp->str);
+  g_string_free(tmp, TRUE);
+
+  return(url);
+}
+
+static char *
+get_list_bucket_url(const char *path)
+{
+  char *url;
+  GString *tmp;
+
+  tmp = g_string_new(stormfs_curl.url);
+  tmp = g_string_append(tmp, "?delimiter=/");
+  tmp = g_string_append(tmp, "&prefix=");
+
+  if(strlen(path) > 1) {
+    tmp = g_string_append(tmp, (path + 1));
+    tmp = g_string_append(tmp, "/");
+  }
+
+  url = strdup(tmp->str);
+  g_string_free(tmp, TRUE);
 
   return(url);
 }
@@ -681,6 +711,38 @@ stormfs_curl_head(const char *path, GList **meta)
   curl_slist_free_all(req_headers);
 
   return status;
+}
+
+int
+stormfs_curl_list_bucket(const char *path, char **xml)
+{
+  int result;
+  char *url = get_list_bucket_url(path);
+  CURL *c = get_curl_handle(url);
+  struct curl_slist *req_headers = NULL; 
+  HTTP_RESPONSE body;
+
+  body.memory = g_malloc(1);
+  body.size = 0;
+
+  sign_request("GET", &req_headers, "/");
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
+  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
+
+  curl_easy_perform(c);
+  result = http_response_errno(c);
+
+  *xml = strdup(body.memory);
+
+  if(body.memory)
+    g_free(body.memory);
+
+  g_free(url);
+  destroy_curl_handle(c);
+  curl_slist_free_all(req_headers);
+
+  return result;
 }
 
 int
