@@ -81,6 +81,7 @@ static struct fuse_operations stormfs_oper = {
     .read     = stormfs_read,
     .readdir  = stormfs_readdir,
     .release  = stormfs_release,
+    .rmdir    = stormfs_rmdir,
     .truncate = stormfs_truncate,
     .utimens  = stormfs_utimens,
     .write    = stormfs_write,
@@ -429,6 +430,27 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     return -errno;
 
   return result;
+}
+
+static int
+stormfs_rmdir(const char *path)
+{
+  int result = 0;
+  char *data;
+
+  if((result = stormfs_curl_get(path, &data)) != 0) {
+    g_free(data);
+    return result;
+  }
+
+  if(strstr(data, "ETag") != NULL) {
+    g_free(data);
+    return -ENOTEMPTY;
+  }
+
+  g_free(data);
+
+  return stormfs_curl_delete(path);
 }
 
 static int

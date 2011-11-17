@@ -552,6 +552,24 @@ destroy_curl_handle(CURL *c)
 }
 
 int
+stormfs_curl_delete(const char *path)
+{
+  int result;
+  char *url = get_url(path);
+  CURL *c = get_curl_handle(url);
+  struct curl_slist *req_headers = NULL; 
+
+  sign_request("DELETE", &req_headers, path);
+  curl_easy_setopt(c, CURLOPT_CUSTOMREQUEST, "DELETE");
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+
+  curl_easy_perform(c);
+  result = http_response_errno(c);
+
+  return result;
+}
+
+int
 stormfs_curl_init(const char *bucket, const char *url)
 {
   CURLcode result;
