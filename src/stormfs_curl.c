@@ -502,13 +502,6 @@ get_url(const char *path)
   tmp = g_string_new(stormfs_curl.url);
   tmp = g_string_append(tmp, path);
   tmp = g_string_append(tmp, "?delimiter=/");
-  tmp = g_string_append(tmp, "&prefix=");
-
-  if(strlen(path) > 1) {
-    tmp = g_string_append(tmp, (path + 1));
-    tmp = g_string_append(tmp, "/");
-  }
-
   url = strdup(tmp->str);
   g_string_free(tmp, TRUE);
 
