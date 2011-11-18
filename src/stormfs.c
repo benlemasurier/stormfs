@@ -529,18 +529,28 @@ stormfs_rename(const char *from, const char *to)
 {
   int result;
   struct stat st;
-  GList *headers = NULL;
 
   if((result = stormfs_getattr(from, &st)) != 0)
     return -result;
 
   // TODO:
-  if(S_ISDIR(st.st_mode)) 
+  if(st.st_size >= FIVE_GB)
     return -ENOTSUP;
 
   // TODO:
-  if(st.st_size >= FIVE_GB)
-    return -ENOTSUP;
+  if(S_ISDIR(st.st_mode)) 
+    result = stormfs_rename_directory(from, to);
+  else
+    result = stormfs_rename_file(from, to);
+
+  return result;
+}
+
+static int
+stormfs_rename_file(const char *from, const char *to)
+{
+  int result;
+  GList *headers = NULL;
 
   if((result = stormfs_curl_head(from, &headers)) != 0)
     return result;
@@ -551,10 +561,85 @@ stormfs_rename(const char *from, const char *to)
   result = stormfs_curl_put_headers(to, headers);
   g_list_free_full(headers, (GDestroyNotify) free_headers);
 
-  if(result != 0)
-    return result;
-
   return stormfs_unlink(from);
+}
+
+static int
+stormfs_rename_directory(const char *from, const char *to)
+{
+  int result;
+  char *xml;
+
+  result = stormfs_curl_list_bucket(from, &xml);
+  if(result != 0) {
+    g_free(xml);
+    return -EIO;
+  }
+
+  if(strstr(xml, "xml") == NULL)
+    return -EIO;
+
+  xmlDocPtr doc;
+  xmlXPathContextPtr ctx;
+  xmlXPathObjectPtr contents_xp;
+  xmlNodeSetPtr content_nodes;
+
+  if((doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0)) == NULL)
+    return -EIO;
+
+  ctx = xmlXPathNewContext(doc);
+  xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
+    (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
+
+  contents_xp = xmlXPathEvalExpression((xmlChar *) "//s3:Contents", ctx);
+  content_nodes = contents_xp->nodesetval;
+
+  int i;
+  for(i = 0; i < content_nodes->nodeNr; i++) {
+    char *tmp;
+    char *name;
+    char *file_from;
+    char *file_to;
+    struct stat st;
+
+    ctx->node = content_nodes->nodeTab[i];
+
+    // extract the items name from xml
+    xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *) "s3:Key", ctx);
+    xmlNodeSetPtr key_nodes = key->nodesetval;
+    tmp = (char *) xmlNodeListGetString(doc, key_nodes->nodeTab[0]->xmlChildrenNode, 1);
+    name = basename(tmp);
+
+    file_from = g_malloc(sizeof(char) * strlen(from) + strlen(name) + 2);
+    file_from = strcpy(file_from, from);
+    file_from = strncat(file_from, "/", 1);
+    file_from = strncat(file_from, name, strlen(name));
+
+    file_to = g_malloc(sizeof(char) * strlen(to) + strlen(name) + 2);
+    file_to = strcpy(file_to, to);
+    file_to = strncat(file_to, "/", 1);
+    file_to = strncat(file_to, name, strlen(name));
+
+    stormfs_getattr(file_from, &st);
+    if(S_ISDIR(st.st_mode))
+      if((result = stormfs_rename_directory(file_from, file_to)) != 0)
+        return result;
+
+    if((result = stormfs_rename_file(file_from, file_to)) != 0)
+      return result;
+
+    g_free(tmp);
+    g_free(file_to);
+    g_free(file_from);
+    xmlXPathFreeObject(key);
+  }
+
+  xmlXPathFreeObject(contents_xp);
+  xmlXPathFreeContext(ctx);
+  xmlFreeDoc(doc);
+  g_free(xml);
+
+  return stormfs_rename_file(from, to);
 }
 
 static int
