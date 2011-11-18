@@ -177,8 +177,10 @@ stormfs_chmod(const char *path, mode_t mode)
 
   headers = strip_header(headers, "x-amz-meta-mode");
   headers = g_list_append(headers, mode_header(mode));
+  headers = g_list_append(headers, replace_header());
+  headers = g_list_append(headers, copy_source_header(path));
 
-  result = stormfs_curl_set_meta(path, headers);
+  result = stormfs_curl_put_headers(path, headers);
   g_list_free_full(headers, (GDestroyNotify) free_headers);
 
   return result;
@@ -213,7 +215,9 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   if(result != 0)
     return result;
 
-  result = stormfs_curl_set_meta(path, headers);
+  headers = g_list_append(headers, replace_header());
+  headers = g_list_append(headers, copy_source_header(path));
+  result = stormfs_curl_put_headers(path, headers);
   g_list_free_full(headers, (GDestroyNotify) free_headers);
 
   return result;
@@ -507,6 +511,7 @@ stormfs_rename(const char *from, const char *to)
 {
   int result;
   struct stat st;
+  GList *headers = NULL;
 
   if((result = stormfs_getattr(from, &st)) != 0)
     return -result;
@@ -519,7 +524,16 @@ stormfs_rename(const char *from, const char *to)
   if(st.st_size >= FIVE_GB)
     return -ENOTSUP;
 
-  if((result = stormfs_curl_rename(from, to)) != 0)
+  if((result = stormfs_curl_head(from, &headers)) != 0)
+    return result;
+
+  headers = g_list_append(headers, copy_meta_header());
+  headers = g_list_append(headers, copy_source_header(from));
+
+  result = stormfs_curl_put_headers(to, headers);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
+
+  if(result != 0)
     return result;
 
   return stormfs_unlink(from);
@@ -634,8 +648,10 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
 
   headers = strip_header(headers, "x-amz-meta-mtime");
   headers = g_list_append(headers, mtime_header(ts[1].tv_sec));
+  headers = g_list_append(headers, replace_header());
+  headers = g_list_append(headers, copy_source_header(path));
 
-  result = stormfs_curl_set_meta(path, headers);
+  result = stormfs_curl_put_headers(path, headers);
   g_list_free_full(headers, (GDestroyNotify) free_headers);
 
   return result;

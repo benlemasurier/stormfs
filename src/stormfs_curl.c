@@ -856,20 +856,18 @@ stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t 
 }
 
 int
-stormfs_curl_set_meta(const char *path, GList *headers)
+stormfs_curl_put_headers(const char *path, GList *headers)
 {
   int result;
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
-  struct curl_slist *req_headers = NULL;
   GList *head = NULL, *next = NULL;
+  struct curl_slist *req_headers = NULL;
   HTTP_RESPONSE body;
 
   body.memory = g_malloc(1);
   body.size = 0;
 
-  headers = g_list_append(headers, replace_header());
-  headers = g_list_append(headers, copy_source_header(path));
   headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
 
   head = g_list_first(headers);
@@ -899,55 +897,6 @@ stormfs_curl_set_meta(const char *path, GList *headers)
   g_free(url);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
-
-  return result;
-}
-
-int
-stormfs_curl_rename(const char *from, const char *to)
-{
-  int result;
-  char *url = get_url(to);
-  CURL *c = get_curl_handle(url);
-  struct curl_slist *req_headers = NULL;
-  GList *headers = NULL, *head = NULL, *next = NULL;
-  HTTP_RESPONSE body;
-
-  body.memory = g_malloc(1);
-  body.size = 0;
-
-  headers = g_list_append(headers, copy_meta_header());
-  headers = g_list_append(headers, copy_source_header(from));
-  headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
-
-  head = g_list_first(headers);
-  while(head != NULL) {
-    next = head->next;
-    HTTP_HEADER *header = head->data;
-
-    if(strstr(header->key, "x-amz-") != NULL)
-      req_headers = curl_slist_append(req_headers, header_to_s(header));
-
-    head = next;
-  }
-
-  sign_request("PUT", &req_headers, to);
-  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
-  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
-  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
-  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
-
-  curl_easy_perform(c);
-  result = http_response_errno(c);
-
-  if(body.memory)
-    g_free(body.memory);
-
-  g_free(url);
-  destroy_curl_handle(c);
-  curl_slist_free_all(req_headers);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
 
   return result;
 }
