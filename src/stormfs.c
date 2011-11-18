@@ -197,6 +197,8 @@ stormfs_chmod(const char *path, mode_t mode)
   int result;
   GList *headers = NULL;
 
+  DEBUG("chmod: %s\n", path);
+
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
 
@@ -422,10 +424,7 @@ stormfs_read(const char *path, char *buf, size_t size, off_t offset,
 
   DEBUG("read: %s\n", path);
 
-  if((result = pread(fi->fh, buf, size, offset)) == -1)
-    return -errno;
-
-  return result;
+  return pread(fi->fh, buf, size, offset);
 }
 
 static int
