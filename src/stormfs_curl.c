@@ -129,6 +129,30 @@ header_to_s(HTTP_HEADER *h)
   return s;
 }
 
+struct curl_slist *
+headers_to_curl_slist(GList *headers)
+{
+  GList *head = NULL, *next = NULL;
+  struct curl_slist *curl_headers = NULL;
+
+  headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
+
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+    HTTP_HEADER *h = head->data;
+
+    if(strstr(h->key, "x-amz-") != NULL)
+      curl_headers = curl_slist_append(curl_headers, header_to_s(h));
+    else if(strstr(h->key, "Content-Type") != NULL)
+      curl_headers = curl_slist_append(curl_headers, header_to_s(h));
+
+    head = next;
+  }
+
+  return curl_headers;
+}
+
 static char *
 hmac_sha1(const char *key, const char *message)
 {
@@ -689,7 +713,7 @@ stormfs_curl_get_file(const char *path, FILE *f)
 }
 
 int
-stormfs_curl_head(const char *path, GList **meta)
+stormfs_curl_head(const char *path, GList **headers)
 {
   int status;
   char *url = get_url(path);
@@ -712,7 +736,7 @@ stormfs_curl_head(const char *path, GList **meta)
   status = http_response_errno(c);
 
   response_headers = strdup(data.memory);
-  extract_meta(response_headers, &(*meta));
+  extract_meta(response_headers, &(*headers));
 
   if(data.memory)
     g_free(data.memory);
@@ -764,9 +788,8 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
   int status;
   char *url;
   CURL *c;
-  GList *head = NULL, *next = NULL;
-  struct curl_slist *req_headers = NULL;
   struct stat st;
+  struct curl_slist *req_headers = NULL;
 
   if(fstat(fd, &st) != 0)
     return -errno;
@@ -780,20 +803,8 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
 
   url = get_url(path);
   c = get_curl_handle(url);
-  headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
 
-  head = g_list_first(headers);
-  while(head != NULL) {
-    next = head->next;
-
-    HTTP_HEADER *header = head->data;
-    if(strstr(header->key, "x-amz-") != NULL)
-      req_headers = curl_slist_append(req_headers, header_to_s(header));
-    if(strstr(header->key, "Content-Type") != NULL)
-      req_headers = curl_slist_append(req_headers, header_to_s(header));
-
-    head = next;
-  }
+  req_headers = headers_to_curl_slist(headers);
 
   sign_request("PUT", &req_headers, path);
   curl_easy_setopt(c, CURLOPT_INFILE, f);
@@ -817,28 +828,14 @@ stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t 
   int status;
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
+  GList *headers = NULL;
   struct curl_slist *req_headers = NULL;
-  GList *headers = NULL, *head = NULL, *next = NULL;
 
   headers = g_list_append(headers, gid_header(gid));
   headers = g_list_append(headers, uid_header(uid));
   headers = g_list_append(headers, mode_header(mode));
   headers = g_list_append(headers, mtime_header(mtime));
-  headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
-
-  head = g_list_first(headers);
-  while(head != NULL) {
-    next = head->next;
-    HTTP_HEADER *header = head->data;
-
-    req_headers = curl_slist_append(req_headers, header_to_s(header));
-
-    g_free(header->key);
-    g_free(header->value);
-    g_free(header);
-
-    head = next;
-  }
+  req_headers = headers_to_curl_slist(headers);
 
   sign_request("PUT", &req_headers, path);
   curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
@@ -851,6 +848,7 @@ stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t 
   g_free(url);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
 
   return status;
 }
@@ -861,25 +859,13 @@ stormfs_curl_put_headers(const char *path, GList *headers)
   int result;
   char *url = get_url(path);
   CURL *c = get_curl_handle(url);
-  GList *head = NULL, *next = NULL;
   struct curl_slist *req_headers = NULL;
   HTTP_RESPONSE body;
 
   body.memory = g_malloc(1);
   body.size = 0;
 
-  headers = g_list_sort(headers, (GCompareFunc) cmpstringp);
-
-  head = g_list_first(headers);
-  while(head != NULL) {
-    next = head->next;
-    HTTP_HEADER *header = head->data;
-
-    if(strstr(header->key, "x-amz-") != NULL)
-      req_headers = curl_slist_append(req_headers, header_to_s(header));
-
-    head = next;
-  }
+  req_headers = headers_to_curl_slist(headers);
 
   sign_request("PUT", &req_headers, path);
   curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT

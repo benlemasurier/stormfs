@@ -273,7 +273,7 @@ static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
   int status;
-  GList *meta = NULL;
+  GList *headers = NULL;
   GList *head = NULL, *next = NULL;
 
   memset(stbuf, 0, sizeof(struct stat));
@@ -285,10 +285,10 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     return 0;
   }
 
-  if((status = stormfs_curl_head(path, &meta)) != 0)
+  if((status = stormfs_curl_head(path, &headers)) != 0)
     return status;
 
-  head = g_list_first(meta);
+  head = g_list_first(headers);
   while(head != NULL) {
     next = head->next;
     HTTP_HEADER *header = head->data;
@@ -319,7 +319,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   if(S_ISREG(stbuf->st_mode))
     stbuf->st_blocks = get_blocks(stbuf->st_size);
 
-  g_list_free_full(meta, (GDestroyNotify) free_headers); 
+  g_list_free_full(headers, (GDestroyNotify) free_headers); 
 
   return 0;
 }
