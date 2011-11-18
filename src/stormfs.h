@@ -3,6 +3,7 @@
 
 #define FIVE_GB 5368709120LL
 
+static char *name_from_xml(xmlDocPtr doc, xmlXPathContextPtr ctx);
 static int stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi);
 static int stormfs_chmod(const char *path, mode_t mode);
 static int stormfs_chown(const char *path, uid_t uid, gid_t gid);

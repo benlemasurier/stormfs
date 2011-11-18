@@ -130,6 +130,20 @@ blkcnt_t get_blocks(off_t size)
   return size / 512 + 1;
 }
 
+static char *
+name_from_xml(xmlDocPtr doc, xmlXPathContextPtr ctx)
+{
+  xmlChar *name;
+
+  xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *) "s3:Key", ctx);
+  xmlNodeSetPtr key_nodes = key->nodesetval;
+  name = xmlNodeListGetString(doc, key_nodes->nodeTab[0]->xmlChildrenNode, 1);
+
+  xmlXPathFreeObject(key);
+
+  return (char *) name;
+}
+
 static int
 validate_mountpoint(const char *path, struct stat *stbuf)
 {
@@ -455,16 +469,11 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     char *name;
 
     ctx->node = content_nodes->nodeTab[i];
-
-    // extract the items name from xml
-    xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *) "s3:Key", ctx);
-    xmlNodeSetPtr key_nodes = key->nodesetval;
-    name = (char *) xmlNodeListGetString(doc, key_nodes->nodeTab[0]->xmlChildrenNode, 1);
+    name = name_from_xml(doc, ctx);
 
     filler(buf, basename(name), 0, 0);
 
     g_free(name);
-    xmlXPathFreeObject(key);
   }
 
   xmlXPathFreeObject(contents_xp);
@@ -578,6 +587,8 @@ stormfs_rename_file(const char *from, const char *to)
   int result;
   GList *headers = NULL;
 
+  DEBUG("rename file: %s -> %s\n", from, to);
+
   if((result = stormfs_curl_head(from, &headers)) != 0)
     return result;
 
@@ -595,6 +606,8 @@ stormfs_rename_directory(const char *from, const char *to)
 {
   int result;
   char *xml;
+
+  DEBUG("rename directory: %s -> %s\n", from, to);
 
   result = stormfs_curl_list_bucket(from, &xml);
   if(result != 0) {
@@ -629,11 +642,7 @@ stormfs_rename_directory(const char *from, const char *to)
     struct stat st;
 
     ctx->node = content_nodes->nodeTab[i];
-
-    // extract the items name from xml
-    xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *) "s3:Key", ctx);
-    xmlNodeSetPtr key_nodes = key->nodesetval;
-    tmp = (char *) xmlNodeListGetString(doc, key_nodes->nodeTab[0]->xmlChildrenNode, 1);
+    tmp = name_from_xml(doc, ctx);
     name = basename(tmp);
 
     file_from = g_malloc(sizeof(char) * strlen(from) + strlen(name) + 2);
@@ -650,14 +659,13 @@ stormfs_rename_directory(const char *from, const char *to)
     if(S_ISDIR(st.st_mode))
       if((result = stormfs_rename_directory(file_from, file_to)) != 0)
         return result;
-
-    if((result = stormfs_rename_file(file_from, file_to)) != 0)
-      return result;
+    else
+      if((result = stormfs_rename_file(file_from, file_to)) != 0)
+        return result;
 
     g_free(tmp);
     g_free(file_to);
     g_free(file_from);
-    xmlXPathFreeObject(key);
   }
 
   xmlXPathFreeObject(contents_xp);
