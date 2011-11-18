@@ -158,8 +158,15 @@ static int
 stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   int result;
+  GList *headers = NULL;
 
-  result = stormfs_curl_create(path, getuid(), getgid(), mode, time(NULL));
+  headers = g_list_append(headers, gid_header(getgid()));
+  headers = g_list_append(headers, uid_header(getuid()));
+  headers = g_list_append(headers, mode_header(mode));
+  headers = g_list_append(headers, mtime_header(time(NULL)));
+
+  result = stormfs_curl_put_headers(path, headers);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
   if(result != 0)
     return result;
 
@@ -266,7 +273,18 @@ stormfs_mkdir(const char *path, mode_t mode)
 static int
 stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
-  return stormfs_curl_create(path, getuid(), getgid(), mode, time(NULL));
+  int result;
+  GList *headers = NULL;
+
+  headers = g_list_append(headers, gid_header(getgid()));
+  headers = g_list_append(headers, uid_header(getuid()));
+  headers = g_list_append(headers, mode_header(mode));
+  headers = g_list_append(headers, mtime_header(time(NULL)));
+
+  result = stormfs_curl_put_headers(path, headers);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
+
+  return result;
 }
 
 static int

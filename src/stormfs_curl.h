@@ -19,7 +19,6 @@ HTTP_HEADER *replace_header();
 GList *strip_header(GList *headers, const char *key);
 void free_headers(HTTP_HEADER *h);
 
-int stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t mtime);
 int stormfs_curl_delete(const char *path);
 void stormfs_curl_destroy();
 int stormfs_curl_get(const char *path, char **data);

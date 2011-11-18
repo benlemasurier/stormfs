@@ -823,37 +823,6 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
 }
 
 int
-stormfs_curl_create(const char *path, uid_t uid, gid_t gid, mode_t mode, time_t mtime)
-{
-  int status;
-  char *url = get_url(path);
-  CURL *c = get_curl_handle(url);
-  GList *headers = NULL;
-  struct curl_slist *req_headers = NULL;
-
-  headers = g_list_append(headers, gid_header(gid));
-  headers = g_list_append(headers, uid_header(uid));
-  headers = g_list_append(headers, mode_header(mode));
-  headers = g_list_append(headers, mtime_header(mtime));
-  req_headers = headers_to_curl_slist(headers);
-
-  sign_request("PUT", &req_headers, path);
-  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
-  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
-
-  curl_easy_perform(c);
-  status = http_response_errno(c);
-
-  g_free(url);
-  destroy_curl_handle(c);
-  curl_slist_free_all(req_headers);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
-
-  return status;
-}
-
-int
 stormfs_curl_put_headers(const char *path, GList *headers)
 {
   int result;
