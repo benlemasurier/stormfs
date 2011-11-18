@@ -782,6 +782,8 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   int result;
   GList *headers = NULL;
 
+  DEBUG("utimens: %s\n", path);
+
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
 
