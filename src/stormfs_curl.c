@@ -679,10 +679,8 @@ stormfs_curl_get(const char *path, char **data)
 
   *data = strdup(body.memory);
 
-  if(body.memory)
-    g_free(body.memory);
-
   g_free(url);
+  g_free(body.memory);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
 
@@ -738,10 +736,8 @@ stormfs_curl_head(const char *path, GList **headers)
   response_headers = strdup(data.memory);
   extract_meta(response_headers, &(*headers));
 
-  if(data.memory)
-    g_free(data.memory);
-
   g_free(url);
+  g_free(data.memory);
   g_free(response_headers);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
@@ -771,10 +767,8 @@ stormfs_curl_list_bucket(const char *path, char **xml)
 
   *xml = strdup(body.memory);
 
-  if(body.memory)
-    g_free(body.memory);
-
   g_free(url);
+  g_free(body.memory);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
 
@@ -846,10 +840,8 @@ stormfs_curl_put_headers(const char *path, GList *headers)
   curl_easy_perform(c);
   result = http_response_errno(c);
 
-  if(body.memory)
-    g_free(body.memory);
-
   g_free(url);
+  g_free(body.memory);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
 
