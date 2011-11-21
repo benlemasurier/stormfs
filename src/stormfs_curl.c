@@ -490,9 +490,13 @@ sign_request(const char *method,
 static int
 set_curl_defaults(CURL **c)
 {
-  curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  /* curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L); */
+  curl_easy_setopt(*c, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
+  /* curl_easy_setopt(*c, CURLOPT_FORBID_REUSE, 1); */
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
+  curl_easy_setopt(*c, CURLOPT_DNS_CACHE_TIMEOUT, -1);
+  curl_easy_setopt(*c, CURLOPT_SSL_VERIFYHOST, stormfs_curl.verify_ssl);
 
   return 0;
 }
@@ -582,7 +586,7 @@ extract_meta(char *headers, GList **meta)
       h = g_malloc(sizeof(HTTP_HEADER));
       h->key = strdup(key);
       value = strstr(p, " ");
-      value++; // remove leading space
+      value++; /* remove leading space */
       h->value = strdup(value);
 
       *meta = g_list_append(*meta, h);
@@ -602,7 +606,6 @@ get_curl_handle(const char *url)
   c = curl_easy_init();
   set_curl_defaults(&c);
   curl_easy_setopt(c, CURLOPT_URL, url);
-  curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, stormfs_curl.verify_ssl);
 
   return c;
 }
@@ -734,8 +737,8 @@ stormfs_curl_head(const char *path, GList **headers)
   data.size = 0;
 
   sign_request("HEAD", &req_headers, path);
-  curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    // HEAD
-  curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  // Last-Modified
+  curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    /* HEAD */
+  curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  /* Last-Modified */
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
   curl_easy_setopt(c, CURLOPT_HEADERDATA, (void *) &data);
   curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
@@ -798,7 +801,7 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
   if(fstat(fd, &st) != 0)
     return -errno;
 
-  // TODO: support multipart uploads (>5GB files)
+  /* TODO: support multipart uploads (>5GB files) */
   if(st.st_size >= FIVE_GB)
     return -EFBIG;
   
@@ -841,8 +844,8 @@ stormfs_curl_put_headers(const char *path, GList *headers)
   req_headers = headers_to_curl_slist(headers);
 
   sign_request("PUT", &req_headers, path);
-  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
-  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
+  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    /* HTTP PUT */
+  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); /* Content-Length: 0 */
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
   curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
   curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);

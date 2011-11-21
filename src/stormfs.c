@@ -396,7 +396,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     next = head->next;
     HTTP_HEADER *header = head->data;
 
-    // TODO: clean this up.
+    /* TODO: clean this up. */
     if(strcmp(header->key, "x-amz-meta-uid") == 0)
       stbuf->st_uid = get_uid(header->value);
     else if(strcmp(header->key, "x-amz-meta-gid") == 0)
@@ -553,7 +553,7 @@ stormfs_readlink(const char *path, char *buf, size_t size)
   if(size <= 0)
     return 0;
 
-  --size; // save the null byte
+  --size; /* save the null byte */
 
   if((f = tmpfile()) == NULL)
     return -errno;
@@ -624,7 +624,7 @@ stormfs_rename(const char *from, const char *to)
   if((result = stormfs_getattr(from, &st)) != 0)
     return -result;
 
-  // TODO:
+  /* TODO: */
   if(st.st_size >= FIVE_GB)
     return -ENOTSUP;
 
@@ -992,7 +992,7 @@ main(int argc, char *argv[])
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
   memset(&stormfs, 0, sizeof(struct stormfs));
-  stormfs.verify_ssl = 1;
+  stormfs.verify_ssl = 2;
   stormfs.url = "http://s3.amazonaws.com";
 
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {

@@ -87,13 +87,30 @@ cache_clean(void)
   }
 }
 
+static void
+cache_purge(const char *path)
+{
+  g_hash_table_remove(cache.table, path);
+}
+
+void
+cache_invalidate(const char *path)
+{
+  if(!cache.on) 
+    return;
+
+  pthread_mutex_lock(&cache.lock);
+  cache_purge(path);
+  pthread_mutex_unlock(&cache.lock);
+}
+
 void
 cache_add_attr(const char *path, const struct stat *stbuf)
 {
   time_t now;
   struct node *node;
 
-  if(cache.on != 1)
+  if(!cache.on)
     return;
 
   pthread_mutex_lock(&cache.lock);
@@ -140,6 +157,16 @@ cache_getattr(const char *path, struct stat *stbuf)
   return result;
 }
 
+static int
+cache_utimens(const char *path, const struct timespec ts[2])
+{
+  int result = cache.next_oper->oper.utimens(path, ts);
+  if(result == 0)
+    cache_invalidate(path);
+
+  return result;
+}
+
 static void
 cache_unity_fill(struct fuse_cache_operations *oper, 
     struct fuse_operations *cache_oper)
@@ -173,6 +200,7 @@ cache_fill(struct fuse_cache_operations *oper,
     struct fuse_operations *cache_oper)
 {
   cache_oper->getattr = oper->oper.getattr ? cache_getattr : NULL;
+  cache_oper->utimens = oper->oper.utimens ? cache_utimens : NULL;
 }
 
 struct fuse_operations *
