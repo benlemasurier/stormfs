@@ -221,6 +221,28 @@ cache_mime_types()
   return 0;
 }
 
+const char *
+get_mime_type(const char *filename)
+{
+  char *p, *ext;
+  char *name = strdup(filename);
+
+  p = strtok(name, ".");
+  while(p != NULL) {
+    ext = p;
+    p = strtok(NULL, ".");
+  }
+
+  if(strcmp(filename, ext) == 0) {
+    g_free(name);
+    return NULL;
+  }
+
+  g_free(name);
+
+  return g_hash_table_lookup(stormfs.mime_types, ext);
+}
+
 static int
 stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
@@ -233,6 +255,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   headers = g_list_append(headers, uid_header(getuid()));
   headers = g_list_append(headers, mode_header(mode));
   headers = g_list_append(headers, mtime_header(time(NULL)));
+  headers = g_list_append(headers, content_header(get_mime_type(path)));
 
   result = stormfs_curl_put_headers(path, headers);
   g_list_free_full(headers, (GDestroyNotify) free_headers);

@@ -327,7 +327,10 @@ content_header(const char *type)
   h = g_malloc(sizeof(HTTP_HEADER));
 
   h->key   = strdup("Content-Type");
-  h->value = strdup(type);
+  if(type == NULL)
+    h->value = strdup("application/octet-stream");
+  else
+    h->value = strdup(type);
 
   return h;
 }
