@@ -26,6 +26,7 @@
 #define SHA1_LENGTH 20
 
 struct stormfs_curl {
+  int verify_ssl;
   const char *url;
   const char *bucket;
   const char *access_key;
@@ -489,7 +490,7 @@ sign_request(const char *method,
 static int
 set_curl_defaults(CURL **c)
 {
-  //curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
   curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
 
@@ -601,6 +602,7 @@ get_curl_handle(const char *url)
   c = curl_easy_init();
   set_curl_defaults(&c);
   curl_easy_setopt(c, CURLOPT_URL, url);
+  curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, stormfs_curl.verify_ssl);
 
   return c;
 }
@@ -637,6 +639,7 @@ stormfs_curl_init(const char *bucket, const char *url)
   CURLcode result;
   stormfs_curl.url = url;
   stormfs_curl.bucket = bucket;
+  stormfs_curl.verify_ssl = 1;
 
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
     return -1;
@@ -649,6 +652,17 @@ stormfs_curl_set_auth(const char *access_key, const char *secret_key)
 {
   stormfs_curl.access_key = access_key;
   stormfs_curl.secret_key = secret_key;
+
+  return 0;
+}
+
+int
+stormfs_curl_verify_ssl(int verify)
+{
+  if(verify == 0)
+    stormfs_curl.verify_ssl = 0;
+  else
+    stormfs_curl.verify_ssl = 1;
 
   return 0;
 }

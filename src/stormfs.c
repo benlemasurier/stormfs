@@ -41,6 +41,7 @@ struct stormfs {
   int ssl;
   int debug;
   int foreground;
+  int verify_ssl;
   char *url;
   char *bucket;
   char *virtual_url;
@@ -54,9 +55,10 @@ struct stormfs {
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
 
 static struct fuse_opt stormfs_opts[] = {
-  STORMFS_OPT("url=%s",        url,    0),
-  STORMFS_OPT("use_ssl",       ssl,    1),
-  STORMFS_OPT("stormfs_debug", debug,  1),
+  STORMFS_OPT("url=%s",        url,        0),
+  STORMFS_OPT("use_ssl",       ssl,        1),
+  STORMFS_OPT("no_verify_ssl", verify_ssl, 0),
+  STORMFS_OPT("stormfs_debug", debug,      1),
 
   FUSE_OPT_KEY("-d",            KEY_FOREGROUND),
   FUSE_OPT_KEY("debug",         KEY_FOREGROUND),
@@ -944,7 +946,10 @@ stormfs_virtual_url(char *url, char *bucket)
     strcpy(v, "https://");
     strncat(v, bucket, strlen(bucket));
     strncat(v, ".", 1);
-    strncat(v, url + 8, strlen(url) - 8);
+    if(strcasestr(url, "https://"))
+      strncat(v, url + 8, strlen(url) - 8);
+    else
+      strncat(v, url + 7, strlen(url) - 7);
   } else {
     strcpy(v, "http://");
     strncat(v, bucket, strlen(bucket));
@@ -984,13 +989,13 @@ main(int argc, char *argv[])
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
   memset(&stormfs, 0, sizeof(struct stormfs));
+  stormfs.verify_ssl = 1;
+  stormfs.url = "http://s3.amazonaws.com";
+
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
     fprintf(stderr, "error parsing command-line options\n");
     abort();
   }
-
-  if(!stormfs.url)
-    stormfs.url = "http://s3.amazonaws.com";
 
   stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
 
@@ -1010,6 +1015,7 @@ main(int argc, char *argv[])
   }
 
   stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
+  stormfs_curl_verify_ssl(stormfs.verify_ssl);
 
   status = stormfs_fuse_main(&args);
   fuse_opt_free_args(&args);

@@ -30,6 +30,7 @@ int stormfs_curl_put_headers(const char *path, GList *headers);
 int stormfs_curl_rename(const char *from, const char *to);
 int stormfs_curl_set_auth(const char *access_key, const char *secret_key);
 int stormfs_curl_upload(const char *path, GList *headers, int fd);
+int stormfs_curl_verify_ssl(int verify);
 
 #endif // stormfs_curl_H
 
