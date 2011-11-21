@@ -490,13 +490,15 @@ sign_request(const char *method,
 static int
 set_curl_defaults(CURL **c)
 {
-  /* curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L); */
   curl_easy_setopt(*c, CURLOPT_NOSIGNAL, 1L);
   curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
-  /* curl_easy_setopt(*c, CURLOPT_FORBID_REUSE, 1); */
+  curl_easy_setopt(*c, CURLOPT_CONNECTTIMEOUT, 15L);
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
   curl_easy_setopt(*c, CURLOPT_DNS_CACHE_TIMEOUT, -1);
   curl_easy_setopt(*c, CURLOPT_SSL_VERIFYHOST, stormfs_curl.verify_ssl);
+
+  /* curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L); */
+  /* curl_easy_setopt(*c, CURLOPT_FORBID_REUSE, 1); */
 
   return 0;
 }
