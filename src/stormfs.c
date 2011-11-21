@@ -29,6 +29,7 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 #include "stormfs.h"
+#include "stormfs_cache.h"
 #include "stormfs_curl.h"
 
 enum {
@@ -73,31 +74,6 @@ static struct fuse_opt stormfs_opts[] = {
 
 #define DEBUG(format, args...) \
         do { if (stormfs.debug) fprintf(stderr, format, args); } while(0)
-
-static struct fuse_operations stormfs_oper = {
-    .create   = stormfs_create,
-    .chmod    = stormfs_chmod,
-    .chown    = stormfs_chown,
-    .destroy  = stormfs_destroy,
-    .getattr  = stormfs_getattr,
-    .init     = stormfs_init,
-    .flush    = stormfs_flush,
-    .mkdir    = stormfs_mkdir,
-    .mknod    = stormfs_mknod,
-    .open     = stormfs_open,
-    .read     = stormfs_read,
-    .readdir  = stormfs_readdir,
-    .readlink = stormfs_readlink,
-    .release  = stormfs_release,
-    .rename   = stormfs_rename,
-    .rmdir    = stormfs_rmdir,
-    .statfs   = stormfs_statfs,
-    .symlink  = stormfs_symlink,
-    .truncate = stormfs_truncate,
-    .unlink   = stormfs_unlink,
-    .utimens  = stormfs_utimens,
-    .write    = stormfs_write,
-};
 
 static uid_t
 get_uid(const char *s)
@@ -930,12 +906,6 @@ stormfs_opt_proc(void *data, const char *arg, int key,
   }
 }
 
-static int
-stormfs_fuse_main(struct fuse_args *args)
-{
-  return fuse_main(args->argc, args->argv, &stormfs_oper, NULL);
-}
-
 char *
 stormfs_virtual_url(char *url, char *bucket)
 {
@@ -982,6 +952,39 @@ stormfs_destroy(void *data)
   g_hash_table_destroy(stormfs.mime_types);
 }
 
+static struct fuse_cache_operations stormfs_oper = {
+  .oper = {
+    .create   = stormfs_create,
+    .chmod    = stormfs_chmod,
+    .chown    = stormfs_chown,
+    .destroy  = stormfs_destroy,
+    .getattr  = stormfs_getattr,
+    .init     = stormfs_init,
+    .flush    = stormfs_flush,
+    .mkdir    = stormfs_mkdir,
+    .mknod    = stormfs_mknod,
+    .open     = stormfs_open,
+    .read     = stormfs_read,
+    .readdir  = stormfs_readdir,
+    .readlink = stormfs_readlink,
+    .release  = stormfs_release,
+    .rename   = stormfs_rename,
+    .rmdir    = stormfs_rmdir,
+    .statfs   = stormfs_statfs,
+    .symlink  = stormfs_symlink,
+    .truncate = stormfs_truncate,
+    .unlink   = stormfs_unlink,
+    .utimens  = stormfs_utimens,
+    .write    = stormfs_write,
+  }
+};
+
+static int
+stormfs_fuse_main(struct fuse_args *args)
+{
+  return fuse_main(args->argc, args->argv, cache_init(&stormfs_oper), NULL);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -998,6 +1001,9 @@ main(int argc, char *argv[])
   }
 
   stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
+
+  if(cache_parse_options(&args) == -1)
+    abort();
 
   DEBUG("STORMFS version:     %s\n", PACKAGE_VERSION);
   DEBUG("STORMFS url:         %s\n", stormfs.url);
