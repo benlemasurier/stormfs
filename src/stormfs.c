@@ -89,6 +89,7 @@ static struct fuse_operations stormfs_oper = {
     .release  = stormfs_release,
     .rename   = stormfs_rename,
     .rmdir    = stormfs_rmdir,
+    .statfs   = stormfs_statfs,
     .symlink  = stormfs_symlink,
     .truncate = stormfs_truncate,
     .unlink   = stormfs_unlink,
@@ -774,6 +775,18 @@ stormfs_rmdir(const char *path)
   g_free(data);
 
   return stormfs_curl_delete(path);
+}
+
+static int
+stormfs_statfs(const char *path, struct statvfs *buf)
+{
+  buf->f_bsize   = 0X1000000;
+  buf->f_blocks  = 0X1000000;
+  buf->f_bfree   = 0x1000000;
+  buf->f_bavail  = 0x1000000;
+  buf->f_namemax = NAME_MAX;
+
+  return 0;
 }
 
 static int

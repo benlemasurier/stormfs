@@ -24,6 +24,7 @@ static int stormfs_release(const char *path, struct fuse_file_info *fi);
 static int stormfs_rename(const char *from, const char *to);
 static int stormfs_rename_file(const char *from, const char *to);
 static int stormfs_rename_directory(const char *from, const char *to);
+static int stormfs_statfs(const char *path, struct statvfs *buf);
 static int stormfs_truncate(const char *path, off_t size);
 static int stormfs_symlink(const char *from, const char *to);
 static int stormfs_unlink(const char *path);
