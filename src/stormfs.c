@@ -48,6 +48,7 @@ struct stormfs {
   char *secret_key;
   char *mountpoint;
   mode_t root_mode;
+  GHashTable *mime_types;
 } stormfs;
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
@@ -164,6 +165,58 @@ validate_mountpoint(const char *path, struct stat *stbuf)
   }
 
   closedir(d);
+
+  return 0;
+}
+
+static int
+cache_mime_types()
+{
+  FILE *f;
+  char *type, *ext, *cur;
+  char line[BUFSIZ];
+
+  stormfs.mime_types = g_hash_table_new_full(g_str_hash, g_str_equal, 
+      g_free, g_free);
+
+  if((f = fopen("/etc/mime.types", "r")) == NULL) {
+    fprintf(stderr, "unable to open /etc/mime.types: %s\n", strerror(errno));
+    return -errno;
+  }
+
+  while(fgets(line, BUFSIZ, f) != NULL) {
+    if(*line == 0 || *line == '#')
+      continue;
+    
+    type = line;
+    cur  = line;
+
+    while(*cur != ' ' && *cur != '\t' && *cur)
+      cur++;
+
+    if(*cur == 0)
+      continue;
+
+    *cur++ = 0;
+
+    while(1) {
+      while(*cur == ' ' || *cur == '\t')
+        cur++;
+      if(*cur == 0)
+        break;
+
+      ext = cur;
+      while(*cur != ' ' && *cur != '\t' && *cur != '\n' && *cur)
+        cur++;
+      *cur++ = 0;
+
+      if(*ext) {
+        g_hash_table_insert(stormfs.mime_types, strdup(ext), strdup(type));
+      }
+    }
+  }
+
+  fclose(f);
 
   return 0;
 }
@@ -381,6 +434,8 @@ stormfs_init(struct fuse_conn_info *conn)
   if(conn->capable & FUSE_CAP_BIG_WRITES)
     conn->want |= FUSE_CAP_BIG_WRITES;
 
+  cache_mime_types();
+
   return NULL;
 }
 
@@ -571,7 +626,6 @@ stormfs_rename(const char *from, const char *to)
   if(st.st_size >= FIVE_GB)
     return -ENOTSUP;
 
-  // TODO:
   if(S_ISDIR(st.st_mode)) 
     result = stormfs_rename_directory(from, to);
   else
@@ -655,12 +709,13 @@ stormfs_rename_directory(const char *from, const char *to)
     file_to = strncat(file_to, name, strlen(name));
 
     stormfs_getattr(file_from, &st);
-    if(S_ISDIR(st.st_mode))
+    if(S_ISDIR(st.st_mode)) {
       if((result = stormfs_rename_directory(file_from, file_to)) != 0)
         return result;
-    else
+    } else {
       if((result = stormfs_rename_file(file_from, file_to)) != 0)
         return result;
+    }
 
     g_free(tmp);
     g_free(file_to);
@@ -883,6 +938,7 @@ stormfs_destroy(void *data)
 {
   stormfs_curl_destroy();
   g_free(stormfs.virtual_url);
+  g_hash_table_destroy(stormfs.mime_types);
 }
 
 int
