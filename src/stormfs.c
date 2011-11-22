@@ -484,14 +484,11 @@ stormfs_read(const char *path, char *buf, size_t size, off_t offset,
   return pread(fi->fh, buf, size, offset);
 }
 
-static int
-stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
-    off_t offset, struct fuse_file_info *fi)
+int
+stormfs_list_bucket(const char *path, GList **files)
 {
   int result;
   char *xml;
-
-  DEBUG("readdir: %s\n", path);
 
   result = stormfs_curl_list_bucket(path, &xml);
   if(result != 0) {
@@ -499,8 +496,8 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return -EIO;
   }
 
-  filler(buf, ".",  0, 0);
-  filler(buf, "..", 0, 0);
+  *files = g_list_append(*files, g_strdup("."));
+  *files = g_list_append(*files, g_strdup(".."));
 
   if(strstr(xml, "xml") == NULL)
     return 0;
@@ -527,7 +524,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     ctx->node = content_nodes->nodeTab[i];
     name = name_from_xml(doc, ctx);
 
-    filler(buf, basename(name), 0, 0);
+    *files = g_list_append(*files, g_strdup(basename(name)));
 
     g_free(name);
   }
@@ -538,6 +535,30 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   g_free(xml);
 
   return 0;
+}
+
+static int
+stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
+    off_t offset, struct fuse_file_info *fi)
+{
+  int result;
+  GList *files = NULL, *next = NULL;
+
+  DEBUG("readdir: %s\n", path);
+
+  if((result = stormfs_list_bucket(path, &files)) != 0)
+    return result;
+
+  files = g_list_first(files);
+  while(files != NULL) {
+    next = files->next;
+    filler(buf, (char *) files->data, 0, 0);
+    files = next;
+  }
+
+  g_list_free_full(files, g_free);
+
+  return result;
 }
 
 static int
@@ -976,7 +997,8 @@ static struct fuse_cache_operations stormfs_oper = {
     .unlink   = stormfs_unlink,
     .utimens  = stormfs_utimens,
     .write    = stormfs_write,
-  }
+  },
+  .list_bucket = stormfs_list_bucket,
 };
 
 static int

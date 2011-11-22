@@ -14,6 +14,7 @@
 
 struct fuse_cache_operations {
   struct fuse_operations oper;
+  int (*list_bucket) (const char *, GList **);
 };
 
 int cache_parse_options(struct fuse_args *args);
