@@ -11,3 +11,15 @@ Build:
   ./configure
   make
   [make install]
+
+Mount Options:
+  url=<url>
+  use_ssl
+  no_verify_ssl
+  cache=<yes/no>
+  cache_timeout=<secs>
+  cache_stat_timeout=<secs>
+  cache_dir_timeout=<secs>
+
+  -d --debug
+  -f --foreground
