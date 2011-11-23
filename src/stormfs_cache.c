@@ -16,6 +16,7 @@
 #include <fuse.h>
 #include <fuse_opt.h>
 #include <pthread.h>
+#include "stormfs_curl.h"
 #include "stormfs_cache.h"
 
 #define DEFAULT_CACHE_TIMEOUT 20

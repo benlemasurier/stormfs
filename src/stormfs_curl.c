@@ -15,22 +15,52 @@
 #include <time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <curl/curl.h>
 #include <curl/types.h>
 #include <curl/easy.h>
+#include <pthread.h>
 #include <glib.h>
 #include "stormfs_curl.h"
 
 #define SHA1_BLOCK_SIZE 64
 #define SHA1_LENGTH 20
 
+struct curl_global {
+  CURLM *multi;
+  guint timer_event;
+  int still_running;
+}; 
+
+struct curl_connection_info {
+  CURL *easy;
+  const char *url;
+  struct curl_global *global;
+  char error[CURL_ERROR_SIZE];
+};
+
+struct curl_socket_info {
+  curl_socket_t sockfd;
+  CURL *easy;
+  int action;
+  long timeout;
+  GIOChannel *io_channel;
+  guint ev;
+  struct curl_global *global;
+};
+
 struct stormfs_curl {
+  int fifo;
   int verify_ssl;
   const char *url;
   const char *bucket;
   const char *access_key;
   const char *secret_key;
+  char *fifo_path;
+  GIOChannel *io_channel;
+  struct curl_global *curl_global;
+  pthread_t event_thread;
 } stormfs_curl;
 
 typedef struct {
@@ -94,6 +124,31 @@ free_headers(HTTP_HEADER *h)
   g_free(h->key);
   g_free(h->value);
   g_free(h);
+}
+
+int
+init_fifo(void)
+{
+  int fd;
+
+  if(mkstemp(stormfs_curl.fifo_path) == -1) {
+    perror("mkstemp");
+    abort();
+  }
+
+  unlink(stormfs_curl.fifo_path);
+  if(mkfifo(stormfs_curl.fifo_path, 0600) == -1) {
+    perror("mkfifo");
+    abort();
+  }
+
+  fd = open(stormfs_curl.fifo_path, O_RDWR | O_NONBLOCK, 0);
+  if(fd == -1) {
+    perror("open");
+    abort();
+  }
+
+  return fd;
 }
 
 char *
@@ -487,22 +542,6 @@ sign_request(const char *method,
   return 0;
 }
 
-static int
-set_curl_defaults(CURL **c)
-{
-  curl_easy_setopt(*c, CURLOPT_NOSIGNAL, 1L);
-  curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
-  curl_easy_setopt(*c, CURLOPT_CONNECTTIMEOUT, 15L);
-  curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
-  curl_easy_setopt(*c, CURLOPT_DNS_CACHE_TIMEOUT, -1);
-  curl_easy_setopt(*c, CURLOPT_SSL_VERIFYHOST, stormfs_curl.verify_ssl);
-
-  /* curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L); */
-  /* curl_easy_setopt(*c, CURLOPT_FORBID_REUSE, 1); */
-
-  return 0;
-}
-
 static char *
 get_url(const char *path)
 {
@@ -601,6 +640,22 @@ extract_meta(char *headers, GList **meta)
   return 0;
 }
 
+static int
+set_curl_defaults(CURL **c)
+{
+  curl_easy_setopt(*c, CURLOPT_NOSIGNAL, 1L);
+  curl_easy_setopt(*c, CURLOPT_NOPROGRESS, 1L);
+  curl_easy_setopt(*c, CURLOPT_CONNECTTIMEOUT, 15L);
+  curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
+  curl_easy_setopt(*c, CURLOPT_DNS_CACHE_TIMEOUT, -1);
+  curl_easy_setopt(*c, CURLOPT_SSL_VERIFYHOST, stormfs_curl.verify_ssl);
+
+  /* curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L); */
+  /* curl_easy_setopt(*c, CURLOPT_FORBID_REUSE, 1); */
+
+  return 0;
+}
+
 static CURL *
 get_curl_handle(const char *url)
 {
@@ -610,6 +665,218 @@ get_curl_handle(const char *url)
   curl_easy_setopt(c, CURLOPT_URL, url);
 
   return c;
+}
+
+
+static gboolean
+timer_cb(gpointer data)
+{
+  printf("TIMER CB!\n");
+  CURLMcode rc;
+  struct curl_global *g = (struct curl_global *) data;
+
+  rc = curl_multi_socket_action(g->multi,
+      CURL_SOCKET_TIMEOUT, 0, &g->still_running);
+  if(rc != CURLM_OK)
+    printf("OMG TIMERFUCK FIXME!\n");
+
+  return FALSE;
+}
+
+static int
+update_timeout_cb(CURLM *multi, long timeout_ms, void *p)
+{
+  struct timeval timeout;
+  struct curl_global *g = (struct curl_global *) p;
+
+  timeout.tv_sec  = timeout_ms / 1000;
+  timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+  g->timer_event = g_timeout_add(timeout_ms, timer_cb, g);
+
+  return 0;
+}
+
+static gboolean
+event_cb(GIOChannel *io_channel, GIOCondition condition, gpointer data)
+{
+  printf("EVENT CB!\n");
+  CURLMcode rc;
+  struct curl_global *g = (struct curl_global *) data;
+  int fd = g_io_channel_unix_get_fd(io_channel);
+
+  int action = (condition & G_IO_IN ? CURL_CSELECT_IN : 0) |
+      (condition & G_IO_OUT ? CURL_CSELECT_OUT : 0);
+
+  rc = curl_multi_socket_action(g->multi, fd, action, &g->still_running);
+  if(rc != CURLM_OK) {
+    fprintf(stderr, "HORRIBLE EVENT FAILURE FIXME!\n");
+    abort();
+  }
+
+  if(g->still_running) {
+    return TRUE;
+  } else {
+    if(g->timer_event)
+      g_source_remove(g->timer_event);
+
+    return FALSE;
+  }
+}
+
+static void
+set_socket(struct curl_socket_info *f, curl_socket_t s, CURL *e, 
+    int act, struct curl_global *g)
+{
+  printf("SET SOCKET!\n");
+  GIOCondition kind = (act & CURL_POLL_IN ? G_IO_IN : 0) | 
+      (act & CURL_POLL_OUT ? G_IO_OUT : 0);
+  f->sockfd = s;
+  f->action = act;
+  f->easy = e;
+
+  if(f->ev)
+    g_source_remove(f->ev);
+
+  f->ev = g_io_add_watch(f->io_channel, kind, event_cb, g);
+}
+
+static void
+add_socket(curl_socket_t s, CURL *easy, int action, struct curl_global *g)
+{
+  printf("ADD SOCKET!\n");
+  struct curl_socket_info *fdp = g_malloc0(sizeof(struct curl_socket_info));
+
+  fdp->global = g;
+  fdp->io_channel = g_io_channel_unix_new(s);
+  set_socket(fdp, s, easy, action, g);
+  curl_multi_assign(g->multi, s, fdp);
+}
+
+static void
+remove_socket(struct curl_socket_info *f)
+{
+  if(!f)
+    return;
+
+  if(f->ev)
+    g_source_remove(f->ev);
+
+  g_free(f);
+}
+
+static void
+new_connection(const char *url, struct curl_global *g)
+{
+  printf("NEW CONNECTION!\n");
+  struct curl_connection_info *conn;
+  CURLMcode rc;
+
+  conn = g_malloc0(sizeof(struct curl_connection_info));
+  conn->easy = get_curl_handle(url);
+  conn->global = g;
+  conn->url = url;
+
+  // TODO: handle data returned from connection (WRITEFUNCTION, WRITEDATA)
+  curl_easy_setopt(conn->easy, CURLOPT_PRIVATE, conn);
+  rc = curl_multi_add_handle(g->multi, conn->easy);
+  if(rc != CURLM_OK)
+    printf("NEW CONNECTINO EXPLOSZIA FIXME!\n");
+}
+
+static gboolean
+fifo_cb(GIOChannel *ch, GIOCondition condition, gpointer data)
+{
+  printf("FIFO CB!\n");
+  guint BUF_SIZE = 1024;
+  gsize len, t_pos;
+  gchar *buf, *tmp, *all = NULL;
+  GIOStatus status;
+
+  do {
+    GError *err = NULL;
+    status = g_io_channel_read_line(ch, &buf, &len, &t_pos, &err);
+
+    if(buf) {
+      if(t_pos)
+        buf[t_pos] = '\0';
+
+      new_connection(buf, (struct curl_global *) data);
+      g_free(buf);
+    } else {
+      buf = g_malloc(BUF_SIZE + 1);
+      while(TRUE) {
+        buf[BUF_SIZE] = '\0';
+        g_io_channel_read_chars(ch, buf, BUF_SIZE, &len, &err);
+
+        if(len) {
+          buf[len] = '\0';
+
+          if(all) {
+            tmp = all;
+            all = g_strdup_printf("%s%s", tmp, buf);
+            g_free(tmp);
+          } else {
+            all = g_strdup(buf);
+          }
+        } else {
+          break;
+        }
+      }
+
+      if(all) {
+        new_connection(all, (struct curl_global *) data);
+        g_free(all);
+      }
+
+      g_free(buf);
+    }
+
+    if(err) {
+      g_error("fifo_cb: %s", err->message);
+      g_free(err);
+      break;
+    }
+  } while((len) && (status == G_IO_STATUS_NORMAL));
+
+  return TRUE;
+}
+
+static int
+sock_cb(CURL *e, curl_socket_t s, int what, void *cbp, void *sockp)
+{
+  printf("SOCK CB!\n");
+  struct curl_global *g = (struct curl_global *) cbp;
+  struct curl_socket_info *fdp = (struct curl_socket_info *) sockp;
+  static const char *whatstr[] = { "none", "IN", "OUT", "INOUT", "REMOVE" };
+
+  printf("socket callback: s=%d e=%p what=%s ", s, e, whatstr[what]);
+  if(what == CURL_POLL_REMOVE) {
+    printf("\n");
+    remove_socket(fdp);
+  } else {
+    if(!fdp) {
+      printf("ADDING DATA: %s%s\n", what&CURL_POLL_IN ? "READ" : "",
+                                    what&CURL_POLL_OUT ? "WRITE" : "");
+      add_socket(s, e, what, g);
+    } else {
+      set_socket(fdp, s, e, what, g);
+    }
+  }
+
+  return 0;
+}
+
+static int
+set_curl_multi_defaults(CURLM **multi)
+{
+  printf("SET MULTI DEFAULTS!\n");
+  curl_multi_setopt(*multi, CURLMOPT_SOCKETFUNCTION, sock_cb);
+  curl_multi_setopt(*multi, CURLMOPT_SOCKETDATA, stormfs_curl.curl_global);
+  curl_multi_setopt(*multi, CURLMOPT_TIMERFUNCTION, update_timeout_cb);
+  curl_multi_setopt(*multi, CURLMOPT_TIMERDATA, stormfs_curl.curl_global);
+
+  return 0;
 }
 
 static int
@@ -636,29 +903,6 @@ stormfs_curl_delete(const char *path)
   result = http_response_errno(c);
 
   return result;
-}
-
-int
-stormfs_curl_init(const char *bucket, const char *url)
-{
-  CURLcode result;
-  stormfs_curl.url = url;
-  stormfs_curl.bucket = bucket;
-  stormfs_curl.verify_ssl = 1;
-
-  if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
-    return -1;
-
-  return 0;
-}
-
-int
-stormfs_curl_set_auth(const char *access_key, const char *secret_key)
-{
-  stormfs_curl.access_key = access_key;
-  stormfs_curl.secret_key = secret_key;
-
-  return 0;
 }
 
 int
@@ -863,8 +1107,58 @@ stormfs_curl_put_headers(const char *path, GList *headers)
   return result;
 }
 
+int
+stormfs_curl_set_auth(const char *access_key, const char *secret_key)
+{
+  stormfs_curl.access_key = access_key;
+  stormfs_curl.secret_key = secret_key;
+
+  return 0;
+}
+
 void
 stormfs_curl_destroy()
 {
+  pthread_cancel(stormfs_curl.event_thread);
   curl_global_cleanup();
+  curl_multi_cleanup(stormfs_curl.curl_global->multi);
+  g_io_channel_shutdown(stormfs_curl.io_channel, FALSE, NULL);
+  unlink(stormfs_curl.fifo_path);
+  g_free(stormfs_curl.fifo_path);
+}
+
+int
+stormfs_curl_init(const char *bucket, const char *url)
+{
+  CURLcode result;
+  GMainLoop *event_loop;
+  pthread_attr_t thread_attr;
+  stormfs_curl.url = url;
+  stormfs_curl.bucket = bucket;
+  stormfs_curl.verify_ssl = 1;
+  stormfs_curl.fifo_path = g_strdup("/tmp/stormfs.fifoXXXXXX");
+  stormfs_curl.fifo = init_fifo();
+  stormfs_curl.io_channel = g_io_channel_unix_new(stormfs_curl.fifo);
+  stormfs_curl.curl_global = g_malloc0(sizeof(struct curl_global));
+  event_loop = g_main_loop_new(NULL, FALSE);
+
+  g_io_add_watch(stormfs_curl.io_channel, G_IO_IN, fifo_cb, 
+      stormfs_curl.curl_global);
+
+  if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
+    return -1;
+
+  if((stormfs_curl.curl_global->multi = curl_multi_init()) == NULL)
+    return -1;
+
+  if(set_curl_multi_defaults(&stormfs_curl.curl_global->multi) != 0)
+    return -1;
+
+  // TODO: thread g_main_event_loop;
+  pthread_attr_init(&thread_attr);
+  pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_DETACHED);
+  pthread_create(&stormfs_curl.event_thread, &thread_attr, 
+      (void *) g_main_loop_run, (void *) event_loop);
+
+  return 0;
 }
