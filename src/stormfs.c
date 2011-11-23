@@ -779,10 +779,10 @@ stormfs_rmdir(const char *path)
 static int
 stormfs_statfs(const char *path, struct statvfs *buf)
 {
-  buf->f_bsize   = 0x1000000;
-  buf->f_blocks  = 0x1000000;
-  buf->f_bfree   = 0x1000000;
   buf->f_bavail  = 0x1000000;
+  buf->f_bfree   = 0x1000000;
+  buf->f_blocks  = 0x1000000;
+  buf->f_bsize   = 0x1000000;
   buf->f_namemax = NAME_MAX;
 
   return 0;
