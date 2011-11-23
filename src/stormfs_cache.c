@@ -63,8 +63,6 @@ cache_get(const char *path)
 static void
 free_node(gpointer node_)
 {
-  GList *head = NULL, *next = NULL;
-
   struct node *node = (struct node *) node_;
   g_list_free_full(node->dir, g_free);
   g_free(node);
@@ -258,6 +256,16 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 }
 
 static int
+cache_unlink(const char *path)
+{
+  int result = cache.next_oper->oper.unlink(path);
+  if(result == 0)
+    cache_invalidate_dir(path);
+
+  return result;
+}
+
+static int
 cache_utimens(const char *path, const struct timespec ts[2])
 {
   int result = cache.next_oper->oper.utimens(path, ts);
@@ -302,6 +310,7 @@ cache_fill(struct fuse_cache_operations *oper,
   cache_oper->create  = oper->oper.create  ? cache_create  : NULL;
   cache_oper->getattr = oper->oper.getattr ? cache_getattr : NULL;
   cache_oper->readdir = oper->list_bucket  ? cache_readdir : NULL;
+  cache_oper->unlink  = oper->oper.unlink  ? cache_unlink  : NULL;
   cache_oper->utimens = oper->oper.utimens ? cache_utimens : NULL;
 }
 
