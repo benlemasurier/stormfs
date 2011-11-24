@@ -287,22 +287,24 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   head = g_list_first(files);
   while(head != NULL) {
     next = head->next;
+    filler(buf, (const char *) head->data, 0, 0);
 
-    if(strcmp((char *) head->data, ".") != 0 &&
-       strcmp((char *) head->data, "..") != 0) {
-      struct stat *st = g_malloc0(sizeof(struct stat));;
-      struct getattr_threaded_args *args;
-      args = g_malloc0(sizeof(struct getattr_threaded_args));
-      args->path = get_path(path, (const char *) head->data);
-      args->stbuf = st;
-      threads[curr_thread].thread_num = curr_thread + 1;
-      pthread_create(&threads[curr_thread].thread_id, NULL,
-          (void *) cache_getattr_threaded, (void *) args);
-
-      curr_thread++;
+    if(strcmp((const char *) head->data, ".") == 0 ||
+       strcmp((const char *) head->data, "..") == 0) {
+      head = next;
+      continue;
     }
 
-    filler(buf, (const char *) head->data, 0, 0);
+    struct stat *st = g_malloc0(sizeof(struct stat));;
+    struct getattr_threaded_args *args;
+    args = g_malloc0(sizeof(struct getattr_threaded_args));
+    args->path = get_path(path, (const char *) head->data);
+    args->stbuf = st;
+    threads[curr_thread].thread_num = curr_thread + 1;
+    pthread_create(&threads[curr_thread].thread_id, NULL,
+        (void *) cache_getattr_threaded, (void *) args);
+
+    curr_thread++;
     head = next;
   }
 
