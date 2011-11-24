@@ -41,6 +41,11 @@ struct node {
   GList *dir;
 };
 
+static struct getattr_threaded_args {
+  char *path;
+  struct stat *stbuf;
+};
+
 static struct node *
 cache_lookup(const char *path)
 {
@@ -58,6 +63,17 @@ cache_get(const char *path)
   }
 
   return node;
+}
+
+static char *
+get_path(const char *path, const char *name)
+{
+  char *fullpath = g_malloc(sizeof(char) * strlen(path) + strlen(name) + 2);
+  strcpy(fullpath, path);
+  strncat(fullpath, "/", 1);
+  strncat(fullpath, name, strlen(name));
+
+  return fullpath;
 }
 
 static void
@@ -215,6 +231,21 @@ cache_getattr(const char *path, struct stat *stbuf)
 }
 
 static int
+cache_getattr_threaded(void *arguments)
+{
+  int result;
+  struct getattr_threaded_args *args = arguments;
+
+  result = cache_getattr(args->path, args->stbuf);
+
+  g_free(args->path);
+  g_free(args->stbuf);
+  g_free(args);
+  
+  return result;
+}
+
+static int
 cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     off_t offset, struct fuse_file_info *fi)
 {
@@ -228,6 +259,19 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     head = g_list_first(node->dir);
     while(head != NULL) {
       next = head->next;
+
+      struct stat *st = g_malloc0(sizeof(struct stat));;
+      struct getattr_threaded_args *args;
+      args = g_malloc0(sizeof(struct getattr_threaded_args));
+      args->path = get_path(path, (const char *) head->data);
+      args->stbuf = st;
+      pthread_attr_t thread_attr;
+      pthread_t getattr_thread;
+      pthread_attr_init(&thread_attr);
+      pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_DETACHED);
+      pthread_create(&getattr_thread, &thread_attr,
+          (void *) cache_getattr_threaded, (void *) args);
+
       filler(buf, (const char *) head->data, 0, 0);
       head = next;
     }
