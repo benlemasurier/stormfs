@@ -91,9 +91,9 @@ cmpstringp(const void *p1, const void *p2)
 void
 free_headers(HTTP_HEADER *h)
 {
-  g_free(h->key);
-  g_free(h->value);
-  g_free(h);
+  if(h->key != NULL) g_free(h->key);
+  if(h->value != NULL) g_free(h->value);
+  if(h != NULL) g_free(h);
 }
 
 char *
