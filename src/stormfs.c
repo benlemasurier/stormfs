@@ -373,25 +373,10 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
 }
 
 static int
-stormfs_getattr(const char *path, struct stat *stbuf)
+headers_to_stat(GList *headers, struct stat *stbuf)
 {
-  int status;
-  GList *headers = NULL;
-  GList *head = NULL, *next = NULL;
-
-  DEBUG("getattr: %s\n", path);
-
-  memset(stbuf, 0, sizeof(struct stat));
-  stbuf->st_nlink = 1;
-
-  if(strcmp(path, "/") == 0) {
-    stbuf->st_mode = stormfs.root_mode | S_IFDIR;
-
-    return 0;
-  }
-
-  if((status = stormfs_curl_head(path, &headers)) != 0)
-    return status;
+  GList *head = NULL,
+        *next = NULL;
 
   head = g_list_first(headers);
   while(head != NULL) {
@@ -420,6 +405,32 @@ stormfs_getattr(const char *path, struct stat *stbuf)
 
     head = next;
   }
+
+  return 0;
+}
+
+static int
+stormfs_getattr(const char *path, struct stat *stbuf)
+{
+  int status;
+  GList *headers = NULL;
+
+  DEBUG("getattr: %s\n", path);
+
+  memset(stbuf, 0, sizeof(struct stat));
+  stbuf->st_nlink = 1;
+
+  if(strcmp(path, "/") == 0) {
+    stbuf->st_mode = stormfs.root_mode | S_IFDIR;
+
+    return 0;
+  }
+
+  if((status = stormfs_curl_head(path, &headers)) != 0)
+    return status;
+  
+  if((status = headers_to_stat(headers, stbuf)) != 0)
+    return status;
 
   if(S_ISREG(stbuf->st_mode))
     stbuf->st_blocks = get_blocks(stbuf->st_size);
@@ -481,8 +492,6 @@ static int
 stormfs_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
 {
-  int result;
-
   DEBUG("read: %s\n", path);
 
   return pread(fi->fh, buf, size, offset);

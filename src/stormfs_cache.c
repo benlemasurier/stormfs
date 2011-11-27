@@ -316,7 +316,7 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     running_threads++;
     curr_thread++;
 
-    if(running_threads > 50) {
+    if(running_threads > 25) {
       gint i;
       for(i = 0; i <= curr_thread; i++) {
         if(!threads[i].done) {
