@@ -19,6 +19,7 @@
 #include <curl/curl.h>
 #include <curl/types.h>
 #include <curl/easy.h>
+#include <pthread.h>
 #include <glib.h>
 #include "stormfs_curl.h"
 
@@ -31,6 +32,7 @@ struct stormfs_curl {
   const char *bucket;
   const char *access_key;
   const char *secret_key;
+  pthread_mutex_t lock;
 } stormfs_curl;
 
 typedef struct {
@@ -91,9 +93,9 @@ cmpstringp(const void *p1, const void *p2)
 void
 free_headers(HTTP_HEADER *h)
 {
-  if(h->key != NULL) g_free(h->key);
-  if(h->value != NULL) g_free(h->value);
-  if(h != NULL) g_free(h);
+  g_free(h->key);
+  g_free(h->value);
+  g_free(h);
 }
 
 char *
@@ -426,63 +428,72 @@ sign_request(const char *method,
     struct curl_slist **headers, const char *path)
 {
   char *signature;
-  GString *to_sign;
-  GString *date_header;
-  GString *amz_headers;
-  GString *content_type;
-  GString *authorization;
+  char *to_sign;
+  char *date_header;
+  char *amz_headers;
+  char *content_type;
+  char *authorization;
   struct curl_slist *next = NULL;
   struct curl_slist *header = NULL;
   char *date = rfc2822_timestamp();
   char *resource = get_resource(path);
 
-  amz_headers  = g_string_new("");
-  content_type = g_string_new("");
+  amz_headers  = g_malloc0(sizeof(char));
+  content_type = g_malloc0(sizeof(char));
   header = *headers;
   while(header != NULL) {
     next = header->next;
 
     if(strstr(header->data, "x-amz") != NULL) {
-      amz_headers = g_string_append(amz_headers, header->data);
-      amz_headers = g_string_append_c(amz_headers, '\n');
+      amz_headers = g_realloc(amz_headers, sizeof(char) * strlen(amz_headers) +
+                        strlen(header->data) + 2);
+      amz_headers = strncat(amz_headers, header->data, strlen(header->data));
+      amz_headers = strncat(amz_headers, "\n", 1);
     } else if(strstr(header->data, "Content-Type") != NULL) {
-      content_type = g_string_append(content_type, 
-        (strstr(header->data, ":") + 1));
+      char *tmp = strstr(header->data, ":") + 1;
+      content_type = g_realloc(content_type, sizeof(char) * strlen(content_type) +
+                        strlen(content_type) + strlen(tmp) + 2);
+      content_type = strncat(content_type, tmp, strlen(tmp));
     }
 
     header = next;
   }
 
-  content_type = g_string_append_c(content_type, '\n');
-  to_sign = g_string_new("");
-  to_sign = g_string_append(to_sign, method);
-  to_sign = g_string_append(to_sign, "\n\n");
-  to_sign = g_string_append(to_sign, content_type->str);
-  to_sign = g_string_append(to_sign, date);
-  to_sign = g_string_append_c(to_sign, '\n');
-  to_sign = g_string_append(to_sign, amz_headers->str);
-  to_sign = g_string_append(to_sign, resource);
+  content_type = strncat(content_type, "\n", 1);
+  to_sign = g_malloc(sizeof(char) * strlen(method) +
+                strlen(content_type) + strlen(date) +
+                strlen(amz_headers) + strlen(resource) + 4);
+  to_sign = strcpy(to_sign, method);
+  to_sign = strcat(to_sign, "\n\n");
+  to_sign = strcat(to_sign, content_type);
+  to_sign = strcat(to_sign, date);
+  to_sign = strcat(to_sign, "\n");
+  to_sign = strcat(to_sign, amz_headers);
+  to_sign = strcat(to_sign, resource);
 
-  signature = hmac_sha1(stormfs_curl.secret_key, to_sign->str);
+  signature = hmac_sha1(stormfs_curl.secret_key, to_sign);
   
-  authorization = g_string_new("Authorization: AWS ");
-  authorization = g_string_append(authorization, stormfs_curl.access_key);
-  authorization = g_string_append(authorization, ":");
-  authorization = g_string_append(authorization, signature);
+  authorization = g_malloc(sizeof(char) * strlen(stormfs_curl.access_key) +
+                                          strlen(signature) + 22);
+  authorization = strcpy(authorization, "Authorization: AWS ");
+  authorization = strcat(authorization, stormfs_curl.access_key);
+  authorization = strcat(authorization, ":");
+  authorization = strcat(authorization, signature);
 
-  date_header = g_string_new("Date: ");
-  date_header = g_string_append(date_header, date);
-  *headers = curl_slist_append(*headers, date_header->str);
-  *headers = curl_slist_append(*headers, authorization->str);
+  date_header = g_malloc(sizeof(char) * strlen(date) + 7);
+  date_header = strcpy(date_header, "Date: ");
+  date_header = strcat(date_header, date);
+  *headers = curl_slist_append(*headers, date_header);
+  *headers = curl_slist_append(*headers, authorization);
 
   g_free(date);
   g_free(resource);
   g_free(signature);
-  g_string_free(to_sign, TRUE);
-  g_string_free(amz_headers, TRUE);
-  g_string_free(date_header, TRUE);
-  g_string_free(content_type, TRUE);
-  g_string_free(authorization, TRUE);
+  g_free(to_sign);
+  g_free(amz_headers);
+  g_free(date_header);
+  g_free(content_type);
+  g_free(authorization);
 
   return 0;
 }
@@ -506,14 +517,15 @@ set_curl_defaults(CURL **c)
 static char *
 get_url(const char *path)
 {
-  char *url;
-  GString *tmp;
-
-  tmp = g_string_new(stormfs_curl.url);
-  tmp = g_string_append(tmp, path);
-  tmp = g_string_append(tmp, "?delimiter=/");
-  url = strdup(tmp->str);
-  g_string_free(tmp, TRUE);
+  char *delimiter = "?delimiter=/";
+  char *url = g_malloc(sizeof(char) * 
+      strlen(stormfs_curl.url) +
+      strlen(path) + 
+      strlen(delimiter) + 1);
+  
+  url = strcpy(url, stormfs_curl.url);
+  url = strncat(url, path, strlen(path));
+  url = strncat(url, delimiter, strlen(delimiter));
 
   return(url);
 }
@@ -645,6 +657,7 @@ stormfs_curl_init(const char *bucket, const char *url)
   stormfs_curl.url = url;
   stormfs_curl.bucket = bucket;
   stormfs_curl.verify_ssl = 1;
+  pthread_mutex_init(&stormfs_curl.lock, NULL);
 
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
     return -1;
@@ -738,7 +751,9 @@ stormfs_curl_head(const char *path, GList **headers)
   data.memory = g_malloc(1);
   data.size = 0;
 
+  pthread_mutex_lock(&stormfs_curl.lock);
   sign_request("HEAD", &req_headers, path);
+  pthread_mutex_unlock(&stormfs_curl.lock);
   curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    /* HEAD */
   curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  /* Last-Modified */
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
@@ -749,7 +764,9 @@ stormfs_curl_head(const char *path, GList **headers)
   status = http_response_errno(c);
 
   response_headers = strdup(data.memory);
+  pthread_mutex_lock(&stormfs_curl.lock);
   extract_meta(response_headers, &(*headers));
+  pthread_mutex_unlock(&stormfs_curl.lock);
 
   g_free(url);
   g_free(data.memory);
@@ -866,5 +883,6 @@ stormfs_curl_put_headers(const char *path, GList *headers)
 void
 stormfs_curl_destroy()
 {
+  pthread_mutex_destroy(&stormfs_curl.lock);
   curl_global_cleanup();
 }

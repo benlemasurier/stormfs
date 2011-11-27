@@ -22,6 +22,7 @@
 #include <pwd.h>
 #include <grp.h>
 #include <libgen.h>
+#include <pthread.h>
 #include <fuse.h>
 #include <glib.h>
 #include <libxml/xpath.h>
@@ -51,6 +52,7 @@ struct stormfs {
   char *mountpoint;
   mode_t root_mode;
   GHashTable *mime_types;
+  pthread_mutex_t lock;
 } stormfs;
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
@@ -422,7 +424,9 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   if(S_ISREG(stbuf->st_mode))
     stbuf->st_blocks = get_blocks(stbuf->st_size);
 
+  pthread_mutex_lock(&stormfs.lock);
   g_list_free_full(headers, (GDestroyNotify) free_headers); 
+  pthread_mutex_unlock(&stormfs.lock);
 
   return 0;
 }
@@ -968,6 +972,7 @@ stormfs_get_credentials(char **access_key, char **secret_key)
 static void
 stormfs_destroy(void *data)
 {
+  pthread_mutex_destroy(&stormfs.lock);
   stormfs_curl_destroy();
   g_free(stormfs.virtual_url);
   g_hash_table_destroy(stormfs.mime_types);
@@ -1016,6 +1021,7 @@ main(int argc, char *argv[])
   memset(&stormfs, 0, sizeof(struct stormfs));
   stormfs.verify_ssl = 2;
   stormfs.url = "http://s3.amazonaws.com";
+  pthread_mutex_init(&stormfs.lock, NULL);
 
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
     fprintf(stderr, "error parsing command-line options\n");

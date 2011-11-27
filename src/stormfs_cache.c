@@ -33,17 +33,17 @@ struct cache {
   struct fuse_cache_operations *next_oper;
 } cache;
 
+struct threads {
+  gboolean done;
+  pthread_t thread_id;
+};
+
 struct node {
   time_t valid;
   time_t dir_valid;
   time_t stat_valid;
   struct stat stat;
   GList *dir;
-};
-
-struct thread_info {
-  int thread_num;
-  pthread_t thread_id;
 };
 
 struct getattr_threaded_args {
@@ -248,6 +248,8 @@ cache_getattr_threaded(void *arguments)
   g_free(args->stbuf);
   g_free(args);
 
+  pthread_exit(NULL);
+
   return result;
 }
 
@@ -261,9 +263,13 @@ static int
 cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     off_t offset, struct fuse_file_info *fi)
 {
+  printf("READDIR\n");
   int result;
   struct node *node;
-  GList *files = NULL, *head = NULL, *next = NULL;
+  struct threads *threads;
+  GList *files   = NULL, 
+        *head    = NULL,
+        *next    = NULL;
 
   pthread_mutex_lock(&cache.lock);
   node = cache_lookup(path);
@@ -285,11 +291,9 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return result;
   }
 
-  guint curr_thread = 0;
-  guint n_threads = g_list_length(files) - 2;
-  struct thread_info *threads;
-  threads = g_malloc(sizeof(struct thread_info) * n_threads);
-
+  gint curr_thread = 0;
+  gint running_threads = 0;
+  threads = g_malloc0(sizeof(struct threads) * g_list_length(files));
   head = g_list_first(files);
   while(head != NULL) {
     next = head->next;
@@ -306,23 +310,30 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     args = g_malloc0(sizeof(struct getattr_threaded_args));
     args->path = get_path(path, (const char *) head->data);
     args->stbuf = st;
-    threads[curr_thread].thread_num = curr_thread + 1;
+
     pthread_create(&threads[curr_thread].thread_id, NULL,
         (void *) cache_getattr_threaded, (void *) args);
-
+    running_threads++;
     curr_thread++;
+
+    if(running_threads > 50) {
+      gint i;
+      for(i = 0; i <= curr_thread; i++) {
+        if(!threads[i].done) {
+          pthread_join(threads[i].thread_id, NULL);
+          threads[i].done = TRUE;
+          running_threads--;
+        }
+      }
+    }
+
     head = next;
   }
-
-  for(curr_thread = 0; curr_thread < n_threads; curr_thread++) {
-    pthread_join(threads[curr_thread].thread_id, NULL);
-  }
-
-  g_free(threads);
 
   head = g_list_first(files);
   cache_add_dir(path, head);
 
+  g_free(threads);
   return result;
 }
 
