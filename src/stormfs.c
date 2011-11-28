@@ -148,6 +148,7 @@ void
 free_file(struct file *f)
 {
   g_free(f->name);
+  g_list_free_full(f->headers, (GDestroyNotify) free_headers);
   g_free(f->stbuf);
   g_free(f);
 }
@@ -157,6 +158,10 @@ add_file_to_list(GList *list, const char *name, struct stat *st)
 {
   struct file *f = g_malloc0(sizeof(struct file));
   f->name = g_strdup(name);
+  
+  if(st == NULL)
+    st = g_malloc0(sizeof(struct stat));
+
   f->stbuf = st;
 
   return g_list_append(list, f);
@@ -489,6 +494,34 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   pthread_mutex_unlock(&stormfs.lock);
 
   return 0;
+}
+
+int
+stormfs_getattr_multi(const char *path, GList *files)
+{
+  DEBUG("getattr_multi: %s\n", path);
+
+  int result;
+  GList *head = NULL, *next = NULL;
+  result = stormfs_curl_head_multi(path, files);
+
+  head = g_list_first(files);
+  while(head != NULL) {
+    next = head->next;
+
+    struct file *f = head->data;
+    GList *headers = f->headers;
+    struct stat *stbuf = f->stbuf;
+    if((result = headers_to_stat(headers, stbuf)) != 0)
+      return result;
+
+    if(S_ISREG(stbuf->st_mode))
+      stbuf->st_blocks = get_blocks(stbuf->st_size);
+
+    head = next;
+  }
+
+  return result;
 }
 
 static void *

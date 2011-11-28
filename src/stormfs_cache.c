@@ -17,8 +17,8 @@
 #include <fuse.h>
 #include <fuse_opt.h>
 #include <pthread.h>
-#include "stormfs_cache.h"
 #include "stormfs.h"
+#include "stormfs_cache.h"
 
 #define DEFAULT_CACHE_TIMEOUT 300
 #define MAX_CACHE_SIZE 10000
@@ -62,7 +62,7 @@ cache_get(const char *path)
   return node;
 }
 
-static char *
+char *
 get_path(const char *path, const char *name)
 {
   char *fullpath = g_malloc(sizeof(char) * strlen(path) + strlen(name) + 2);
@@ -251,7 +251,7 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     while(head != NULL) {
       next = head->next;
       struct file *file = head->data;
-      filler(buf, (const char *) file->name, file->stbuf, 0);
+      filler(buf, (const char *) file->name, 0, 0);
       head = next;
     }
     pthread_mutex_unlock(&cache.lock);
@@ -265,18 +265,23 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return result;
   }
 
+  result = stormfs_getattr_multi(path, files);
+
   head = g_list_first(files);
   while(head != NULL) {
     next = head->next;
     struct file *file = head->data;
-    filler(buf, (const char *) file->name, file->stbuf, 0);
+    char *fullpath = get_path(path, file->name);
+    filler(buf, (const char *) file->name, 0, 0);
+    cache_add_attr(fullpath, file->stbuf);
+    g_free(fullpath);
     head = next;
   }
 
   head = g_list_first(files);
   cache_add_dir(path, head);
 
-  g_list_free_full(files, (GDestroyNotify) free_file);
+  /* g_list_free_full(files, (GDestroyNotify) free_file); */
 
   return result;
 }

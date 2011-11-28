@@ -12,11 +12,14 @@
 #define FIVE_GB 5368709120LL
 
 struct file {
-  char *name;
-  struct stat *stbuf;
+  char *name;         /* file name */
+  GList *headers;     /* http headers */
+  struct stat *stbuf; /* stat(2) buffer */
 };
 
+char *get_path(const char *path, const char *name);
 char *stormfs_virtual_url(char *url, char *bucket);
 void free_file(struct file *f);
+int stormfs_getattr_multi(const char *path, GList *files);
 
 #endif // stormfs_H
