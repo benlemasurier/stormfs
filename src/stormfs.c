@@ -613,7 +613,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   while(files != NULL) {
     next = files->next;
     struct file *file = files->data;
-    filler(buf, (char *) file->name, 0, 0);
+    filler(buf, (char *) file->name, file->stbuf, 0);
     files = next;
   }
 

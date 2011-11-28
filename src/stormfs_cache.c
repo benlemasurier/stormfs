@@ -251,7 +251,7 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     while(head != NULL) {
       next = head->next;
       struct file *file = head->data;
-      filler(buf, (const char *) file->name, 0, 0);
+      filler(buf, (const char *) file->name, file->stbuf, 0);
       head = next;
     }
     pthread_mutex_unlock(&cache.lock);
@@ -269,7 +269,7 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   while(head != NULL) {
     next = head->next;
     struct file *file = head->data;
-    filler(buf, (const char *) file->name, 0, 0);
+    filler(buf, (const char *) file->name, file->stbuf, 0);
     head = next;
   }
 
