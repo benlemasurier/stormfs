@@ -33,6 +33,38 @@
 #include "stormfs_cache.h"
 #include "stormfs_curl.h"
 
+static char *name_from_xml(xmlDocPtr doc, xmlXPathContextPtr ctx);
+static int stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi);
+static int stormfs_chmod(const char *path, mode_t mode);
+static int stormfs_chown(const char *path, uid_t uid, gid_t gid);
+static void stormfs_destroy(void *data);
+static int stormfs_flush(const char *path, struct fuse_file_info *fi);
+static int stormfs_getattr(const char *path, struct stat *stbuf);
+static void *stormfs_init(struct fuse_conn_info *conn);
+static int stormfs_mkdir(const char *path, mode_t mode);
+static int stormfs_mknod(const char *path, mode_t mode, dev_t rdev);
+static int stormfs_open(const char *path, struct fuse_file_info *fi);
+static int stormfs_read(const char *path, char *buf, size_t size, off_t offset,
+                        struct fuse_file_info *fi);
+static int stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
+                           off_t offset, struct fuse_file_info *fi);
+static int stormfs_readlink(const char *path, char *buf, size_t size);
+static int stormfs_rmdir(const char *path);
+static int stormfs_release(const char *path, struct fuse_file_info *fi);
+static int stormfs_rename(const char *from, const char *to);
+static int stormfs_rename_file(const char *from, const char *to);
+static int stormfs_rename_directory(const char *from, const char *to);
+static int stormfs_statfs(const char *path, struct statvfs *buf);
+static int stormfs_truncate(const char *path, off_t size);
+static int stormfs_symlink(const char *from, const char *to);
+static int stormfs_unlink(const char *path);
+static int stormfs_utimens(const char *path, const struct timespec ts[2]);
+static int stormfs_write(const char *path, const char *buf, 
+                         size_t size, off_t offset, struct fuse_file_info *fi);
+static int stormfs_opt_proc(void *data, const char *arg, int key,
+                            struct fuse_args *outargs);
+static int stormfs_fuse_main(struct fuse_args *args);
+
 enum {
   KEY_HELP,
   KEY_VERSION,
@@ -225,6 +257,43 @@ get_mime_type(const char *filename)
 }
 
 static int
+headers_to_stat(GList *headers, struct stat *stbuf)
+{
+  GList *head = NULL,
+        *next = NULL;
+
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+    HTTP_HEADER *header = head->data;
+
+    /* TODO: clean this up. */
+    if(strcmp(header->key, "x-amz-meta-uid") == 0)
+      stbuf->st_uid = get_uid(header->value);
+    else if(strcmp(header->key, "x-amz-meta-gid") == 0)
+      stbuf->st_gid = get_gid(header->value);
+    else if(strcmp(header->key, "x-amz-meta-mtime") == 0)
+      stbuf->st_mtime = get_mtime(header->value);
+    else if(strcmp(header->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
+      stbuf->st_mtime = get_mtime(header->value);
+    else if(strcmp(header->key, "x-amz-meta-mode") == 0)
+      stbuf->st_mode |= get_mode(header->value);
+    else if(strcmp(header->key, "Content-Length") == 0)
+      stbuf->st_size = get_size(header->value);
+    else if(strcmp(header->key, "Content-Type") == 0) {
+      if(strstr(header->value, "x-directory"))
+        stbuf->st_mode |= S_IFDIR;
+      else
+        stbuf->st_mode |= S_IFREG;
+    }
+
+    head = next;
+  }
+
+  return 0;
+}
+
+static int
 stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   int result;
@@ -373,43 +442,6 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
 }
 
 static int
-headers_to_stat(GList *headers, struct stat *stbuf)
-{
-  GList *head = NULL,
-        *next = NULL;
-
-  head = g_list_first(headers);
-  while(head != NULL) {
-    next = head->next;
-    HTTP_HEADER *header = head->data;
-
-    /* TODO: clean this up. */
-    if(strcmp(header->key, "x-amz-meta-uid") == 0)
-      stbuf->st_uid = get_uid(header->value);
-    else if(strcmp(header->key, "x-amz-meta-gid") == 0)
-      stbuf->st_gid = get_gid(header->value);
-    else if(strcmp(header->key, "x-amz-meta-mtime") == 0)
-      stbuf->st_mtime = get_mtime(header->value);
-    else if(strcmp(header->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
-      stbuf->st_mtime = get_mtime(header->value);
-    else if(strcmp(header->key, "x-amz-meta-mode") == 0)
-      stbuf->st_mode |= get_mode(header->value);
-    else if(strcmp(header->key, "Content-Length") == 0)
-      stbuf->st_size = get_size(header->value);
-    else if(strcmp(header->key, "Content-Type") == 0) {
-      if(strstr(header->value, "x-directory"))
-        stbuf->st_mode |= S_IFDIR;
-      else
-        stbuf->st_mode |= S_IFREG;
-    }
-
-    head = next;
-  }
-
-  return 0;
-}
-
-static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
   int status;
@@ -422,7 +454,6 @@ stormfs_getattr(const char *path, struct stat *stbuf)
 
   if(strcmp(path, "/") == 0) {
     stbuf->st_mode = stormfs.root_mode | S_IFDIR;
-
     return 0;
   }
 

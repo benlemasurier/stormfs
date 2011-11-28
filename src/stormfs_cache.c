@@ -13,10 +13,12 @@
 #include <string.h>
 #include <errno.h>
 #include <glib.h>
+#include <sys/select.h>
 #include <fuse.h>
 #include <fuse_opt.h>
 #include <pthread.h>
 #include "stormfs_cache.h"
+#include "stormfs.h"
 
 #define DEFAULT_CACHE_TIMEOUT 300
 #define MAX_CACHE_SIZE 10000
@@ -33,22 +35,12 @@ struct cache {
   struct fuse_cache_operations *next_oper;
 } cache;
 
-struct threads {
-  gboolean done;
-  pthread_t thread_id;
-};
-
 struct node {
   time_t valid;
   time_t dir_valid;
   time_t stat_valid;
   struct stat stat;
   GList *dir;
-};
-
-struct getattr_threaded_args {
-  char *path;
-  struct stat *stbuf;
 };
 
 static struct node *
@@ -237,23 +229,6 @@ cache_getattr(const char *path, struct stat *stbuf)
 }
 
 static int
-cache_getattr_threaded(void *arguments)
-{
-  int result;
-  struct getattr_threaded_args *args = arguments;
-
-  result = cache_getattr(args->path, args->stbuf);
-
-  g_free(args->path);
-  g_free(args->stbuf);
-  g_free(args);
-
-  pthread_exit(NULL);
-
-  return result;
-}
-
-static int
 cache_flush(const char *path, struct fuse_file_info *fi)
 {
   return cache.next_oper->oper.flush(path, fi);
@@ -263,10 +238,8 @@ static int
 cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     off_t offset, struct fuse_file_info *fi)
 {
-  printf("READDIR\n");
   int result;
   struct node *node;
-  struct threads *threads;
   GList *files   = NULL, 
         *head    = NULL,
         *next    = NULL;
@@ -291,49 +264,16 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return result;
   }
 
-  gint curr_thread = 0;
-  gint running_threads = 0;
-  threads = g_malloc0(sizeof(struct threads) * g_list_length(files));
   head = g_list_first(files);
   while(head != NULL) {
     next = head->next;
     filler(buf, (const char *) head->data, 0, 0);
-
-    if(strcmp((const char *) head->data, ".") == 0 ||
-       strcmp((const char *) head->data, "..") == 0) {
-      head = next;
-      continue;
-    }
-
-    struct stat *st = g_malloc0(sizeof(struct stat));;
-    struct getattr_threaded_args *args;
-    args = g_malloc0(sizeof(struct getattr_threaded_args));
-    args->path = get_path(path, (const char *) head->data);
-    args->stbuf = st;
-
-    pthread_create(&threads[curr_thread].thread_id, NULL,
-        (void *) cache_getattr_threaded, (void *) args);
-    running_threads++;
-    curr_thread++;
-
-    if(running_threads > 25) {
-      gint i;
-      for(i = 0; i <= curr_thread; i++) {
-        if(!threads[i].done) {
-          pthread_join(threads[i].thread_id, NULL);
-          threads[i].done = TRUE;
-          running_threads--;
-        }
-      }
-    }
-
     head = next;
   }
 
   head = g_list_first(files);
   cache_add_dir(path, head);
 
-  g_free(threads);
   return result;
 }
 
