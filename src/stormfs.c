@@ -152,6 +152,16 @@ free_file(struct file *f)
   g_free(f);
 }
 
+GList *
+add_file_to_list(GList *list, const char *name, struct stat *st)
+{
+  struct file *f = g_malloc0(sizeof(struct file));
+  f->name = g_strdup(name);
+  f->stbuf = st;
+
+  return g_list_append(list, f);
+}
+
 static char *
 name_from_xml(xmlDocPtr doc, xmlXPathContextPtr ctx)
 {
@@ -548,12 +558,8 @@ stormfs_list_bucket(const char *path, GList **files)
     return -EIO;
   }
 
-  struct file *dot    = g_malloc0(sizeof(struct file));
-  struct file *dotdot = g_malloc0(sizeof(struct file));
-  dot->name    = g_strdup(".");
-  dotdot->name = g_strdup("..");
-  *files = g_list_append(*files, dot);
-  *files = g_list_append(*files, dotdot);
+  *files = add_file_to_list(*files, ".", NULL);
+  *files = add_file_to_list(*files, "..", NULL);
 
   if(strstr(xml, "xml") == NULL)
     return 0;
@@ -575,13 +581,10 @@ stormfs_list_bucket(const char *path, GList **files)
   int i;
   for(i = 0; i < content_nodes->nodeNr; i++) {
     char *name;
-    struct file *file = g_malloc0(sizeof(struct file));
 
     ctx->node = content_nodes->nodeTab[i];
     name = name_from_xml(doc, ctx);
-
-    file->name  = g_strdup(basename(name));
-    *files = g_list_append(*files, file);
+    *files = add_file_to_list(*files, basename(name), NULL);
 
     g_free(name);
   }
