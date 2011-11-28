@@ -250,7 +250,8 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     head = g_list_first(node->dir);
     while(head != NULL) {
       next = head->next;
-      filler(buf, (const char *) head->data, 0, 0);
+      struct file *file = head->data;
+      filler(buf, (const char *) file->name, 0, 0);
       head = next;
     }
     pthread_mutex_unlock(&cache.lock);
@@ -260,19 +261,22 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
   result = cache.next_oper->list_bucket(path, &files);
   if(result != 0) {
-    g_list_free_full(head, g_free);
+    g_list_free_full(head, (GDestroyNotify) free_file);
     return result;
   }
 
   head = g_list_first(files);
   while(head != NULL) {
     next = head->next;
-    filler(buf, (const char *) head->data, 0, 0);
+    struct file *file = head->data;
+    filler(buf, (const char *) file->name, 0, 0);
     head = next;
   }
 
   head = g_list_first(files);
   cache_add_dir(path, head);
+
+  g_list_free_full(files, (GDestroyNotify) free_file);
 
   return result;
 }

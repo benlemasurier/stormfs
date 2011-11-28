@@ -144,6 +144,14 @@ blkcnt_t get_blocks(off_t size)
   return size / 512 + 1;
 }
 
+void
+free_file(struct file *f)
+{
+  g_free(f->name);
+  g_free(f->stbuf);
+  g_free(f);
+}
+
 static char *
 name_from_xml(xmlDocPtr doc, xmlXPathContextPtr ctx)
 {
@@ -540,8 +548,12 @@ stormfs_list_bucket(const char *path, GList **files)
     return -EIO;
   }
 
-  *files = g_list_append(*files, g_strdup("."));
-  *files = g_list_append(*files, g_strdup(".."));
+  struct file *dot    = g_malloc0(sizeof(struct file));
+  struct file *dotdot = g_malloc0(sizeof(struct file));
+  dot->name    = g_strdup(".");
+  dotdot->name = g_strdup("..");
+  *files = g_list_append(*files, dot);
+  *files = g_list_append(*files, dotdot);
 
   if(strstr(xml, "xml") == NULL)
     return 0;
@@ -550,7 +562,6 @@ stormfs_list_bucket(const char *path, GList **files)
   xmlXPathContextPtr ctx;
   xmlXPathObjectPtr contents_xp;
   xmlNodeSetPtr content_nodes;
-
   if((doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0)) == NULL)
     return -EIO;
 
@@ -564,11 +575,13 @@ stormfs_list_bucket(const char *path, GList **files)
   int i;
   for(i = 0; i < content_nodes->nodeNr; i++) {
     char *name;
+    struct file *file = g_malloc0(sizeof(struct file));
 
     ctx->node = content_nodes->nodeTab[i];
     name = name_from_xml(doc, ctx);
 
-    *files = g_list_append(*files, g_strdup(basename(name)));
+    file->name  = g_strdup(basename(name));
+    *files = g_list_append(*files, file);
 
     g_free(name);
   }
@@ -596,11 +609,12 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   files = g_list_first(files);
   while(files != NULL) {
     next = files->next;
-    filler(buf, (char *) files->data, 0, 0);
+    struct file *file = files->data;
+    filler(buf, (char *) file->name, 0, 0);
     files = next;
   }
 
-  g_list_free_full(files, g_free);
+  g_list_free_full(files, (GDestroyNotify) free_file);
 
   return result;
 }

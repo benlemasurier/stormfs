@@ -12,10 +12,11 @@
 #define FIVE_GB 5368709120LL
 
 struct file {
-  const char *path;
+  char *name;
   struct stat *stbuf;
 };
 
 char *stormfs_virtual_url(char *url, char *bucket);
+void free_file(struct file *f);
 
 #endif // stormfs_H

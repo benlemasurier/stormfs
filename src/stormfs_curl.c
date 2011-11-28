@@ -439,7 +439,7 @@ sign_request(const char *method,
   char *resource = get_resource(path);
 
   amz_headers  = g_malloc0(sizeof(char));
-  content_type = g_malloc0(sizeof(char));
+  content_type = g_malloc0(sizeof(char) * 2);
   header = *headers;
   while(header != NULL) {
     next = header->next;
@@ -533,20 +533,28 @@ get_url(const char *path)
 static char *
 get_list_bucket_url(const char *path)
 {
-  char *url;
-  GString *tmp;
+  char *url, *tmp;
+  const char *delimiter = "?delimiter=/";
+  const char *prefix    = "&prefix=";
+  size_t url_len        = strlen(stormfs_curl.url);
+  size_t delimiter_len  = strlen(delimiter);
+  size_t prefix_len     = strlen(prefix);
+  size_t path_len       = strlen(path);
 
-  tmp = g_string_new(stormfs_curl.url);
-  tmp = g_string_append(tmp, "?delimiter=/");
-  tmp = g_string_append(tmp, "&prefix=");
+  tmp = g_malloc(sizeof(char) * (url_len + delimiter_len + prefix_len + 1));
 
-  if(strlen(path) > 1) {
-    tmp = g_string_append(tmp, (path + 1));
-    tmp = g_string_append(tmp, "/");
+  tmp = strcpy(tmp, stormfs_curl.url);
+  tmp = strncat(tmp, delimiter, strlen(delimiter));
+  tmp = strncat(tmp, prefix, strlen(prefix));
+
+  if(path_len > 1) {
+    tmp = g_realloc(tmp, sizeof(char) * (strlen(tmp) + path_len + 1));
+    tmp = strncat(tmp, path + 1, path_len - 1);
+    tmp = strncat(tmp, "/", 1);
   }
 
-  url = strdup(tmp->str);
-  g_string_free(tmp, TRUE);
+  url = g_strdup(tmp);
+  g_free(tmp);
 
   return(url);
 }
