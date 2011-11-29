@@ -399,7 +399,7 @@ static const struct fuse_opt cache_opts[] = {
   {"cache_timeout=%u",      offsetof(struct cache, stat_timeout), 0},
   {"cache_timeout=%u",      offsetof(struct cache, dir_timeout),  0},
   {"cache_stat_timeout=%u", offsetof(struct cache, stat_timeout), 0},
-  {"cache_dir_timeout=%u", offsetof(struct cache,  dir_timeout),  0},
+  {"cache_dir_timeout=%u",  offsetof(struct cache, dir_timeout),  0},
   FUSE_OPT_END
 };
 

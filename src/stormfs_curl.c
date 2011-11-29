@@ -789,7 +789,7 @@ stormfs_curl_head(const char *path, GList **headers)
 int
 stormfs_curl_head_multi(const char *path, GList *files)
 {
-  int i, still_running;
+  int i, n_running, last_req_idx, still_running;
   size_t n_files = g_list_length(files);
   CURL *c[n_files];
   HTTP_RESPONSE *responses = g_malloc0(sizeof(HTTP_RESPONSE) * n_files);
@@ -800,12 +800,11 @@ stormfs_curl_head_multi(const char *path, GList *files)
     return -1;
 
   i = 0;
+  n_running = 0;
   head = g_list_first(files);
   while(head != NULL) {
     next = head->next;
     struct file *f = head->data;
-
-    // TODO: ignore '.' && '..'
 
     CURLMcode err;
     char *full_path = get_path(path, f->name);
@@ -822,8 +821,13 @@ stormfs_curl_head_multi(const char *path, GList *files)
     curl_easy_setopt(c[i], CURLOPT_HEADERDATA, (void *) &responses[i]);
     curl_easy_setopt(c[i], CURLOPT_HEADERFUNCTION, write_memory_cb);
 
-    if((err = curl_multi_add_handle(multi, c[i])) != CURLM_OK)
-      return -EIO;
+    if(n_running < MAX_REQUESTS && n_running < n_files) {
+      if((err = curl_multi_add_handle(multi, c[i])) != CURLM_OK)
+        return -EIO;
+
+      n_running++;
+      last_req_idx = i;
+    }
 
     g_free(full_path);
     g_free(url);
@@ -834,53 +838,65 @@ stormfs_curl_head_multi(const char *path, GList *files)
 
   curl_multi_perform(multi, &still_running);
   while(still_running) {
-    int max_fd = -1;
-    long curl_timeout = -1;
-    struct timeval timeout;
-    CURLMcode err;
+    if(still_running) {
+      int max_fd = -1;
+      long curl_timeout = -1;
+      struct timeval timeout;
+      CURLMcode err;
 
-    fd_set fd_r;
-    fd_set fd_w;
-    fd_set fd_e;
-    FD_ZERO(&fd_r);
-    FD_ZERO(&fd_w);
-    FD_ZERO(&fd_e);
-    timeout.tv_sec  = 1;
-    timeout.tv_usec = 0;
+      fd_set fd_r;
+      fd_set fd_w;
+      fd_set fd_e;
+      FD_ZERO(&fd_r);
+      FD_ZERO(&fd_w);
+      FD_ZERO(&fd_e);
+      timeout.tv_sec  = 1;
+      timeout.tv_usec = 0;
 
-    curl_multi_timeout(multi, &curl_timeout);
-    if(curl_timeout >= 0) {
-      timeout.tv_sec = curl_timeout / 1000;
-      if(timeout.tv_sec > 1)
-        timeout.tv_sec = 1;
-      else 
-        timeout.tv_usec = (curl_timeout % 1000) * 1000;
+      curl_multi_timeout(multi, &curl_timeout);
+      if(curl_timeout >= 0) {
+        timeout.tv_sec = curl_timeout / 1000;
+        if(timeout.tv_sec > 1)
+          timeout.tv_sec = 1;
+        else 
+          timeout.tv_usec = (curl_timeout % 1000) * 1000;
+      }
+
+      err = curl_multi_fdset(multi, &fd_r, &fd_w, &fd_e, &max_fd);
+      if(err != CURLM_OK)
+        return -EIO;
+
+      if(select(max_fd + 1, &fd_r, &fd_w, &fd_e, &timeout) == -1)
+        return -errno;
     }
-
-    err = curl_multi_fdset(multi, &fd_r, &fd_w, &fd_e, &max_fd);
-    if(err != CURLM_OK)
-      return -EIO;
-
-    if(select(max_fd + 1, &fd_r, &fd_w, &fd_e, &timeout) == -1)
-      return -errno;
 
     curl_multi_perform(multi, &still_running);
-  }
 
-  CURLMsg *msg;
-  int remaining;
-  while((msg = curl_multi_info_read(multi, &remaining))) {
-    if(msg->msg != CURLMSG_DONE)
-      continue;
+    CURLMsg *msg;
+    int remaining;
+    while((msg = curl_multi_info_read(multi, &remaining))) {
+      if(msg->msg != CURLMSG_DONE)
+        continue;
 
-    for(i = 0; i < (int) n_files; i++) {
-      if(msg->easy_handle == c[i])
-        break;
+      for(i = 0; i < (int) n_files; i++) {
+        if(msg->easy_handle == c[i])
+          break;
+      }
+
+      struct file *f = g_list_nth_data(files, i);
+      extract_meta(responses[i].memory, &(f->headers));
+      g_free(responses[i].memory);
+      n_running--;
+
+      if(n_running < MAX_REQUESTS && last_req_idx < (n_files - 1)) {
+        CURLMcode err;
+        last_req_idx++;;
+        if((err = curl_multi_add_handle(multi, c[last_req_idx])) != CURLM_OK)
+          return -EIO;
+
+        n_running++;
+      }
     }
-
-    struct file *f = g_list_nth_data(files, i);
-    extract_meta(responses[i].memory, &(f->headers));
-    g_free(responses[i].memory);
   }
 
   curl_multi_cleanup(multi);

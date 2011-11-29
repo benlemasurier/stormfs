@@ -10,6 +10,7 @@
 #define stormfs_curl_H
 
 #define FIVE_GB 5368709120LL
+#define MAX_REQUESTS 100
 
 typedef struct {
   char *key;
