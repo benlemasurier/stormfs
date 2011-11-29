@@ -235,6 +235,18 @@ cache_flush(const char *path, struct fuse_file_info *fi)
 }
 
 static int
+cache_mkdir(const char *path, mode_t mode)
+{
+  int result;
+  if((result = cache.next_oper->oper.mkdir(path, mode)) != 0)
+    return result;
+
+  cache_invalidate_dir(path);
+
+  return result;
+}
+
+static int
 cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
     off_t offset, struct fuse_file_info *fi)
 {
@@ -365,6 +377,7 @@ cache_fill(struct fuse_cache_operations *oper,
   cache_oper->create  = oper->oper.create  ? cache_create  : NULL;
   cache_oper->getattr = oper->oper.getattr ? cache_getattr : NULL;
   cache_oper->flush   = oper->oper.flush   ? cache_flush   : NULL;
+  cache_oper->mkdir   = oper->oper.mkdir   ? cache_mkdir   : NULL;
   cache_oper->readdir = oper->list_bucket  ? cache_readdir : NULL;
   cache_oper->release = oper->oper.release ? cache_release : NULL;
   cache_oper->unlink  = oper->oper.unlink  ? cache_unlink  : NULL;
