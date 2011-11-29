@@ -30,6 +30,7 @@ struct cache {
   time_t last_cleaned;
   unsigned dir_timeout;
   unsigned stat_timeout;
+  unsigned link_timeout;
   GHashTable *table;
   pthread_mutex_t lock;
   struct fuse_cache_operations *next_oper;
@@ -38,9 +39,11 @@ struct cache {
 struct node {
   time_t valid;
   time_t dir_valid;
+  time_t link_valid;
   time_t stat_valid;
   struct stat stat;
   GList *dir;
+  char *link;
 };
 
 static struct node *
@@ -226,6 +229,24 @@ cache_add_dir(const char *path, GList *files)
   pthread_mutex_unlock(&cache.lock);
 }
 
+static void
+cache_add_link(const char *path, const char *link, size_t size)
+{
+  struct node *node;
+  time_t now;
+
+  pthread_mutex_lock(&cache.lock);
+  node = cache_get(path);
+  now = time(NULL);
+  g_free(node->link);
+  node->link = g_strndup(link, strnlen(link, size - 1));
+  node->link_valid = time(NULL) + cache.link_timeout;
+  if(node->link_valid > node->valid)
+    node->valid = node->link_valid;
+  cache_clean();
+  pthread_mutex_unlock(&cache.lock);
+}
+
 static int
 cache_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
@@ -321,6 +342,32 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
   /* g_list_free_full(files, (GDestroyNotify) free_file); */
 
+  return result;
+}
+
+static int
+cache_readlink(const char *path, char *buf, size_t size)
+{
+  struct node *node;
+  int result;
+
+  pthread_mutex_lock(&cache.lock);
+  node = cache_lookup(path);
+  if(node != NULL) {
+    time_t now = time(NULL);
+    if(node->link_valid - now >= 0) {
+      strncpy(buf, node->link, size - 1);
+      buf[size-1] = '\0';
+      pthread_mutex_unlock(&cache.lock);
+      return 0;
+    }
+  }
+  pthread_mutex_unlock(&cache.lock);
+
+  if((result = cache.next_oper->oper.readlink(path, buf, size)) != 0)
+    return result;
+
+  cache_add_link(path, buf, size);
   return result;
 }
 
@@ -447,6 +494,7 @@ cache_fill(struct fuse_cache_operations *oper,
   cache_oper->mkdir    = oper->oper.mkdir    ? cache_mkdir    : NULL;
   cache_oper->readdir  = oper->list_bucket   ? cache_readdir  : NULL;
   cache_oper->release  = oper->oper.release  ? cache_release  : NULL;
+  cache_oper->readlink = oper->oper.readlink ? cache_readlink : NULL;
   cache_oper->rename   = oper->oper.rename   ? cache_rename   : NULL;
   cache_oper->rmdir    = oper->oper.rmdir    ? cache_rmdir    : NULL;
   cache_oper->symlink  = oper->oper.symlink  ? cache_symlink  : NULL;
@@ -483,6 +531,7 @@ static const struct fuse_opt cache_opts[] = {
   {"cache_timeout=%u",      offsetof(struct cache, stat_timeout), 0},
   {"cache_timeout=%u",      offsetof(struct cache, dir_timeout),  0},
   {"cache_stat_timeout=%u", offsetof(struct cache, stat_timeout), 0},
+  {"cache_link_timeout=%u", offsetof(struct cache, link_timeout), 0},
   {"cache_dir_timeout=%u",  offsetof(struct cache, dir_timeout),  0},
   FUSE_OPT_END
 };
@@ -493,6 +542,7 @@ cache_parse_options(struct fuse_args *args)
   cache.on = 1;
   cache.dir_timeout  = DEFAULT_CACHE_TIMEOUT;
   cache.stat_timeout = DEFAULT_CACHE_TIMEOUT;
+  cache.link_timeout = DEFAULT_CACHE_TIMEOUT;
 
   return fuse_opt_parse(args, &cache, cache_opts, NULL);
 }
