@@ -126,7 +126,7 @@ cache_purge_parent(const char *path)
   }
 }
 
-void
+static void
 cache_invalidate(const char *path)
 {
   if(!cache.on) 
@@ -137,12 +137,35 @@ cache_invalidate(const char *path)
   pthread_mutex_unlock(&cache.lock);
 }
 
-void
+static void
 cache_invalidate_dir(const char *path)
 {
   pthread_mutex_lock(&cache.lock);
   cache_purge(path);
   cache_purge_parent(path);
+  pthread_mutex_unlock(&cache.lock);
+}
+
+static int
+cache_del_children(const char *key, void *val_, const char *path)
+{
+  (void) val_;
+  if(strncmp(key, path, strlen(path)) == 0)
+    return TRUE;
+  else
+    return FALSE;
+}
+
+static void
+cache_do_rename(const char *from, const char *to)
+{
+  pthread_mutex_lock(&cache.lock);
+  g_hash_table_foreach_remove(cache.table, (GHRFunc) cache_del_children,
+      (char *) from);
+  cache_purge(from);
+  cache_purge(to);
+  cache_purge_parent(from);
+  cache_purge_parent(to);
   pthread_mutex_unlock(&cache.lock);
 }
 
@@ -312,6 +335,17 @@ cache_release(const char *path, struct fuse_file_info *fi)
 }
 
 static int
+cache_rename(const char *from, const char *to)
+{
+  int result;
+  if((result = cache.next_oper->oper.rename(from, to)) != 0)
+    return result;
+
+  cache_do_rename(from, to);
+  return result;
+}
+
+static int
 cache_rmdir(const char *path)
 {
   int result;
@@ -413,6 +447,7 @@ cache_fill(struct fuse_cache_operations *oper,
   cache_oper->mkdir    = oper->oper.mkdir    ? cache_mkdir    : NULL;
   cache_oper->readdir  = oper->list_bucket   ? cache_readdir  : NULL;
   cache_oper->release  = oper->oper.release  ? cache_release  : NULL;
+  cache_oper->rename   = oper->oper.rename   ? cache_rename   : NULL;
   cache_oper->rmdir    = oper->oper.rmdir    ? cache_rmdir    : NULL;
   cache_oper->symlink  = oper->oper.symlink  ? cache_symlink  : NULL;
   cache_oper->truncate = oper->oper.truncate ? cache_truncate : NULL;
