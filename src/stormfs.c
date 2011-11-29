@@ -591,9 +591,6 @@ stormfs_list_bucket(const char *path, GList **files)
     return -EIO;
   }
 
-  *files = add_file_to_list(*files, ".", NULL);
-  *files = add_file_to_list(*files, "..", NULL);
-
   if(strstr(xml, "xml") == NULL)
     return 0;
 
@@ -641,6 +638,9 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
   if((result = stormfs_list_bucket(path, &files)) != 0)
     return result;
+
+  filler(buf, ".",  0, 0);
+  filler(buf, "..", 0, 0);
 
   files = g_list_first(files);
   while(files != NULL) {

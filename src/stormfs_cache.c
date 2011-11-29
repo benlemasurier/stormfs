@@ -244,6 +244,9 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         *head    = NULL,
         *next    = NULL;
 
+  filler(buf, ".",  0, 0);
+  filler(buf, "..", 0, 0);
+
   pthread_mutex_lock(&cache.lock);
   node = cache_lookup(path);
   if(node != NULL && node->dir != NULL) {
