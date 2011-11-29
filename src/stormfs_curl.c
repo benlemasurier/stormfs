@@ -792,9 +792,12 @@ stormfs_curl_head_multi(const char *path, GList *files)
   int i, n_running, last_req_idx, still_running;
   size_t n_files = g_list_length(files);
   CURL *c[n_files];
-  HTTP_RESPONSE *responses = g_malloc0(sizeof(HTTP_RESPONSE) * n_files);
+  HTTP_RESPONSE *responses;
+  struct curl_slist *req_headers[n_files];
   CURLM *multi;
   GList *head = NULL, *next = NULL;
+
+  responses = g_malloc0(sizeof(HTTP_RESPONSE) * n_files);
 
   if((multi = curl_multi_init()) == NULL)
     return -1;
@@ -809,15 +812,15 @@ stormfs_curl_head_multi(const char *path, GList *files)
     CURLMcode err;
     char *full_path = get_path(path, f->name);
     char *url = get_url(full_path);
-    struct curl_slist *req_headers = NULL;
     c[i] = get_curl_handle(url);
+    req_headers[i] = NULL;
     responses[i].memory = g_malloc0(1);
     responses[i].size = 0;
 
-    sign_request("HEAD", &req_headers, full_path);
+    sign_request("HEAD", &req_headers[i], full_path);
     curl_easy_setopt(c[i], CURLOPT_NOBODY, 1L);    /* HEAD */
     curl_easy_setopt(c[i], CURLOPT_FILETIME, 1L);  /* Last-Modified */
-    curl_easy_setopt(c[i], CURLOPT_HTTPHEADER, req_headers);
+    curl_easy_setopt(c[i], CURLOPT_HTTPHEADER, req_headers[i]);
     curl_easy_setopt(c[i], CURLOPT_HEADERDATA, (void *) &responses[i]);
     curl_easy_setopt(c[i], CURLOPT_HEADERFUNCTION, write_memory_cb);
 
@@ -886,6 +889,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
       struct file *f = g_list_nth_data(files, i);
       extract_meta(responses[i].memory, &(f->headers));
       g_free(responses[i].memory);
+      curl_slist_free_all(req_headers[i]);
       n_running--;
 
       if(n_running < MAX_REQUESTS && last_req_idx < (n_files - 1)) {
@@ -899,6 +903,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
     }
   }
 
+  g_free(responses);
   curl_multi_cleanup(multi);
   for(i = 0; i < (int) n_files; i++)
     destroy_curl_handle(c[i]);
