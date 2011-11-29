@@ -312,6 +312,17 @@ cache_release(const char *path, struct fuse_file_info *fi)
 }
 
 static int
+cache_truncate(const char *path, off_t size)
+{
+  int result;
+  if((result = cache.next_oper->oper.truncate(path, size)) != 0)
+    return result;
+
+  cache_invalidate(path);
+  return result;
+}
+
+static int
 cache_unlink(const char *path)
 {
   int result = cache.next_oper->oper.unlink(path);
@@ -374,15 +385,16 @@ static void
 cache_fill(struct fuse_cache_operations *oper,
     struct fuse_operations *cache_oper)
 {
-  cache_oper->create  = oper->oper.create  ? cache_create  : NULL;
-  cache_oper->getattr = oper->oper.getattr ? cache_getattr : NULL;
-  cache_oper->flush   = oper->oper.flush   ? cache_flush   : NULL;
-  cache_oper->mkdir   = oper->oper.mkdir   ? cache_mkdir   : NULL;
-  cache_oper->readdir = oper->list_bucket  ? cache_readdir : NULL;
-  cache_oper->release = oper->oper.release ? cache_release : NULL;
-  cache_oper->unlink  = oper->oper.unlink  ? cache_unlink  : NULL;
-  cache_oper->utimens = oper->oper.utimens ? cache_utimens : NULL;
-  cache_oper->write   = oper->oper.write   ? cache_write   : NULL;
+  cache_oper->create   = oper->oper.create   ? cache_create   : NULL;
+  cache_oper->getattr  = oper->oper.getattr  ? cache_getattr  : NULL;
+  cache_oper->flush    = oper->oper.flush    ? cache_flush    : NULL;
+  cache_oper->mkdir    = oper->oper.mkdir    ? cache_mkdir    : NULL;
+  cache_oper->readdir  = oper->list_bucket   ? cache_readdir  : NULL;
+  cache_oper->release  = oper->oper.release  ? cache_release  : NULL;
+  cache_oper->truncate = oper->oper.truncate ? cache_truncate : NULL;
+  cache_oper->unlink   = oper->oper.unlink   ? cache_unlink   : NULL;
+  cache_oper->utimens  = oper->oper.utimens  ? cache_utimens  : NULL;
+  cache_oper->write    = oper->oper.write    ? cache_write    : NULL;
 }
 
 struct fuse_operations *
