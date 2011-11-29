@@ -255,7 +255,28 @@ cache_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     return result;
 
   cache_invalidate_dir(path);
+  return result;
+}
 
+static int
+cache_chmod(const char *path, mode_t mode)
+{
+  int result;
+  if((result = cache.next_oper->oper.chmod(path, mode)) != 0)
+    return result;
+
+  cache_invalidate(path);
+  return result;
+}
+
+static int
+cache_chown(const char *path, uid_t uid, gid_t gid)
+{
+  int result;
+  if((result = cache.next_oper->oper.chown(path, uid, gid)) != 0)
+    return result;
+
+  cache_invalidate(path);
   return result;
 }
 
@@ -286,7 +307,6 @@ cache_mkdir(const char *path, mode_t mode)
     return result;
 
   cache_invalidate_dir(path);
-
   return result;
 }
 
@@ -501,6 +521,8 @@ cache_fill(struct fuse_cache_operations *oper,
     struct fuse_operations *cache_oper)
 {
   cache_oper->create   = oper->oper.create   ? cache_create   : NULL;
+  cache_oper->chmod    = oper->oper.chmod    ? cache_chmod    : NULL;
+  cache_oper->chown    = oper->oper.chown    ? cache_chown    : NULL;
   cache_oper->getattr  = oper->oper.getattr  ? cache_getattr  : NULL;
   cache_oper->flush    = oper->oper.flush    ? cache_flush    : NULL;
   cache_oper->mkdir    = oper->oper.mkdir    ? cache_mkdir    : NULL;
