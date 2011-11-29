@@ -312,6 +312,17 @@ cache_release(const char *path, struct fuse_file_info *fi)
 }
 
 static int
+cache_symlink(const char *from, const char *to)
+{
+  int result;
+  if((result = cache.next_oper->oper.symlink(from, to)) != 0)
+    return result;
+
+  cache_invalidate_dir(to);
+  return result;
+}
+
+static int
 cache_truncate(const char *path, off_t size)
 {
   int result;
@@ -391,6 +402,7 @@ cache_fill(struct fuse_cache_operations *oper,
   cache_oper->mkdir    = oper->oper.mkdir    ? cache_mkdir    : NULL;
   cache_oper->readdir  = oper->list_bucket   ? cache_readdir  : NULL;
   cache_oper->release  = oper->oper.release  ? cache_release  : NULL;
+  cache_oper->symlink  = oper->oper.symlink  ? cache_symlink  : NULL;
   cache_oper->truncate = oper->oper.truncate ? cache_truncate : NULL;
   cache_oper->unlink   = oper->oper.unlink   ? cache_unlink   : NULL;
   cache_oper->utimens  = oper->oper.utimens  ? cache_utimens  : NULL;
