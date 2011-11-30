@@ -29,37 +29,6 @@
 #include "stormfs_cache.h"
 #include "stormfs_curl.h"
 
-static int stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi);
-static int stormfs_chmod(const char *path, mode_t mode);
-static int stormfs_chown(const char *path, uid_t uid, gid_t gid);
-static void stormfs_destroy(void *data);
-static int stormfs_flush(const char *path, struct fuse_file_info *fi);
-static int stormfs_getattr(const char *path, struct stat *stbuf);
-static void *stormfs_init(struct fuse_conn_info *conn);
-static int stormfs_mkdir(const char *path, mode_t mode);
-static int stormfs_mknod(const char *path, mode_t mode, dev_t rdev);
-static int stormfs_open(const char *path, struct fuse_file_info *fi);
-static int stormfs_read(const char *path, char *buf, size_t size, off_t offset,
-                        struct fuse_file_info *fi);
-static int stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
-                           off_t offset, struct fuse_file_info *fi);
-static int stormfs_readlink(const char *path, char *buf, size_t size);
-static int stormfs_rmdir(const char *path);
-static int stormfs_release(const char *path, struct fuse_file_info *fi);
-static int stormfs_rename(const char *from, const char *to);
-static int stormfs_rename_file(const char *from, const char *to);
-static int stormfs_rename_directory(const char *from, const char *to);
-static int stormfs_statfs(const char *path, struct statvfs *buf);
-static int stormfs_truncate(const char *path, off_t size);
-static int stormfs_symlink(const char *from, const char *to);
-static int stormfs_unlink(const char *path);
-static int stormfs_utimens(const char *path, const struct timespec ts[2]);
-static int stormfs_write(const char *path, const char *buf, 
-                         size_t size, off_t offset, struct fuse_file_info *fi);
-static int stormfs_opt_proc(void *data, const char *arg, int key,
-                            struct fuse_args *outargs);
-static int stormfs_fuse_main(struct fuse_args *args);
-
 enum {
   KEY_HELP,
   KEY_VERSION,
@@ -73,6 +42,7 @@ struct stormfs {
   int verify_ssl;
   char *url;
   char *bucket;
+  char *progname;
   char *virtual_url;
   char *access_key;
   char *secret_key;
@@ -170,14 +140,14 @@ validate_mountpoint(const char *path, struct stat *stbuf)
   DEBUG("validating mountpoint: %s\n", path);
 
   if(stat(path, &(*stbuf)) == -1) {
-    fprintf(stderr, "unable to stat MOUNTPOINT %s: %s\n",
-        path, strerror(errno));
+    fprintf(stderr, "%s: unable to stat MOUNTPOINT %s: %s\n",
+        stormfs.progname, path, strerror(errno));
     return -1;
   }
 
   if((d = opendir(path)) == NULL) {
-    fprintf(stderr, "unable to open MOUNTPOINT %s: %s\n",
-        path, strerror(errno));
+    fprintf(stderr, "%s: unable to open MOUNTPOINT %s: %s\n",
+        stormfs.progname, path, strerror(errno));
     return -1;
   }
 
@@ -197,7 +167,8 @@ cache_mime_types()
       g_free, g_free);
 
   if((f = fopen("/etc/mime.types", "r")) == NULL) {
-    fprintf(stderr, "unable to open /etc/mime.types: %s\n", strerror(errno));
+    fprintf(stderr, "%s: unable to open /etc/mime.types: %s\n", 
+        stormfs.progname, strerror(errno));
     return -errno;
   }
 
@@ -293,6 +264,118 @@ headers_to_stat(GList *headers, struct stat *stbuf)
 
     head = next;
   }
+
+  return 0;
+}
+
+static int
+stormfs_getattr(const char *path, struct stat *stbuf)
+{
+  int status;
+  GList *headers = NULL;
+
+  DEBUG("getattr: %s\n", path);
+
+  memset(stbuf, 0, sizeof(struct stat));
+  stbuf->st_nlink = 1;
+
+  if(strcmp(path, "/") == 0) {
+    stbuf->st_mode = stormfs.root_mode | S_IFDIR;
+    return 0;
+  }
+
+  if((status = stormfs_curl_head(path, &headers)) != 0)
+    return status;
+  
+  if((status = headers_to_stat(headers, stbuf)) != 0)
+    return status;
+
+  if(S_ISREG(stbuf->st_mode))
+    stbuf->st_blocks = get_blocks(stbuf->st_size);
+
+  pthread_mutex_lock(&stormfs.lock);
+  g_list_free_full(headers, (GDestroyNotify) free_headers); 
+  pthread_mutex_unlock(&stormfs.lock);
+
+  return 0;
+}
+
+static int
+stormfs_unlink(const char *path)
+{
+  DEBUG("unlink: %s\n", path);
+  return stormfs_curl_delete(path);
+}
+
+static int
+stormfs_truncate(const char *path, off_t size)
+{
+  FILE *f;
+  int fd;
+  int result;
+  struct stat st;
+  GList *headers = NULL;
+
+  DEBUG("truncate: %s\n", path);
+
+  if((f = tmpfile()) == NULL)
+    return -errno;
+
+  if((result = stormfs_getattr(path, &st)) != 0)
+    return result;
+
+  if((result = stormfs_curl_get_file(path, f)) != 0) {
+    fclose(f);
+    return result;
+  }
+
+  if((fd = fileno(f)) == -1)
+    return -errno;
+
+  if(ftruncate(fd, size) != 0)
+    return -errno;
+
+  headers = g_list_append(headers, gid_header(getgid()));
+  headers = g_list_append(headers, uid_header(getuid()));
+  headers = g_list_append(headers, mode_header(st.st_mode));
+  headers = g_list_append(headers, mtime_header(time(NULL)));
+  result = stormfs_curl_upload(path, headers, fd);
+  g_list_free_full(headers, (GDestroyNotify) free_headers);
+
+  if(close(fd) != 0)
+    return -errno;
+
+  return result;
+}
+
+static int
+stormfs_open(const char *path, struct fuse_file_info *fi)
+{
+  FILE *f;
+  int fd;
+  int result;
+
+  DEBUG("open: %s\n", path);
+
+  if((unsigned int) fi->flags & O_TRUNC)
+    if((result = stormfs_truncate(path, 0)) != 0)
+      return result;
+
+  if((f = tmpfile()) == NULL)
+    return -errno;
+
+  if((result = stormfs_curl_get_file(path, f)) != 0) {
+    fclose(f);
+    return result;
+  }
+
+  if((fd = fileno(f)) == -1)
+    return -errno;
+
+  if(fsync(fd) != 0)
+    return -errno;
+
+  fi->fh = fd;
 
   return 0;
 }
@@ -445,38 +528,6 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
   return result;
 }
 
-static int
-stormfs_getattr(const char *path, struct stat *stbuf)
-{
-  int status;
-  GList *headers = NULL;
-
-  DEBUG("getattr: %s\n", path);
-
-  memset(stbuf, 0, sizeof(struct stat));
-  stbuf->st_nlink = 1;
-
-  if(strcmp(path, "/") == 0) {
-    stbuf->st_mode = stormfs.root_mode | S_IFDIR;
-    return 0;
-  }
-
-  if((status = stormfs_curl_head(path, &headers)) != 0)
-    return status;
-  
-  if((status = headers_to_stat(headers, stbuf)) != 0)
-    return status;
-
-  if(S_ISREG(stbuf->st_mode))
-    stbuf->st_blocks = get_blocks(stbuf->st_size);
-
-  pthread_mutex_lock(&stormfs.lock);
-  g_list_free_full(headers, (GDestroyNotify) free_headers); 
-  pthread_mutex_unlock(&stormfs.lock);
-
-  return 0;
-}
-
 int
 stormfs_getattr_multi(const char *path, GList *files)
 {
@@ -517,38 +568,6 @@ stormfs_init(struct fuse_conn_info *conn)
   cache_mime_types();
 
   return NULL;
-}
-
-static int
-stormfs_open(const char *path, struct fuse_file_info *fi)
-{
-  FILE *f;
-  int fd;
-  int result;
-
-  DEBUG("open: %s\n", path);
-
-  if((unsigned int) fi->flags & O_TRUNC)
-    if((result = stormfs_truncate(path, 0)) != 0)
-      return result;
-
-  if((f = tmpfile()) == NULL)
-    return -errno;
-
-  if((result = stormfs_curl_get_file(path, f)) != 0) {
-    fclose(f);
-    return result;
-  }
-
-  if((fd = fileno(f)) == -1)
-    return -errno;
-
-  if(fsync(fd) != 0)
-    return -errno;
-
-  fi->fh = fd;
-
-  return 0;
 }
 
 static int
@@ -697,29 +716,6 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
 }
 
 static int
-stormfs_rename(const char *from, const char *to)
-{
-  int result;
-  struct stat st;
-
-  DEBUG("rename: %s -> %s\n", from, to);
-
-  if((result = stormfs_getattr(from, &st)) != 0)
-    return -result;
-
-  /* TODO: */
-  if(st.st_size >= FIVE_GB)
-    return -ENOTSUP;
-
-  if(S_ISDIR(st.st_mode)) 
-    result = stormfs_rename_directory(from, to);
-  else
-    result = stormfs_rename_file(from, to);
-
-  return result;
-}
-
-static int
 stormfs_rename_file(const char *from, const char *to)
 {
   int result;
@@ -800,6 +796,29 @@ stormfs_rename_directory(const char *from, const char *to)
 }
 
 static int
+stormfs_rename(const char *from, const char *to)
+{
+  int result;
+  struct stat st;
+
+  DEBUG("rename: %s -> %s\n", from, to);
+
+  if((result = stormfs_getattr(from, &st)) != 0)
+    return -result;
+
+  /* TODO: */
+  if(st.st_size >= FIVE_GB)
+    return -ENOTSUP;
+
+  if(S_ISDIR(st.st_mode)) 
+    result = stormfs_rename_directory(from, to);
+  else
+    result = stormfs_rename_file(from, to);
+
+  return result;
+}
+
+static int
 stormfs_rmdir(const char *path)
 {
   int result = 0;
@@ -864,54 +883,6 @@ stormfs_symlink(const char *from, const char *to)
 }
 
 static int
-stormfs_truncate(const char *path, off_t size)
-{
-  FILE *f;
-  int fd;
-  int result;
-  struct stat st;
-  GList *headers = NULL;
-
-  DEBUG("truncate: %s\n", path);
-
-  if((f = tmpfile()) == NULL)
-    return -errno;
-
-  if((result = stormfs_getattr(path, &st)) != 0)
-    return result;
-
-  if((result = stormfs_curl_get_file(path, f)) != 0) {
-    fclose(f);
-    return result;
-  }
-
-  if((fd = fileno(f)) == -1)
-    return -errno;
-
-  if(ftruncate(fd, size) != 0)
-    return -errno;
-
-  headers = g_list_append(headers, gid_header(getgid()));
-  headers = g_list_append(headers, uid_header(getuid()));
-  headers = g_list_append(headers, mode_header(st.st_mode));
-  headers = g_list_append(headers, mtime_header(time(NULL)));
-  result = stormfs_curl_upload(path, headers, fd);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
-
-  if(close(fd) != 0)
-    return -errno;
-
-  return result;
-}
-
-static int
-stormfs_unlink(const char *path)
-{
-  DEBUG("unlink: %s\n", path);
-  return stormfs_curl_delete(path);
-}
-
-static int
 stormfs_utimens(const char *path, const struct timespec ts[2])
 {
   int result;
@@ -938,39 +909,6 @@ stormfs_write(const char *path, const char *buf,
     size_t size, off_t offset, struct fuse_file_info *fi)
 {
   return pwrite(fi->fh, buf, size, offset);
-}
-
-static int
-stormfs_opt_proc(void *data, const char *arg, int key,
-                 struct fuse_args *outargs)
-{
-  switch(key) {
-    case FUSE_OPT_KEY_OPT:
-      return 1;
-
-    case FUSE_OPT_KEY_NONOPT:
-      if(!stormfs.bucket) {
-        stormfs.bucket = (char *) arg;
-        return 0;
-      }
-
-      struct stat stbuf;
-      if(validate_mountpoint(arg, &stbuf) == -1)
-        abort();
-
-      stormfs.mountpoint = (char *) arg;
-      stormfs.root_mode = stbuf.st_mode;
-
-      return 1;
-
-    case KEY_FOREGROUND:
-      stormfs.foreground = 1;
-      return 1;
-
-    default:
-      fprintf(stderr, "error parsing options\n");
-      abort();
-  }
 }
 
 char *
@@ -1020,6 +958,27 @@ stormfs_destroy(void *data)
   g_hash_table_destroy(stormfs.mime_types);
 }
 
+static void
+usage(const char *progname)
+{
+  printf(
+"usage: %s bucket mountpoint [options]\n"
+"\n"
+"general options:\n"
+"    -o opt,[opt...]        mount options\n"
+"    -h   --help            print help\n"
+"    -V   --version         print version\n"
+"\n"
+"STORMFS options:\n"
+"    -o url=URL             specify a custom service URL\n"
+"    -o use_ssl             force the use of SSL\n"
+"    -o no_verify_ssl       skip SSL certificate/host verification\n"
+"    -o cache=BOOL          enable caching {yes,no} (default: yes)\n"
+"    -o cache_timeout=N     sets timeout for caches in seconds (default: 300)\n"
+"    -o cache_X_timeout=N   sets timeout for {stat,dir,link} cache\n"
+"\n", progname);
+}
+
 static struct fuse_cache_operations stormfs_oper = {
   .oper = {
     .create   = stormfs_create,
@@ -1054,6 +1013,51 @@ stormfs_fuse_main(struct fuse_args *args)
   return fuse_main(args->argc, args->argv, cache_init(&stormfs_oper), NULL);
 }
 
+static int
+stormfs_opt_proc(void *data, const char *arg, int key,
+                 struct fuse_args *outargs)
+{
+  switch(key) {
+    case FUSE_OPT_KEY_OPT:
+      return 1;
+
+    case FUSE_OPT_KEY_NONOPT:
+      if(!stormfs.bucket) {
+        stormfs.bucket = (char *) arg;
+        return 0;
+      }
+
+      struct stat stbuf;
+      if(validate_mountpoint(arg, &stbuf) == -1)
+        abort();
+
+      stormfs.mountpoint = (char *) arg;
+      stormfs.root_mode = stbuf.st_mode;
+
+      return 1;
+
+    case KEY_FOREGROUND:
+      stormfs.foreground = 1;
+      return 1;
+
+    case KEY_HELP:
+      usage(outargs->argv[0]);
+      fuse_opt_add_arg(outargs, "-ho");
+      stormfs_fuse_main(outargs);
+      exit(1);
+
+    case KEY_VERSION:
+      printf("STORMFS version %s\n", PACKAGE_VERSION);
+      fuse_opt_add_arg(outargs, "--version");
+      stormfs_fuse_main(outargs);
+      exit(0);
+
+    default:
+      fprintf(stderr, "%s: error parsing options\n", stormfs.progname);
+      abort();
+  }
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -1061,14 +1065,28 @@ main(int argc, char *argv[])
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
   memset(&stormfs, 0, sizeof(struct stormfs));
+  stormfs.progname = argv[0];
   stormfs.verify_ssl = 2;
   stormfs.url = "http://s3.amazonaws.com";
   pthread_mutex_init(&stormfs.lock, NULL);
 
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
-    fprintf(stderr, "error parsing command-line options\n");
+    fprintf(stderr, "%s: error parsing command-line options\n", stormfs.progname);
     abort();
   }
+
+  if(!stormfs.bucket) {
+    fprintf(stderr, "%s: missing BUCKET command-line option, see %s -h for usage\n",
+        stormfs.progname, stormfs.progname);
+    abort();
+  }
+
+  if(!stormfs.mountpoint) {
+    fprintf(stderr, "%s: missing MOUNTPOINT command-line option, see %s -h for usage\n",
+        stormfs.progname, stormfs.progname);
+    abort();
+  }
+
 
   stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
 
@@ -1081,12 +1099,12 @@ main(int argc, char *argv[])
   DEBUG("STORMFS virtual url: %s\n", stormfs.virtual_url);
 
   if(stormfs_get_credentials(&stormfs.access_key, &stormfs.secret_key) != 0) {
-    fprintf(stderr, "missing api credentials\n");
+    fprintf(stderr, "%s: missing api credentials\n", stormfs.progname);
     abort();
   }
 
   if((status = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
-    fprintf(stderr, "unable to initialize libcurl\n");
+    fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs.progname);
     abort();
   }
 
