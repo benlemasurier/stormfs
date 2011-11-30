@@ -583,7 +583,7 @@ int
 stormfs_list_bucket(const char *path, GList **files)
 {
   int result;
-  char *xml;
+  char *xml = NULL;
 
   result = stormfs_curl_list_bucket(path, &xml);
   if(result != 0) {

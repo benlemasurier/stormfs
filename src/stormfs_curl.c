@@ -121,6 +121,45 @@ url_encode(char *s)
   return buf;
 }
 
+static gboolean
+is_truncated(char *xml)
+{
+  if(strstr(xml, "<IsTruncated>true"))
+    return TRUE;
+
+  return FALSE;
+}
+
+static char *
+get_next_marker(char *xml)
+{
+  char *start_marker = "NextMarker>";
+  char *end_marker  = "</NextMarker";
+  char *start_p, *end_p;
+
+  start_p = strstr(xml, start_marker) + strlen(start_marker);
+  end_p   = strstr(xml, end_marker);
+
+  return g_strndup(start_p, end_p - start_p);
+}
+
+static char *
+append_list_bucket_xml(char *xml, char *xml_to_append)
+{
+  char *append_pos, *to_append;
+
+  xml = g_realloc(xml, sizeof(char) *
+      strlen(xml) + strlen(xml_to_append) + 1);
+  
+  append_pos = strstr(xml, "</ListBucket");
+  to_append  = strstr(xml_to_append, "<Contents");
+
+  *append_pos = '\0';
+  strncat(append_pos, to_append, strlen(to_append));
+
+  return xml;
+}
+
 char *
 header_to_s(HTTP_HEADER *h)
 {
@@ -532,21 +571,26 @@ get_url(const char *path)
 }
 
 static char *
-get_list_bucket_url(const char *path)
+get_list_bucket_url(const char *path, const char *next_marker)
 {
   char *url, *tmp;
-  const char *delimiter = "?delimiter=/";
-  const char *prefix    = "&prefix=";
-  size_t url_len        = strlen(stormfs_curl.url);
-  size_t delimiter_len  = strlen(delimiter);
-  size_t prefix_len     = strlen(prefix);
-  size_t path_len       = strlen(path);
+  const char *delimiter  = "?delimiter=/";
+  const char *prefix     = "&prefix=";
+  const char *marker     = "&marker=";
+  size_t url_len         = strlen(stormfs_curl.url);
+  size_t delimiter_len   = strlen(delimiter);
+  size_t prefix_len      = strlen(prefix);
+  size_t path_len        = strlen(path);
+  size_t marker_len      = strlen(marker) + strlen(next_marker);
 
-  tmp = g_malloc(sizeof(char) * (url_len + delimiter_len + prefix_len + 1));
+  tmp = g_malloc(sizeof(char) * (url_len + delimiter_len +
+      marker_len + prefix_len + 1));
 
   tmp = strcpy(tmp, stormfs_curl.url);
-  tmp = strncat(tmp, delimiter, strlen(delimiter));
-  tmp = strncat(tmp, prefix, strlen(prefix));
+  tmp = strncat(tmp, delimiter, delimiter_len);
+  tmp = strncat(tmp, marker, strlen(marker));
+  tmp = strncat(tmp, next_marker, strlen(next_marker));
+  tmp = strncat(tmp, prefix, prefix_len);
 
   if(path_len > 1) {
     tmp = g_realloc(tmp, sizeof(char) * (strlen(tmp) + path_len + 1));
@@ -915,28 +959,43 @@ int
 stormfs_curl_list_bucket(const char *path, char **xml)
 {
   int result;
-  char *url = get_list_bucket_url(path);
-  CURL *c = get_curl_handle(url);
-  struct curl_slist *req_headers = NULL; 
-  HTTP_RESPONSE body;
+  char *marker = g_strdup("");
+  gboolean truncated = TRUE;
 
-  body.memory = g_malloc(1);
-  body.size = 0;
+  while(truncated) {
+    char *url = get_list_bucket_url(path, marker);
+    CURL *c = get_curl_handle(url);
+    struct curl_slist *req_headers = NULL; 
+    HTTP_RESPONSE body;
 
-  sign_request("GET", &req_headers, "/");
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
-  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
-  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
+    body.memory = g_malloc(1);
+    body.size = 0;
 
-  curl_easy_perform(c);
-  result = http_response_errno(c);
+    sign_request("GET", &req_headers, "/");
+    curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+    curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
+    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
-  *xml = strdup(body.memory);
+    curl_easy_perform(c);
+    result = http_response_errno(c);
 
-  g_free(url);
-  g_free(body.memory);
-  destroy_curl_handle(c);
-  curl_slist_free_all(req_headers);
+    if(*xml == NULL)
+      *xml = strdup(body.memory);
+    else
+      *xml = append_list_bucket_xml(*xml, body.memory);
+
+    if((truncated = is_truncated(body.memory)) == TRUE) {
+      g_free(marker);
+      marker = get_next_marker(body.memory);
+    }
+
+    g_free(url);
+    g_free(body.memory);
+    destroy_curl_handle(c);
+    curl_slist_free_all(req_headers);
+  }
+
+  g_free(marker);
 
   return result;
 }
