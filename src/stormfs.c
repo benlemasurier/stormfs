@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -36,9 +37,9 @@ enum {
 };
 
 struct stormfs {
-  int ssl;
-  int debug;
-  int foreground;
+  bool ssl;
+  bool debug;
+  bool foreground;
   int verify_ssl;
   char *url;
   char *bucket;
@@ -56,9 +57,9 @@ struct stormfs {
 
 static struct fuse_opt stormfs_opts[] = {
   STORMFS_OPT("url=%s",        url,        0),
-  STORMFS_OPT("use_ssl",       ssl,        1),
+  STORMFS_OPT("use_ssl",       ssl,        true),
   STORMFS_OPT("no_verify_ssl", verify_ssl, 0),
-  STORMFS_OPT("stormfs_debug", debug,      1),
+  STORMFS_OPT("stormfs_debug", debug,      true),
 
   FUSE_OPT_KEY("-d",            KEY_FOREGROUND),
   FUSE_OPT_KEY("debug",         KEY_FOREGROUND),
@@ -242,7 +243,7 @@ headers_to_stat(GList *headers, struct stat *stbuf)
     next = head->next;
     HTTP_HEADER *header = head->data;
 
-    /* TODO: clean this up. */
+    // TODO: clean this up.
     if(strcmp(header->key, "x-amz-meta-uid") == 0)
       stbuf->st_uid = get_uid(header->value);
     else if(strcmp(header->key, "x-amz-meta-gid") == 0)
@@ -655,7 +656,7 @@ stormfs_readlink(const char *path, char *buf, size_t size)
   if(size <= 0)
     return 0;
 
-  --size; /* save the null byte */
+  --size; // save the null byte
 
   if((f = tmpfile()) == NULL)
     return -errno;
@@ -805,7 +806,7 @@ stormfs_rename(const char *from, const char *to)
   if((result = stormfs_getattr(from, &st)) != 0)
     return -result;
 
-  /* TODO: */
+  // TODO:
   if(st.st_size >= FIVE_GB)
     return -ENOTSUP;
 
@@ -1036,7 +1037,7 @@ stormfs_opt_proc(void *data, const char *arg, int key,
       return 1;
 
     case KEY_FOREGROUND:
-      stormfs.foreground = 1;
+      stormfs.foreground = true;
       return 1;
 
     case KEY_HELP:

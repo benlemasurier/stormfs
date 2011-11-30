@@ -150,7 +150,7 @@ append_list_bucket_xml(char *xml, char *xml_to_append)
 {
   char *append_pos, *to_append;
 
-  /* TODO: should be able to use a little less memory here. */
+  // TODO: should be able to use a little less memory here.
   xml = g_realloc(xml, sizeof(char) *
       strlen(xml) + strlen(xml_to_append) + 1);
   
@@ -216,7 +216,7 @@ hmac_sha1(const char *key, const char *message)
 
   checksum = g_checksum_new(G_CHECKSUM_SHA1);
 
-  /* If the key is longer than the block size, hash it first */
+  // If the key is longer than the block size, hash it first
   if(strlen(key) > SHA1_BLOCK_SIZE) {
     guchar new_key[SHA1_LENGTH];
 
@@ -232,33 +232,33 @@ hmac_sha1(const char *key, const char *message)
     key_length = strlen(key);
   }
 
-  /* Sanity check the length */
+  // Sanity check the length
   g_assert(key_length <= SHA1_BLOCK_SIZE);
 
-  /* Protect against use of the provided key by NULLing it */
+  // Protect against use of the provided key by NULLing it
   key = NULL;
 
-  /* Stage 1 */
+  // Stage 1
   memset(ipad, 0, sizeof(ipad));
   memset(opad, 0, sizeof(opad));
 
   memcpy(ipad, real_key, key_length);
   memcpy(opad, real_key, key_length);
 
-  /* Stage 2 and 5 */
+  // Stage 2 and 5
   for(i = 0; i < sizeof(ipad); i++) {
     ipad[i] ^= 0x36;
     opad[i] ^= 0x5C;
   }
 
-  /* Stage 3 and 4 */
+  // Stage 3 and 4
   g_checksum_update(checksum, ipad, sizeof(ipad));
   g_checksum_update(checksum, (guchar*) message, strlen(message));
   inner_length = sizeof(inner);
   g_checksum_get_digest(checksum, inner, &inner_length);
   g_checksum_reset(checksum);
 
-  /* Stage 6 and 7 */
+  // Stage 6 and 7
   g_checksum_update(checksum, opad, sizeof(opad));
   g_checksum_update(checksum, inner, inner_length);
 
@@ -551,8 +551,8 @@ set_curl_defaults(CURL **c)
   curl_easy_setopt(*c, CURLOPT_DNS_CACHE_TIMEOUT, -1);
   curl_easy_setopt(*c, CURLOPT_SSL_VERIFYHOST, stormfs_curl.verify_ssl);
 
-  /* curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L); */
-  /* curl_easy_setopt(*c, CURLOPT_FORBID_REUSE, 1); */
+  // curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
+  // curl_easy_setopt(*c, CURLOPT_FORBID_REUSE, 1);
 
   return 0;
 }
@@ -656,7 +656,7 @@ extract_meta(char *headers, GList **meta)
       h = g_malloc(sizeof(HTTP_HEADER));
       h->key = strdup(key);
       value = strstr(p, " ");
-      value++; /* remove leading space */
+      value++; // remove leading space
       h->value = strdup(value);
 
       *meta = g_list_append(*meta, h);
@@ -810,8 +810,8 @@ stormfs_curl_head(const char *path, GList **headers)
   pthread_mutex_lock(&stormfs_curl.lock);
   sign_request("HEAD", &req_headers, path);
   pthread_mutex_unlock(&stormfs_curl.lock);
-  curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    /* HEAD */
-  curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  /* Last-Modified */
+  curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    // HEAD
+  curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  // Last-Modified
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
   curl_easy_setopt(c, CURLOPT_HEADERDATA, (void *) &data);
   curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
@@ -837,7 +837,7 @@ int
 stormfs_curl_head_multi(const char *path, GList *files)
 {
   int running_handles;
-  size_t i, n_running, last_req_idx;
+  size_t i, n_running, last_req_idx = 0;
   size_t n_files = g_list_length(files);
   CURL *c[n_files];
   HTTP_RESPONSE *responses;
@@ -866,8 +866,8 @@ stormfs_curl_head_multi(const char *path, GList *files)
     responses[i].size = 0;
 
     sign_request("HEAD", &req_headers[i], full_path);
-    curl_easy_setopt(c[i], CURLOPT_NOBODY, 1L);    /* HEAD */
-    curl_easy_setopt(c[i], CURLOPT_FILETIME, 1L);  /* Last-Modified */
+    curl_easy_setopt(c[i], CURLOPT_NOBODY, 1L);    // HEAD
+    curl_easy_setopt(c[i], CURLOPT_FILETIME, 1L);  // Last-Modified
     curl_easy_setopt(c[i], CURLOPT_HTTPHEADER, req_headers[i]);
     curl_easy_setopt(c[i], CURLOPT_HEADERDATA, (void *) &responses[i]);
     curl_easy_setopt(c[i], CURLOPT_HEADERFUNCTION, write_memory_cb);
@@ -1017,7 +1017,7 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
   if(fstat(fd, &st) != 0)
     return -errno;
 
-  /* TODO: support multipart uploads (>5GB files) */
+  // TODO: support multipart uploads (>5GB files)
   if(st.st_size >= FIVE_GB)
     return -EFBIG;
   
@@ -1060,8 +1060,8 @@ stormfs_curl_put_headers(const char *path, GList *headers)
   req_headers = headers_to_curl_slist(headers);
 
   sign_request("PUT", &req_headers, path);
-  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    /* HTTP PUT */
-  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); /* Content-Length: 0 */
+  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
+  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
   curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
   curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);

@@ -375,8 +375,6 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   head = g_list_first(files);
   cache_add_dir(path, head);
 
-  /* g_list_free_full(files, (GDestroyNotify) free_file); */
-
   return result;
 }
 
