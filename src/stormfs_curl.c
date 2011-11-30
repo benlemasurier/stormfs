@@ -6,6 +6,8 @@
  * See the file COPYING.
  */
 
+#define _GNU_SOURCE
+
 #include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -834,7 +836,8 @@ stormfs_curl_head(const char *path, GList **headers)
 int
 stormfs_curl_head_multi(const char *path, GList *files)
 {
-  int i, n_running, last_req_idx, still_running;
+  int running_handles;
+  size_t i, n_running, last_req_idx;
   size_t n_files = g_list_length(files);
   CURL *c[n_files];
   HTTP_RESPONSE *responses;
@@ -884,9 +887,9 @@ stormfs_curl_head_multi(const char *path, GList *files)
     head = next;
   }
 
-  curl_multi_perform(multi, &still_running);
-  while(still_running) {
-    if(still_running) {
+  curl_multi_perform(multi, &running_handles);
+  while(running_handles) {
+    if(running_handles) {
       int max_fd = -1;
       long curl_timeout = -1;
       struct timeval timeout;
@@ -918,7 +921,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
         return -errno;
     }
 
-    curl_multi_perform(multi, &still_running);
+    curl_multi_perform(multi, &running_handles);
 
     CURLMsg *msg;
     int remaining;
@@ -926,7 +929,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
       if(msg->msg != CURLMSG_DONE)
         continue;
 
-      for(i = 0; i < (int) n_files; i++) {
+      for(i = 0; i < n_files; i++) {
         if(msg->easy_handle == c[i])
           break;
       }
@@ -950,7 +953,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
 
   g_free(responses);
   curl_multi_cleanup(multi);
-  for(i = 0; i < (int) n_files; i++)
+  for(i = 0; i < n_files; i++)
     destroy_curl_handle(c[i]);
 
   return 0;

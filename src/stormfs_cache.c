@@ -8,6 +8,9 @@
  * See the file COPYING.
  */
 
+#define FUSE_USE_VERSION 26
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
