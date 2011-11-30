@@ -11,14 +11,19 @@ Build:
   make
   [make install]
 
-Mount Options:
-  url=<url>
-  use_ssl
-  no_verify_ssl
-  cache=<yes/no>
-  cache_timeout=<secs>
-  cache_stat_timeout=<secs>
-  cache_dir_timeout=<secs>
+Usage: (see --help for a full list of options)
+=============================================================================
+stormfs bucket mountpoint [options]
 
-  -d --debug
-  -f --foreground
+general options:
+    -o opt,[opt...]        mount options
+    -h   --help            print help
+    -V   --version         print version
+
+STORMFS options:
+    -o url=URL             specify a custom service URL
+    -o use_ssl             force the use of SSL
+    -o no_verify_ssl       skip SSL certificate/host verification
+    -o cache=BOOL          enable caching {yes,no} (default: yes)
+    -o cache_timeout=N     sets timeout for caches in seconds (default: 300)
+    -o cache_X_timeout=N   sets timeout for {stat,dir,link} cache
