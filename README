@@ -8,12 +8,14 @@ Installation Requirements:
   - autotools    ([sudo] apt-get install automake)
   - mime-support ([sudo] apt-get install mime-support)
 
+
 Build:
 =============================================================================
   ./autogen.sh
   ./configure
   make
   [make install]
+
 
 Usage: (see --help for a full list of options)
 =============================================================================
