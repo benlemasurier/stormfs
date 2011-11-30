@@ -369,8 +369,7 @@ strip_header(GList *headers, const char *key)
 HTTP_HEADER *
 content_header(const char *type)
 {
-  HTTP_HEADER *h;
-  h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
 
   h->key   = strdup("Content-Type");
   if(type == NULL)
@@ -384,8 +383,7 @@ content_header(const char *type)
 HTTP_HEADER *
 copy_meta_header()
 {
-  HTTP_HEADER *h;
-  h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
 
   h->key   = strdup("x-amz-metadata-directive");
   h->value = strdup("COPY");
@@ -396,8 +394,7 @@ copy_meta_header()
 HTTP_HEADER *
 copy_source_header(const char *path)
 {
-  HTTP_HEADER *h;
-  h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
 
   h->key = strdup("x-amz-copy-source");
   h->value = get_resource(path);
@@ -432,9 +429,8 @@ mode_header(mode_t mode)
 HTTP_HEADER *
 mtime_header(time_t t)
 {
-  HTTP_HEADER *h;
   char *s = time_to_s(t);
-  h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
 
   h->key = strdup("x-amz-meta-mtime");
   h->value = s;
@@ -445,8 +441,7 @@ mtime_header(time_t t)
 HTTP_HEADER *
 replace_header()
 {
-  HTTP_HEADER *h;
-  h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
 
   h->key   = strdup("x-amz-metadata-directive");
   h->value = strdup("REPLACE");
