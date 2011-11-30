@@ -792,7 +792,7 @@ stormfs_curl_get_file(const char *path, FILE *f)
 int
 stormfs_curl_head(const char *path, GList **headers)
 {
-  int status;
+  int result;
   char *url = get_url(path);
   char *response_headers;
   CURL *c = get_curl_handle(url);
@@ -812,7 +812,7 @@ stormfs_curl_head(const char *path, GList **headers)
   curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
 
   curl_easy_perform(c);
-  status = http_response_errno(c);
+  result = http_response_errno(c);
 
   response_headers = strdup(data.memory);
   pthread_mutex_lock(&stormfs_curl.lock);
@@ -825,7 +825,7 @@ stormfs_curl_head(const char *path, GList **headers)
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
 
-  return status;
+  return result;
 }
 
 int
@@ -1003,7 +1003,7 @@ int
 stormfs_curl_upload(const char *path, GList *headers, int fd)
 {
   FILE *f;
-  int status;
+  int result;
   char *url;
   CURL *c;
   struct stat st;
@@ -1031,13 +1031,13 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
 
   curl_easy_perform(c);
-  status = http_response_errno(c);
+  result = http_response_errno(c);
 
   g_free(url);
   destroy_curl_handle(c);
   curl_slist_free_all(req_headers);
 
-  return status;
+  return result;
 }
 
 int
