@@ -148,6 +148,7 @@ append_list_bucket_xml(char *xml, char *xml_to_append)
 {
   char *append_pos, *to_append;
 
+  /* TODO: should be able to use a little less memory here. */
   xml = g_realloc(xml, sizeof(char) *
       strlen(xml) + strlen(xml_to_append) + 1);
   

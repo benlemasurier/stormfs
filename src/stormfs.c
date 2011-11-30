@@ -583,7 +583,7 @@ int
 stormfs_list_bucket(const char *path, GList **files)
 {
   int result;
-  char *xml = NULL;
+  char *xml = NULL, *start_p = NULL;
 
   result = stormfs_curl_list_bucket(path, &xml);
   if(result != 0) {
@@ -594,34 +594,21 @@ stormfs_list_bucket(const char *path, GList **files)
   if(strstr(xml, "xml") == NULL)
     return 0;
 
-  xmlDocPtr doc;
-  xmlXPathContextPtr ctx;
-  xmlXPathObjectPtr contents_xp;
-  xmlNodeSetPtr content_nodes;
-  if((doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0)) == NULL)
-    return -EIO;
+  if((start_p = strstr(xml, "<Key>")) != NULL)
+    start_p += strlen("<Key>");
 
-  ctx = xmlXPathNewContext(doc);
-  xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
-    (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
-
-  contents_xp = xmlXPathEvalExpression((xmlChar *) "//s3:Contents", ctx);
-  content_nodes = contents_xp->nodesetval;
-
-  int i;
-  for(i = 0; i < content_nodes->nodeNr; i++) {
+  while(start_p != NULL) {
     char *name;
-
-    ctx->node = content_nodes->nodeTab[i];
-    name = name_from_xml(doc, ctx);
+    char *end_p = strstr(start_p, "</Key>");
+     
+    name = g_strndup(start_p, end_p - start_p);
     *files = add_file_to_list(*files, basename(name), NULL);
-
     g_free(name);
+
+    if((start_p = strstr(end_p, "<Key>")) != NULL)
+      start_p += strlen("<Key>");
   }
 
-  xmlXPathFreeObject(contents_xp);
-  xmlXPathFreeContext(ctx);
-  xmlFreeDoc(doc);
   g_free(xml);
 
   return 0;
