@@ -25,15 +25,10 @@
 #include <pthread.h>
 #include <fuse.h>
 #include <glib.h>
-#include <libxml/xpath.h>
-#include <libxml/xpathInternals.h>
-#include <libxml/parser.h>
-#include <libxml/tree.h>
 #include "stormfs.h"
 #include "stormfs_cache.h"
 #include "stormfs_curl.h"
 
-static char *name_from_xml(xmlDocPtr doc, xmlXPathContextPtr ctx);
 static int stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi);
 static int stormfs_chmod(const char *path, mode_t mode);
 static int stormfs_chown(const char *path, uid_t uid, gid_t gid);
@@ -165,20 +160,6 @@ add_file_to_list(GList *list, const char *name, struct stat *st)
   f->stbuf = st;
 
   return g_list_append(list, f);
-}
-
-static char *
-name_from_xml(xmlDocPtr doc, xmlXPathContextPtr ctx)
-{
-  xmlChar *name;
-
-  xmlXPathObjectPtr key = xmlXPathEvalExpression((xmlChar *) "s3:Key", ctx);
-  xmlNodeSetPtr key_nodes = key->nodesetval;
-  name = xmlNodeListGetString(doc, key_nodes->nodeTab[0]->xmlChildrenNode, 1);
-
-  xmlXPathFreeObject(key);
-
-  return (char *) name;
 }
 
 static int
@@ -762,7 +743,7 @@ static int
 stormfs_rename_directory(const char *from, const char *to)
 {
   int result;
-  char *xml;
+  char *xml = NULL, *start_p = NULL;
 
   DEBUG("rename directory: %s -> %s\n", from, to);
 
@@ -775,31 +756,15 @@ stormfs_rename_directory(const char *from, const char *to)
   if(strstr(xml, "xml") == NULL)
     return -EIO;
 
-  xmlDocPtr doc;
-  xmlXPathContextPtr ctx;
-  xmlXPathObjectPtr contents_xp;
-  xmlNodeSetPtr content_nodes;
+  if((start_p = strstr(xml, "<Key>")) != NULL)
+    start_p += strlen("<Key>");
 
-  if((doc = xmlReadMemory(xml, strlen(xml), "", NULL, 0)) == NULL)
-    return -EIO;
-
-  ctx = xmlXPathNewContext(doc);
-  xmlXPathRegisterNs(ctx, (xmlChar *) "s3",
-    (xmlChar *) "http://s3.amazonaws.com/doc/2006-03-01/");
-
-  contents_xp = xmlXPathEvalExpression((xmlChar *) "//s3:Contents", ctx);
-  content_nodes = contents_xp->nodesetval;
-
-  int i;
-  for(i = 0; i < content_nodes->nodeNr; i++) {
-    char *tmp;
-    char *name;
-    char *file_from;
-    char *file_to;
+  while(start_p != NULL) {
+    char *name, *tmp, *file_from, *file_to;
+    char *end_p = strstr(start_p, "</Key>");
     struct stat st;
-
-    ctx->node = content_nodes->nodeTab[i];
-    tmp = name_from_xml(doc, ctx);
+     
+    tmp = g_strndup(start_p, end_p - start_p);
     name = basename(tmp);
 
     file_from = g_malloc(sizeof(char) * strlen(from) + strlen(name) + 2);
@@ -824,11 +789,11 @@ stormfs_rename_directory(const char *from, const char *to)
     g_free(tmp);
     g_free(file_to);
     g_free(file_from);
+
+    if((start_p = strstr(end_p, "<Key>")) != NULL)
+      start_p += strlen("<Key>");
   }
 
-  xmlXPathFreeObject(contents_xp);
-  xmlXPathFreeContext(ctx);
-  xmlFreeDoc(doc);
   g_free(xml);
 
   return stormfs_rename_file(from, to);

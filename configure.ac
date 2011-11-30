@@ -12,7 +12,7 @@ AC_PROG_INSTALL
 CFLAGS="$CFLAGS -Wall -W -Wno-uninitialized"
 LIBS="-lpthread -lfuse -lcurl"
 
-PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4, glib-2.0 >= 2.3.0,  libcurl >= 7.0, libxml-2.0 >= 2.6])
+PKG_CHECK_MODULES([DEPS], [fuse >= 2.8.4, glib-2.0 >= 2.3.0,  libcurl >= 7.0])
 
 AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT
