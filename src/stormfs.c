@@ -71,8 +71,8 @@ static struct fuse_opt stormfs_opts[] = {
   FUSE_OPT_END
 };
 
-#define DEBUG(format, args...) \
-        do { if (stormfs.debug) fprintf(stderr, format, args); } while(0)
+#define DEBUG(format, ...) \
+        do { if (stormfs.debug) fprintf(stderr, format, __VA_ARGS__); } while(0)
 
 static uid_t
 get_uid(const char *s)
@@ -212,7 +212,7 @@ cache_mime_types()
 const char *
 get_mime_type(const char *filename)
 {
-  char *p, *ext;
+  char *p = NULL, *ext = NULL;
   char *name = strdup(filename);
 
   p = strtok(name, ".");
@@ -691,7 +691,6 @@ stormfs_readlink(const char *path, char *buf, size_t size)
 static int
 stormfs_release(const char *path, struct fuse_file_info *fi)
 {
-  int flags;
   int result = 0;
 
   DEBUG("release: %s\n", path);
