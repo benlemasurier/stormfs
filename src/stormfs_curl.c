@@ -349,7 +349,6 @@ http_response_errno(CURLcode response_code, CURL *handle)
       return -EAGAIN;
 
     default:
-      fprintf(stderr, "STORMFS: unknown HTTP response code\n");
       return -EIO;
   }
 
