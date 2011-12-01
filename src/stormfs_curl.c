@@ -27,7 +27,7 @@
 #include "stormfs.h"
 #include "stormfs_curl.h"
 
-#define CURL_RETRIES 2
+#define CURL_RETRIES 3
 #define SHA1_BLOCK_SIZE 64
 #define SHA1_LENGTH 20
 
@@ -110,8 +110,9 @@ url_encode(char *s)
   char *buf = g_malloc((strlen(s) * 3) + 1);
   char *pbuf = buf;
 
+  // NOTE: '/' will not be url encoded
   while(*p) {
-    if(isalnum(*p) || *p == '-' || *p == '_' || *p == '.' || *p == '~') 
+    if(isalnum(*p) || *p == '/' || *p == '-' || *p == '_' || *p == '.' || *p == '~') 
       *pbuf++ = *p;
     else if(*p == ' ') 
       *pbuf++ = '+';
@@ -577,15 +578,17 @@ set_curl_defaults(CURL **c)
 static char *
 get_url(const char *path)
 {
+  char *tmp = url_encode((char *) path);
   char *delimiter = "?delimiter=/";
   char *url = g_malloc(sizeof(char) * 
       strlen(stormfs_curl.url) +
-      strlen(path) + 
+      strlen(tmp) + 
       strlen(delimiter) + 1);
   
   url = strcpy(url, stormfs_curl.url);
-  url = strncat(url, path, strlen(path));
+  url = strncat(url, tmp, strlen(tmp));
   url = strncat(url, delimiter, strlen(delimiter));
+  g_free(tmp);
 
   return(url);
 }
