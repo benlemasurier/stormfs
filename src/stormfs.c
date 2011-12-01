@@ -39,6 +39,7 @@ enum {
 
 struct stormfs {
   bool ssl;
+  bool rrs;
   bool debug;
   bool foreground;
   int verify_ssl;
@@ -50,6 +51,7 @@ struct stormfs {
   char *access_key;
   char *secret_key;
   char *mountpoint;
+  char *storage_class;
   mode_t root_mode;
   GHashTable *mime_types;
   pthread_mutex_t lock;
@@ -58,14 +60,15 @@ struct stormfs {
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
 
 static struct fuse_opt stormfs_opts[] = {
-  STORMFS_OPT("acl=%s",        acl,        0),
-  STORMFS_OPT("url=%s",        url,        0),
-  STORMFS_OPT("use_ssl",       ssl,        true),
-  STORMFS_OPT("no_verify_ssl", verify_ssl, 0),
-  STORMFS_OPT("stormfs_debug", debug,      true),
+  STORMFS_OPT("acl=%s",        acl,           0),
+  STORMFS_OPT("url=%s",        url,           0),
+  STORMFS_OPT("use_ssl",       ssl,           true),
+  STORMFS_OPT("no_verify_ssl", verify_ssl,    0),
+  STORMFS_OPT("use_rrs",       rrs,           true),
+  STORMFS_OPT("stormfs_debug", debug,         true),
 
   FUSE_OPT_KEY("-d",            KEY_FOREGROUND),
-  FUSE_OPT_KEY("debug",         KEY_FOREGROUND),
+  FUSE_OPT_KEY("--debug",       KEY_FOREGROUND),
   FUSE_OPT_KEY("-f",            KEY_FOREGROUND),
   FUSE_OPT_KEY("--foreground",  KEY_FOREGROUND),
   FUSE_OPT_KEY("-h",            KEY_HELP),
@@ -339,6 +342,9 @@ stormfs_truncate(const char *path, off_t size)
   if(ftruncate(fd, size) != 0)
     return -errno;
 
+  headers = strip_header(headers, "x-amz-storage-class");
+  headers = g_list_append(headers, storage_header(stormfs.storage_class));
+  headers = g_list_append(headers, acl_header(stormfs.acl));
   headers = strip_header(headers, "x-amz-acl");
   headers = g_list_append(headers, acl_header(stormfs.acl));
   headers = g_list_append(headers, gid_header(getgid()));
@@ -394,6 +400,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
   DEBUG("create: %s\n", path);
 
+  headers = g_list_append(headers, storage_header(stormfs.storage_class));
   headers = g_list_append(headers, acl_header(stormfs.acl));
   headers = g_list_append(headers, gid_header(getgid()));
   headers = g_list_append(headers, uid_header(getuid()));
@@ -525,6 +532,7 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
 
   DEBUG("mknod: %s\n", path);
 
+  headers = g_list_append(headers, storage_header(stormfs.storage_class));
   headers = g_list_append(headers, acl_header(stormfs.acl));
   headers = g_list_append(headers, gid_header(getgid()));
   headers = g_list_append(headers, uid_header(getuid()));
@@ -710,6 +718,8 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     if((result = stormfs_curl_head(path, &headers)) != 0)
       return result;
 
+    headers = strip_header(headers, "x-amz-storage-class");
+    headers = g_list_append(headers, storage_header(stormfs.storage_class));
     headers = strip_header(headers, "x-amz-acl");
     headers = g_list_append(headers, acl_header(stormfs.acl));
     headers = strip_header(headers, "x-amz-meta-mtime");
@@ -903,6 +913,8 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
 
+  headers = strip_header(headers, "x-amz-storage-class");
+  headers = g_list_append(headers, storage_header(stormfs.storage_class));
   headers = strip_header(headers, "x-amz-acl");
   headers = g_list_append(headers, acl_header(stormfs.acl));
   headers = strip_header(headers, "x-amz-meta-mtime");
@@ -997,6 +1009,7 @@ usage(const char *progname)
 "                                           bucket-owner-full-control}\n"
 "    -o use_ssl             force the use of SSL\n"
 "    -o no_verify_ssl       skip SSL certificate/host verification\n"
+"    -o use_rrs             use reduced redundancy storage\n"
 "    -o cache=BOOL          enable caching {yes,no} (default: yes)\n"
 "    -o cache_timeout=N     sets timeout for caches in seconds (default: 300)\n"
 "    -o cache_X_timeout=N   sets timeout for {stat,dir,link} cache\n"
@@ -1093,6 +1106,7 @@ main(int argc, char *argv[])
   stormfs.verify_ssl = 2;
   stormfs.acl = "private";
   stormfs.url = "http://s3.amazonaws.com";
+  stormfs.storage_class = "STANDARD";
   pthread_mutex_init(&stormfs.lock, NULL);
 
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
@@ -1112,17 +1126,19 @@ main(int argc, char *argv[])
     abort();
   }
 
+  if(stormfs.rrs)
+    stormfs.storage_class = "REDUCED_REDUNDANCY";
 
   stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
 
   if(cache_parse_options(&args) == -1)
     abort();
 
-  DEBUG("STORMFS version:     %s\n", PACKAGE_VERSION);
-  DEBUG("STORMFS url:         %s\n", stormfs.url);
-  DEBUG("STORMFS bucket:      %s\n", stormfs.bucket);
-  DEBUG("STORMFS virtual url: %s\n", stormfs.virtual_url);
-  DEBUG("STORMFS acl:         %s\n", stormfs.acl);
+  DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
+  DEBUG("STORMFS url:           %s\n", stormfs.url);
+  DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
+  DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
+  DEBUG("STORMFS acl:           %s\n", stormfs.acl);
 
   if(stormfs_get_credentials(&stormfs.access_key, &stormfs.secret_key) != 0) {
     fprintf(stderr, "%s: missing api credentials\n", stormfs.progname);

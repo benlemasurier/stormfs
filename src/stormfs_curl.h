@@ -18,14 +18,15 @@ typedef struct {
 } HTTP_HEADER;
 
 HTTP_HEADER *acl_header(const char *acl);
+HTTP_HEADER *content_header(const char *type);
 HTTP_HEADER *copy_source_header(const char *path);
 HTTP_HEADER *copy_meta_header();
 HTTP_HEADER *gid_header(gid_t gid);
 HTTP_HEADER *uid_header(uid_t uid);
 HTTP_HEADER *mode_header(mode_t mode);
 HTTP_HEADER *mtime_header(time_t t);
-HTTP_HEADER *content_header(const char *type);
 HTTP_HEADER *replace_header();
+HTTP_HEADER *storage_header(const char *class);
 GList *strip_header(GList *headers, const char *key);
 void free_headers(HTTP_HEADER *h);
 

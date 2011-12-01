@@ -508,6 +508,17 @@ replace_header()
 }
 
 HTTP_HEADER *
+storage_header(const char *class)
+{
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key = strdup("x-amz-storage-class");
+  h->value = strdup(class);
+
+  return h;
+}
+
+HTTP_HEADER *
 uid_header(uid_t uid)
 {
   char *s = uid_to_s(uid);
