@@ -43,7 +43,6 @@ STORMFS options:
                                            authenticated-read,
                                            bucket-owner-read,
                                            bucket-owner-full-control}
-
     -o use_ssl             force the use of SSL
     -o no_verify_ssl       skip SSL certificate/host verification
     -o cache=BOOL          enable caching {yes,no} (default: yes)
