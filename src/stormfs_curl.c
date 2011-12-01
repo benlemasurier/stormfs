@@ -308,27 +308,50 @@ get_resource(const char *path)
 }
 
 static int
-http_response_errno(CURL *handle)
+http_response_errno(CURLcode response_code, CURL *handle)
 {
   long http_response;
 
-  if(curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &http_response) != 0)
-    return -EIO;
+  switch(response_code) {
+    case CURLE_OK:
+      if(curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &http_response) != 0)
+        return -EIO;
+      if(http_response == 401)
+        return -EACCES;
+      if(http_response == 403)
+        return -EACCES;
+      if(http_response == 404)
+        return -ENOENT;
+      if(http_response >= 400 && http_response < 500)
+        return -EIO; 
+      if(http_response >= 500)
+        return -EAGAIN;
 
-  if(http_response == 401)
-    return -EACCES;
+      return 0;
 
-  if(http_response == 403)
-    return -EACCES;
+    case CURLE_COULDNT_RESOLVE_HOST:
+      return -EAGAIN;
+    case CURLE_COULDNT_CONNECT:
+      return -EAGAIN;
+    case CURLE_WRITE_ERROR:
+      return -EAGAIN;
+    case CURLE_UPLOAD_FAILED:
+      return -EAGAIN;
+    case CURLE_READ_ERROR:
+      return -EAGAIN;
+    case CURLE_OPERATION_TIMEDOUT:
+      return -EAGAIN;
+    case CURLE_SEND_ERROR:
+      return -EAGAIN;
+    case CURLE_RECV_ERROR:
+      return -EAGAIN;
+    case CURLE_AGAIN:
+      return -EAGAIN;
 
-  if(http_response == 404)
-    return -ENOENT;
-
-  if(http_response >= 400 && http_response < 500)
-    return -EIO; 
-
-  if(http_response >= 500)
-    return -EAGAIN;
+    default:
+      fprintf(stderr, "STORMFS: unknown HTTP response code\n");
+      return -EIO;
+  }
 
   return 0;
 }
@@ -337,14 +360,16 @@ static int
 stormfs_curl_easy_perform(CURL *c)
 {
   int result;
+  CURLcode code;
   uint8_t attempts = 0;
 
-  curl_easy_perform(c);
+  code = curl_easy_perform(c);
   while(attempts < CURL_RETRIES) {
-    if((result = http_response_errno(c)) != -EAGAIN)
+    if((result = http_response_errno(code, c)) != -EAGAIN)
       break;
 
     attempts++;
+    curl_easy_perform(c);
   }
 
   return result;
