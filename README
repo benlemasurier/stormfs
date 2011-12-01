@@ -44,8 +44,8 @@ STORMFS options:
                                            bucket-owner-read,
                                            bucket-owner-full-control}
     -o use_ssl             force the use of SSL
-    -o no_verify_ssl       skip SSL certificate/host verification\n"
-    -o use_rrs             use reduced redundancy storage\n"
+    -o no_verify_ssl       skip SSL certificate/host verification"
+    -o use_rrs             use reduced redundancy storage"
     -o cache=BOOL          enable caching {yes,no} (default: yes)
     -o cache_timeout=N     sets timeout for caches in seconds (default: 300)
     -o cache_X_timeout=N   sets timeout for {stat,dir,link} cache
