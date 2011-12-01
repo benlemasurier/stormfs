@@ -17,6 +17,7 @@ typedef struct {
   char *value;
 } HTTP_HEADER;
 
+HTTP_HEADER *acl_header(const char *acl);
 HTTP_HEADER *copy_source_header(const char *path);
 HTTP_HEADER *copy_meta_header();
 HTTP_HEADER *gid_header(gid_t gid);

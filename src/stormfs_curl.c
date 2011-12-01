@@ -414,6 +414,17 @@ strip_header(GList *headers, const char *key)
 }
 
 HTTP_HEADER *
+acl_header(const char *acl)
+{
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key = strdup("x-amz-acl");
+  h->value = strdup(acl);
+
+  return h;
+}
+
+HTTP_HEADER *
 content_header(const char *type)
 {
   HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
