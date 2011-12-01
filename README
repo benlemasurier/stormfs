@@ -36,7 +36,7 @@ general options:
 
 STORMFS options:
     -o url=URL             specify a custom service URL
-    -o acl=ACL             canned acl applied to new objects (default: private)
+    -o acl=ACL             canned acl applied to objects (default: private)
                            valid options: {private,
                                            public-read,
                                            public-read-write,

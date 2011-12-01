@@ -988,7 +988,7 @@ usage(const char *progname)
 "\n"
 "STORMFS options:\n"
 "    -o url=URL             specify a custom service URL\n"
-"    -o acl=ACL             canned acl applied to new objects (default: private)\n"
+"    -o acl=ACL             canned acl applied to objects (default: private)\n"
 "                           valid options: {private,\n" 
 "                                           public-read,\n"
 "                                           public-read-write,\n"
