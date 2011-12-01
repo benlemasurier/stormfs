@@ -41,3 +41,13 @@ STORMFS options:
     -o cache=BOOL          enable caching {yes,no} (default: yes)
     -o cache_timeout=N     sets timeout for caches in seconds (default: 300)
     -o cache_X_timeout=N   sets timeout for {stat,dir,link} cache
+
+
+Supported APIs
+=============================================================================
+Amazon Simple Storage Service (Amazon S3)
+Eucalyptus (Walrus S3)
+Google Cloud Storage[1]
+
+[1] You must enable "Interoperable Access" and use the provided
+      "Legacy Storage Access Keys"
