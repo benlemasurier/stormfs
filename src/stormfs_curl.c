@@ -11,6 +11,7 @@
 #include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>
@@ -26,6 +27,7 @@
 #include "stormfs.h"
 #include "stormfs_curl.h"
 
+#define CURL_RETRIES 2
 #define SHA1_BLOCK_SIZE 64
 #define SHA1_LENGTH 20
 
@@ -321,10 +323,30 @@ http_response_errno(CURL *handle)
   if(http_response == 404)
     return -ENOENT;
 
-  if(http_response >= 400)
+  if(http_response >= 400 && http_response < 500)
     return -EIO; 
 
+  if(http_response >= 500)
+    return -EAGAIN;
+
   return 0;
+}
+
+static int
+stormfs_curl_easy_perform(CURL *c)
+{
+  int result;
+  uint8_t attempts = 0;
+
+  curl_easy_perform(c);
+  while(attempts < CURL_RETRIES) {
+    if((result = http_response_errno(c)) != -EAGAIN)
+      break;
+
+    attempts++;
+  }
+
+  return result;
 }
 
 GList *
@@ -695,8 +717,8 @@ stormfs_curl_delete(const char *path)
   curl_easy_setopt(c, CURLOPT_CUSTOMREQUEST, "DELETE");
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
 
-  curl_easy_perform(c);
-  result = http_response_errno(c);
+  result = stormfs_curl_easy_perform(c);
+  destroy_curl_handle(c);
 
   return result;
 }
@@ -753,8 +775,7 @@ stormfs_curl_get(const char *path, char **data)
   curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
   curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
-  curl_easy_perform(c);
-  result = http_response_errno(c);
+  result = stormfs_curl_easy_perform(c);
 
   *data = strdup(body.memory);
 
@@ -778,8 +799,7 @@ stormfs_curl_get_file(const char *path, FILE *f)
   curl_easy_setopt(c, CURLOPT_WRITEDATA, f);
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
 
-  curl_easy_perform(c);
-  result = http_response_errno(c);
+  result = stormfs_curl_easy_perform(c);
   rewind(f);
 
   g_free(url);
@@ -811,8 +831,7 @@ stormfs_curl_head(const char *path, GList **headers)
   curl_easy_setopt(c, CURLOPT_HEADERDATA, (void *) &data);
   curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
 
-  curl_easy_perform(c);
-  result = http_response_errno(c);
+  result = stormfs_curl_easy_perform(c);
 
   response_headers = strdup(data.memory);
   pthread_mutex_lock(&stormfs_curl.lock);
@@ -975,8 +994,7 @@ stormfs_curl_list_bucket(const char *path, char **xml)
     curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
     curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
-    curl_easy_perform(c);
-    result = http_response_errno(c);
+    result = stormfs_curl_easy_perform(c);
 
     if(*xml == NULL)
       *xml = strdup(body.memory);
@@ -1030,8 +1048,7 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
   curl_easy_setopt(c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size); 
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
 
-  curl_easy_perform(c);
-  result = http_response_errno(c);
+  result = stormfs_curl_easy_perform(c);
 
   g_free(url);
   destroy_curl_handle(c);
@@ -1061,8 +1078,7 @@ stormfs_curl_put_headers(const char *path, GList *headers)
   curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
   curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
-  curl_easy_perform(c);
-  result = http_response_errno(c);
+  result = stormfs_curl_easy_perform(c);
 
   g_free(url);
   g_free(body.memory);
