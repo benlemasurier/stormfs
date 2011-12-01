@@ -924,13 +924,18 @@ stormfs_virtual_url(char *url, char *bucket)
     strncat(v, ".", 1);
     if(strcasestr(url, "https://"))
       strncat(v, url + 8, strlen(url) - 8);
-    else
+    else if(strcasestr(url, "http://"))
       strncat(v, url + 7, strlen(url) - 7);
+    else
+      strncat(v, url, strlen(url));
   } else {
     strcpy(v, "http://");
     strncat(v, bucket, strlen(bucket));
     strncat(v, ".", 1);
-    strncat(v, url + 7, strlen(url) - 7);
+    if(strcasestr(url, "http://"))
+      strncat(v, url + 7, strlen(url) - 7);
+    else
+      strncat(v, url, strlen(url));
   }
 
   tmp = strdup(v);
