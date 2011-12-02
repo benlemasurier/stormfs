@@ -52,7 +52,7 @@ STORMFS options:
                                             bucket-owner-read,
                                             bucket-owner-full-control}
     -o expires=RFC1123DATE  expires HTTP header applied to objects
-                              e.g.: -ooexpires=Thu\\,\ 08\ Apr\ 2012\ 20:00:00\ GMT
+                              e.g.: Thu\\,\ 08\ Apr\ 2012\ 20:00:00\ GMT
                               (default: disabled)
     -o use_ssl              force the use of SSL
     -o no_verify_ssl        skip SSL certificate/host verification
