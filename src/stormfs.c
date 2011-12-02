@@ -163,6 +163,26 @@ validate_mountpoint(const char *path, struct stat *stbuf)
   return 0;
 }
 
+bool
+valid_acl(const char *acl)
+{
+  bool valid = false;
+  const char *valid_acls[] = {
+    "private",
+    "public-read",
+    "public-read-write",
+    "authenticated-read",
+    "bucket-owner-read",
+    "bucket-owner-full-control"
+  };
+
+  for(uint8_t i = 0; i < 6; i++)
+    if(strcmp(acl, valid_acls[i]) == 0)
+      valid = true;
+
+  return valid;
+}
+
 static int
 cache_mime_types()
 {
@@ -1066,7 +1086,7 @@ stormfs_opt_proc(void *data, const char *arg, int key,
 
       struct stat stbuf;
       if(validate_mountpoint(arg, &stbuf) == -1)
-        abort();
+        exit(EXIT_FAILURE);
 
       stormfs.mountpoint = (char *) arg;
       stormfs.root_mode = stbuf.st_mode;
@@ -1081,7 +1101,7 @@ stormfs_opt_proc(void *data, const char *arg, int key,
       usage(outargs->argv[0]);
       fuse_opt_add_arg(outargs, "-ho");
       stormfs_fuse_main(outargs);
-      exit(1);
+      exit(EXIT_FAILURE);
 
     case KEY_VERSION:
       printf("STORMFS version %s\n", PACKAGE_VERSION);
@@ -1091,7 +1111,7 @@ stormfs_opt_proc(void *data, const char *arg, int key,
 
     default:
       fprintf(stderr, "%s: error parsing options\n", stormfs.progname);
-      abort();
+      exit(EXIT_FAILURE);
   }
 }
 
@@ -1111,19 +1131,25 @@ main(int argc, char *argv[])
 
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
     fprintf(stderr, "%s: error parsing command-line options\n", stormfs.progname);
-    abort();
+    exit(EXIT_FAILURE);
   }
 
   if(!stormfs.bucket) {
     fprintf(stderr, "%s: missing BUCKET command-line option, see %s -h for usage\n",
         stormfs.progname, stormfs.progname);
-    abort();
+    exit(EXIT_FAILURE);
   }
 
   if(!stormfs.mountpoint) {
     fprintf(stderr, "%s: missing MOUNTPOINT command-line option, see %s -h for usage\n",
         stormfs.progname, stormfs.progname);
-    abort();
+    exit(EXIT_FAILURE);
+  }
+
+  if(!valid_acl(stormfs.acl)) {
+    fprintf(stderr, "%s: invalid ACL %s, see %s -h for usage\n",
+        stormfs.progname, stormfs.acl, stormfs.progname);
+    exit(EXIT_FAILURE);
   }
 
   if(stormfs.rrs)
@@ -1132,7 +1158,7 @@ main(int argc, char *argv[])
   stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
 
   if(cache_parse_options(&args) == -1)
-    abort();
+    exit(EXIT_FAILURE);
 
   DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
   DEBUG("STORMFS url:           %s\n", stormfs.url);
@@ -1142,12 +1168,12 @@ main(int argc, char *argv[])
 
   if(stormfs_get_credentials(&stormfs.access_key, &stormfs.secret_key) != 0) {
     fprintf(stderr, "%s: missing api credentials\n", stormfs.progname);
-    abort();
+    exit(EXIT_FAILURE);
   }
 
   if((status = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
     fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs.progname);
-    abort();
+    exit(EXIT_FAILURE);
   }
 
   stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);

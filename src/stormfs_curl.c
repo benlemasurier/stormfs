@@ -682,7 +682,7 @@ write_memory_cb(void *ptr, size_t size, size_t nmemb, void *data)
   mem->memory = g_realloc(mem->memory, mem->size + realsize + 1);
   if(mem->memory == NULL) {
     fprintf(stderr, "stormfs: memory allocation failed\n");
-    abort();
+    exit(EXIT_FAILURE);
   }
 
   memcpy(&(mem->memory[mem->size]), ptr, realsize);
