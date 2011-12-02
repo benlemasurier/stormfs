@@ -126,6 +126,190 @@ url_encode(char *s)
   return buf;
 }
 
+static char *
+get_resource(const char *path)
+{
+  int path_len;
+  int bucket_len;
+  char *resource;
+
+  path_len   = strlen(path);
+  bucket_len = strlen(stormfs_curl.bucket);
+  char tmp[1 + path_len + bucket_len + 1];
+
+  strcpy(tmp, "/");
+  strncat(tmp, stormfs_curl.bucket, bucket_len);
+  strncat(tmp, path, path_len);
+  resource = strdup(tmp);
+
+  return resource;
+}
+
+HTTP_HEADER *
+acl_header(const char *acl)
+{
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key = strdup("x-amz-acl");
+  h->value = strdup(acl);
+
+  return h;
+}
+
+HTTP_HEADER *
+content_header(const char *type)
+{
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("Content-Type");
+  if(type == NULL)
+    h->value = strdup("application/octet-stream");
+  else
+    h->value = strdup(type);
+
+  return h;
+}
+
+HTTP_HEADER *
+copy_meta_header()
+{
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("x-amz-metadata-directive");
+  h->value = strdup("COPY");
+
+  return h;
+}
+
+HTTP_HEADER *
+copy_source_header(const char *path)
+{
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key = strdup("x-amz-copy-source");
+  h->value = get_resource(path);
+
+  return h;
+}
+
+HTTP_HEADER *
+gid_header(gid_t gid)
+{
+  char *s = gid_to_s(gid);
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("x-amz-meta-gid");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+mode_header(mode_t mode)
+{
+  char *s = mode_to_s(mode);
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("x-amz-meta-mode");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+mtime_header(time_t t)
+{
+  char *s = time_to_s(t);
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key = strdup("x-amz-meta-mtime");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+replace_header()
+{
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("x-amz-metadata-directive");
+  h->value = strdup("REPLACE");
+
+  return h;
+}
+
+HTTP_HEADER *
+storage_header(const char *class)
+{
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key = strdup("x-amz-storage-class");
+  h->value = strdup(class);
+
+  return h;
+}
+
+HTTP_HEADER *
+uid_header(uid_t uid)
+{
+  char *s = uid_to_s(uid);
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key   = strdup("x-amz-meta-uid");
+  h->value = s;
+
+  return h;
+}
+
+GList *
+strip_header(GList *headers, const char *key)
+{
+  GList *new = NULL;
+  GList *head = NULL;
+  GList *next = NULL;
+
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+    HTTP_HEADER *header = head->data;
+
+    if(strstr(header->key, key) != NULL) {
+      g_free(header->key);
+      g_free(header->value);
+      g_free(header);
+
+      head = next;
+      continue;
+    }
+
+    HTTP_HEADER *h;
+    h = g_malloc(sizeof(HTTP_HEADER));
+    h->key   = strdup(header->key);
+    h->value = strdup(header->value);
+
+    g_free(header->key);
+    g_free(header->value);
+    g_free(header);
+
+    new = g_list_append(new, h);
+    head = next;
+  }
+
+  g_list_free(headers);
+
+  return new;
+}
+
+GList *
+add_header(GList *headers, HTTP_HEADER *h)
+{
+  headers = strip_header(headers, h->key);
+  headers = g_list_append(headers, h);
+
+  return headers;
+}
+
 static gboolean
 is_truncated(char *xml)
 {
@@ -288,25 +472,6 @@ rfc2822_timestamp()
   return date;
 }
 
-static char *
-get_resource(const char *path)
-{
-  int path_len;
-  int bucket_len;
-  char *resource;
-
-  path_len   = strlen(path);
-  bucket_len = strlen(stormfs_curl.bucket);
-  char tmp[1 + path_len + bucket_len + 1];
-
-  strcpy(tmp, "/");
-  strncat(tmp, stormfs_curl.bucket, bucket_len);
-  strncat(tmp, path, path_len);
-  resource = strdup(tmp);
-
-  return resource;
-}
-
 static int
 http_response_errno(CURLcode response_code, CURL *handle)
 {
@@ -372,162 +537,6 @@ stormfs_curl_easy_perform(CURL *c)
   }
 
   return result;
-}
-
-GList *
-strip_header(GList *headers, const char *key)
-{
-  GList *new = NULL;
-  GList *head = NULL;
-  GList *next = NULL;
-
-  head = g_list_first(headers);
-  while(head != NULL) {
-    next = head->next;
-    HTTP_HEADER *header = head->data;
-
-    if(strstr(header->key, key) != NULL) {
-      g_free(header->key);
-      g_free(header->value);
-      g_free(header);
-
-      head = next;
-      continue;
-    }
-
-    HTTP_HEADER *h;
-    h = g_malloc(sizeof(HTTP_HEADER));
-    h->key   = strdup(header->key);
-    h->value = strdup(header->value);
-
-    g_free(header->key);
-    g_free(header->value);
-    g_free(header);
-
-    new = g_list_append(new, h);
-    head = next;
-  }
-
-  g_list_free(headers);
-
-  return new;
-}
-
-HTTP_HEADER *
-acl_header(const char *acl)
-{
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key = strdup("x-amz-acl");
-  h->value = strdup(acl);
-
-  return h;
-}
-
-HTTP_HEADER *
-content_header(const char *type)
-{
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key   = strdup("Content-Type");
-  if(type == NULL)
-    h->value = strdup("application/octet-stream");
-  else
-    h->value = strdup(type);
-
-  return h;
-}
-
-HTTP_HEADER *
-copy_meta_header()
-{
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key   = strdup("x-amz-metadata-directive");
-  h->value = strdup("COPY");
-
-  return h;
-}
-
-HTTP_HEADER *
-copy_source_header(const char *path)
-{
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key = strdup("x-amz-copy-source");
-  h->value = get_resource(path);
-
-  return h;
-}
-
-HTTP_HEADER *
-gid_header(gid_t gid)
-{
-  char *s = gid_to_s(gid);
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key   = strdup("x-amz-meta-gid");
-  h->value = s;
-
-  return h;
-}
-
-HTTP_HEADER *
-mode_header(mode_t mode)
-{
-  char *s = mode_to_s(mode);
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key   = strdup("x-amz-meta-mode");
-  h->value = s;
-
-  return h;
-}
-
-HTTP_HEADER *
-mtime_header(time_t t)
-{
-  char *s = time_to_s(t);
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key = strdup("x-amz-meta-mtime");
-  h->value = s;
-
-  return h;
-}
-
-HTTP_HEADER *
-replace_header()
-{
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key   = strdup("x-amz-metadata-directive");
-  h->value = strdup("REPLACE");
-
-  return h;
-}
-
-HTTP_HEADER *
-storage_header(const char *class)
-{
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key = strdup("x-amz-storage-class");
-  h->value = strdup(class);
-
-  return h;
-}
-
-HTTP_HEADER *
-uid_header(uid_t uid)
-{
-  char *s = uid_to_s(uid);
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
-
-  h->key   = strdup("x-amz-meta-uid");
-  h->value = s;
-
-  return h;
 }
 
 static int

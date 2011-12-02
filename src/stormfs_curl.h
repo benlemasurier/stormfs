@@ -27,7 +27,7 @@ HTTP_HEADER *mode_header(mode_t mode);
 HTTP_HEADER *mtime_header(time_t t);
 HTTP_HEADER *replace_header();
 HTTP_HEADER *storage_header(const char *class);
-GList *strip_header(GList *headers, const char *key);
+GList *add_header(GList *headers, HTTP_HEADER *h);
 void free_headers(HTTP_HEADER *h);
 
 int stormfs_curl_delete(const char *path);
