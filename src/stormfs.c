@@ -120,7 +120,7 @@ void
 free_file(struct file *f)
 {
   g_free(f->name);
-  g_list_free_full(f->headers, (GDestroyNotify) free_headers);
+  g_list_free_full(f->headers, (GDestroyNotify) free_header);
   g_free(f->stbuf);
   g_free(f);
 }
@@ -321,7 +321,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     stbuf->st_blocks = get_blocks(stbuf->st_size);
 
   pthread_mutex_lock(&stormfs.lock);
-  g_list_free_full(headers, (GDestroyNotify) free_headers); 
+  free_headers(headers);
   pthread_mutex_unlock(&stormfs.lock);
 
   return 0;
@@ -369,7 +369,7 @@ stormfs_truncate(const char *path, off_t size)
   headers = add_header(headers, mode_header(st.st_mode));
   headers = add_header(headers, mtime_header(time(NULL)));
   result = stormfs_curl_upload(path, headers, fd);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
+  free_headers(headers);
 
   if(close(fd) != 0)
     return -errno;
@@ -426,7 +426,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   headers = add_header(headers, content_header(get_mime_type(path)));
 
   result = stormfs_curl_put_headers(path, headers);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
+  free_headers(headers);
   if(result != 0)
     return result;
 
@@ -451,7 +451,7 @@ stormfs_chmod(const char *path, mode_t mode)
   headers = add_header(headers, copy_source_header(path));
 
   result = stormfs_curl_put_headers(path, headers);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
+  free_headers(headers);
 
   return result;
 }
@@ -486,7 +486,7 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
   result = stormfs_curl_put_headers(path, headers);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
+  free_headers(headers);
 
   return result;
 }
@@ -528,7 +528,7 @@ stormfs_mkdir(const char *path, mode_t mode)
   headers = add_header(headers, mtime_header(time(NULL)));
   headers = add_header(headers, content_header("application/x-directory"));
   result = stormfs_curl_upload(path, headers, fd);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
+  free_headers(headers);
 
   if(close(fd) != 0)
     return -errno;
@@ -552,7 +552,7 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
   headers = add_header(headers, mtime_header(time(NULL)));
 
   result = stormfs_curl_put_headers(path, headers);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
+  free_headers(headers);
 
   return result;
 }
@@ -735,7 +735,7 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     headers = add_header(headers, mtime_header(time(NULL)));
 
     result = stormfs_curl_upload(path, headers, fi->fh);
-    g_list_free_full(headers, (GDestroyNotify) free_headers);
+    free_headers(headers);
   }
 
   if(close(fi->fh) != 0)
@@ -759,7 +759,7 @@ stormfs_rename_file(const char *from, const char *to)
   headers = add_header(headers, copy_source_header(from));
 
   result = stormfs_curl_put_headers(to, headers);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
+  free_headers(headers);
 
   return stormfs_unlink(from);
 }
@@ -903,7 +903,7 @@ stormfs_symlink(const char *from, const char *to)
   headers = add_header(headers, mode_header(mode));
   headers = add_header(headers, mtime_header(time(NULL)));
   result = stormfs_curl_upload(to, headers, fd);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
+  free_headers(headers);
 
   if(close(fd) != 0)
     return -errno;
@@ -929,7 +929,7 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   headers = add_header(headers, copy_source_header(path));
 
   result = stormfs_curl_put_headers(path, headers);
-  g_list_free_full(headers, (GDestroyNotify) free_headers);
+  free_headers(headers);
 
   return result;
 }

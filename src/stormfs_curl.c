@@ -96,11 +96,17 @@ cmpstringp(const void *p1, const void *p2)
 }
 
 void
-free_headers(HTTP_HEADER *h)
+free_header(HTTP_HEADER *h)
 {
   g_free(h->key);
   g_free(h->value);
   g_free(h);
+}
+
+void
+free_headers(GList *headers)
+{
+  g_list_free_full(headers, (GDestroyNotify) free_header);
 }
 
 char *
