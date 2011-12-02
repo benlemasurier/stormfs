@@ -244,7 +244,10 @@ get_mime_type(const char *filename)
 
   p = strtok(name, ".");
   while(p != NULL) {
-    ext = p;
+    if(ext != NULL)
+      g_free(ext);  
+
+    ext = strdup(p);
     p = strtok(NULL, ".");
   }
 
