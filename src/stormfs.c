@@ -45,6 +45,7 @@ struct stormfs {
   char *acl;
   char *url;
   char *bucket;
+  char *config;
   char *progname;
   char *virtual_url;
   char *access_key;
@@ -60,6 +61,7 @@ struct stormfs {
 
 static struct fuse_opt stormfs_opts[] = {
   STORMFS_OPT("acl=%s",        acl,           0),
+  STORMFS_OPT("config=%s",     config,        0),
   STORMFS_OPT("url=%s",        url,           0),
   STORMFS_OPT("expires=%s",    expires,       0),
   STORMFS_OPT("use_ssl",       ssl,           true),
@@ -991,22 +993,126 @@ stormfs_virtual_url(char *url, char *bucket)
   return tmp;
 }
 
-static int
-stormfs_get_credentials(char **access_key, char **secret_key)
+static void
+set_defaults()
 {
-  *access_key = getenv("AWS_ACCESS_KEY_ID");
-  *secret_key = getenv("AWS_SECRET_ACCESS_KEY");
+  stormfs.verify_ssl = 2;
+  stormfs.acl = "private";
+  stormfs.url = "http://s3.amazonaws.com";
+  stormfs.storage_class = "STANDARD";
+  stormfs.config = "/etc/stormfs.conf";
+}
 
-  if(*access_key == NULL || *secret_key == NULL)
-    return -1;
+static void
+validate_config()
+{
+  if(!stormfs.bucket) {
+    fprintf(stderr, "%s: missing BUCKET command-line option, see %s -h for usage\n",
+        stormfs.progname, stormfs.progname);
+    exit(EXIT_FAILURE);
+  }
 
-  return 0;
+  if(!stormfs.mountpoint) {
+    fprintf(stderr, "%s: missing MOUNTPOINT command-line option, see %s -h for usage\n",
+        stormfs.progname, stormfs.progname);
+    exit(EXIT_FAILURE);
+  }
+
+  if(!valid_acl(stormfs.acl)) {
+    fprintf(stderr, "%s: invalid ACL %s, see %s -h for usage\n",
+        stormfs.progname, stormfs.acl, stormfs.progname);
+    exit(EXIT_FAILURE);
+  }
+}
+
+static void
+validate_config_perms(struct stat *st)
+{
+  if((st->st_mode & S_IROTH) ||
+     (st->st_mode & S_IWOTH) ||
+     (st->st_mode & S_IXOTH)) {
+    fprintf(stderr, "%s: WARNING: config file %s has insecure permissions!\n",
+        stormfs.progname, stormfs.config);
+  }
+}
+
+char *
+get_config_value(const char *value)
+{
+  char *s = strdup(value);
+
+  while(*s == ' ') s++;
+
+  char *end = s + strlen(s) + 1;
+  while(end > s && *end == ' ') end--;
+
+  *(end + 1) = '\0';
+
+  return strdup(s);
+}
+
+static void
+parse_config(const char *path)
+{
+  int fd;
+  ssize_t n;
+  char *p = NULL;
+  char buf[BUFSIZ + 1];
+  struct stat *st = g_malloc0(sizeof(struct stat));
+
+  if(stat(path, st) == -1) {
+    fprintf(stderr, "%s: missing configuration file %s",
+        stormfs.progname, path);
+    exit(EXIT_FAILURE);
+  }
+
+  validate_config_perms(st);
+
+  if((fd = open(path, O_RDONLY)) == -1)
+    return;
+
+  while((n = read(fd, buf, BUFSIZ)) > 0)
+    buf[n] = '\0';
+
+  p = strtok(buf, "\n");
+  while(p != NULL) {
+    while(*p == ' ')
+      p++;
+
+    if(*p == '#') {
+      p = strtok(NULL, "\n");
+      continue;
+    }
+
+    if(strstr(p, "access_key") != NULL)
+      stormfs.access_key = get_config_value(strstr(p, "=") + 1);
+    if(strstr(p, "secret_key") != NULL)
+      stormfs.secret_key = get_config_value(strstr(p, "=") + 1);
+    if(strstr(p, "url") != NULL)
+      stormfs.url = get_config_value(strstr(p, "=") + 1);
+    if(strstr(p, "acl") != NULL)
+      stormfs.acl = get_config_value(strstr(p, "=") + 1);
+    if(strstr(p, "expires") != NULL)
+      stormfs.expires = get_config_value(strstr(p, "=") + 1);
+    if(strstr(p, "use_ssl") != NULL)
+      stormfs.ssl = true;
+    if(strstr(p, "no_verify_ssl") != NULL)
+      stormfs.verify_ssl = 0;
+    if(strstr(p, "use_rrs") != NULL)
+      stormfs.rrs = true;
+
+    p = strtok(NULL, "\n");
+  }
+
+  return;
 }
 
 static void
 stormfs_destroy(void *data)
 {
   stormfs_curl_destroy();
+  g_free(stormfs.access_key);
+  g_free(stormfs.secret_key);
   g_free(stormfs.virtual_url);
   g_hash_table_destroy(stormfs.mime_types);
 }
@@ -1023,6 +1129,7 @@ usage(const char *progname)
 "    -V   --version          print version\n"
 "\n"                         
 "STORMFS options:\n"         
+"    -o config=CONFIG        path to configuration file (default: /etc/stormfs.conf)\n"
 "    -o url=URL              specify a custom service URL\n"
 "    -o acl=ACL              canned acl applied to objects (default: private)\n"
 "                            valid options: {private,\n" 
@@ -1129,41 +1236,20 @@ main(int argc, char *argv[])
 
   memset(&stormfs, 0, sizeof(struct stormfs));
   stormfs.progname = argv[0];
-  stormfs.verify_ssl = 2;
-  stormfs.acl = "private";
-  stormfs.url = "http://s3.amazonaws.com";
-  stormfs.storage_class = "STANDARD";
+  set_defaults();
 
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
     fprintf(stderr, "%s: error parsing command-line options\n", stormfs.progname);
     exit(EXIT_FAILURE);
   }
 
-  if(!stormfs.bucket) {
-    fprintf(stderr, "%s: missing BUCKET command-line option, see %s -h for usage\n",
-        stormfs.progname, stormfs.progname);
-    exit(EXIT_FAILURE);
-  }
-
-  if(!stormfs.mountpoint) {
-    fprintf(stderr, "%s: missing MOUNTPOINT command-line option, see %s -h for usage\n",
-        stormfs.progname, stormfs.progname);
-    exit(EXIT_FAILURE);
-  }
-
-  if(!valid_acl(stormfs.acl)) {
-    fprintf(stderr, "%s: invalid ACL %s, see %s -h for usage\n",
-        stormfs.progname, stormfs.acl, stormfs.progname);
-    exit(EXIT_FAILURE);
-  }
+  parse_config(stormfs.config);
+  validate_config();
 
   if(stormfs.rrs)
     stormfs.storage_class = "REDUCED_REDUNDANCY";
 
   stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
-
-  if(cache_parse_options(&args) == -1)
-    exit(EXIT_FAILURE);
 
   DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
   DEBUG("STORMFS url:           %s\n", stormfs.url);
@@ -1171,10 +1257,8 @@ main(int argc, char *argv[])
   DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
   DEBUG("STORMFS acl:           %s\n", stormfs.acl);
 
-  if(stormfs_get_credentials(&stormfs.access_key, &stormfs.secret_key) != 0) {
-    fprintf(stderr, "%s: missing api credentials\n", stormfs.progname);
+  if(cache_parse_options(&args) == -1)
     exit(EXIT_FAILURE);
-  }
 
   if((status = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
     fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs.progname);

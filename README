@@ -35,6 +35,8 @@ general options:
     -V   --version          print version
                             
 STORMFS options:            
+    -o config=CONFIG        path to configuration file
+                              (default: /etc/stormfs.conf)
     -o url=URL              specify a custom service URL
     -o acl=ACL              canned acl applied to objects (default: private)
                             valid options: {private,
@@ -43,12 +45,12 @@ STORMFS options:
                                             authenticated-read,
                                             bucket-owner-read,
                                             bucket-owner-full-control}
-    -o expires=RFC1123DATE  expires HTTP header applied to objects\n"
-                              e.g.: -oexpires=Thu\\,\ 08\ Apr\ 2012\ 20:00:00\ GMT\n"
-                              (default: disabled)\n"
+    -o expires=RFC1123DATE  expires HTTP header applied to objects
+                              e.g.: -oexpires=Thu, 08 Apr 2012 20:00:00 GMT
+                              (default: disabled)
     -o use_ssl              force the use of SSL
-    -o no_verify_ssl        skip SSL certificate/host verification"
-    -o use_rrs              use reduced redundancy storage"
+    -o no_verify_ssl        skip SSL certificate/host verification
+    -o use_rrs              use reduced redundancy storage
     -o cache=BOOL           enable caching {yes,no} (default: yes)
     -o cache_timeout=N      sets timeout for caches in seconds (default: 300)
     -o cache_X_timeout=N    sets timeout for {stat,dir,link} cache

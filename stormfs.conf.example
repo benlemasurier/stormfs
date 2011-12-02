@@ -1,0 +1,24 @@
+# StormFS example configuration file 
+# Public access key
+access_key = AKZRKEXZAMPLEFSLLSJJ
+
+# Secret access key
+secret_key = jEfooveeUnfDerpasAmLkEisNotVAlideK/yA0cb
+
+# Custom URL
+#url = http://commondatastorage.googleapis.com
+
+# Canned ACL
+#acl = public-read
+
+# Default HTTP expires header
+#expires = Thu, 08 Apr 2012 20:00:00 GMT
+
+# Force the use of SSL
+#use_ssl
+
+# Skip SSL cert/host verification
+#no_verify_ssl
+
+# Use reduced redundancy storage
+#use_rrs
