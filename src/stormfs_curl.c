@@ -199,6 +199,17 @@ copy_source_header(const char *path)
 }
 
 HTTP_HEADER *
+expires_header(const char *expires)
+{
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key = strdup("Expires");
+  h->value = strdup(expires);
+
+  return h;
+}
+
+HTTP_HEADER *
 gid_header(gid_t gid)
 {
   char *s = gid_to_s(gid);
@@ -381,7 +392,7 @@ headers_to_curl_slist(GList *headers)
     next = head->next;
     HTTP_HEADER *h = head->data;
 
-    if(strstr(h->key, "x-amz-") != NULL)
+    if(strstr(h->key, "x-amz-") != NULL || strstr(h->key, "Expires") != NULL)
       curl_headers = curl_slist_append(curl_headers, header_to_s(h));
     else if(strstr(h->key, "Content-Type") != NULL)
       curl_headers = curl_slist_append(curl_headers, header_to_s(h));

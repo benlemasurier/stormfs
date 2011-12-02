@@ -30,25 +30,28 @@ Usage: (see --help for a full list of options)
 stormfs bucket mountpoint [options]
 
 general options:
-    -o opt,[opt...]        mount options
-    -h   --help            print help
-    -V   --version         print version
-
-STORMFS options:
-    -o url=URL             specify a custom service URL
-    -o acl=ACL             canned acl applied to objects (default: private)
-                           valid options: {private,
-                                           public-read,
-                                           public-read-write,
-                                           authenticated-read,
-                                           bucket-owner-read,
-                                           bucket-owner-full-control}
-    -o use_ssl             force the use of SSL
-    -o no_verify_ssl       skip SSL certificate/host verification"
-    -o use_rrs             use reduced redundancy storage"
-    -o cache=BOOL          enable caching {yes,no} (default: yes)
-    -o cache_timeout=N     sets timeout for caches in seconds (default: 300)
-    -o cache_X_timeout=N   sets timeout for {stat,dir,link} cache
+    -o opt,[opt...]         mount options
+    -h   --help             print help
+    -V   --version          print version
+                            
+STORMFS options:            
+    -o url=URL              specify a custom service URL
+    -o acl=ACL              canned acl applied to objects (default: private)
+                            valid options: {private,
+                                            public-read,
+                                            public-read-write,
+                                            authenticated-read,
+                                            bucket-owner-read,
+                                            bucket-owner-full-control}
+    -o expires=RFC1123DATE  expires HTTP header applied to objects\n"
+                              e.g.: -oexpires=Thu\\,\ 08\ Apr\ 2012\ 20:00:00\ GMT\n"
+                              (default: disabled)\n"
+    -o use_ssl              force the use of SSL
+    -o no_verify_ssl        skip SSL certificate/host verification"
+    -o use_rrs              use reduced redundancy storage"
+    -o cache=BOOL           enable caching {yes,no} (default: yes)
+    -o cache_timeout=N      sets timeout for caches in seconds (default: 300)
+    -o cache_X_timeout=N    sets timeout for {stat,dir,link} cache
 
 
 Supported APIs

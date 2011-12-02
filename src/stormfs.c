@@ -51,6 +51,7 @@ struct stormfs {
   char *secret_key;
   char *mountpoint;
   char *storage_class;
+  char *expires;
   mode_t root_mode;
   GHashTable *mime_types;
 } stormfs;
@@ -60,6 +61,7 @@ struct stormfs {
 static struct fuse_opt stormfs_opts[] = {
   STORMFS_OPT("acl=%s",        acl,           0),
   STORMFS_OPT("url=%s",        url,           0),
+  STORMFS_OPT("expires=%s",    expires,       0),
   STORMFS_OPT("use_ssl",       ssl,           true),
   STORMFS_OPT("no_verify_ssl", verify_ssl,    0),
   STORMFS_OPT("use_rrs",       rrs,           true),
@@ -376,6 +378,9 @@ stormfs_truncate(const char *path, off_t size)
   headers = add_header(headers, uid_header(getuid()));
   headers = add_header(headers, mode_header(st.st_mode));
   headers = add_header(headers, mtime_header(time(NULL)));
+  if(stormfs.expires != NULL)
+    headers = add_header(headers, expires_header(stormfs.expires));
+
   result = stormfs_curl_upload(path, headers, fd);
   free_headers(headers);
 
@@ -432,6 +437,8 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   headers = add_header(headers, mode_header(mode));
   headers = add_header(headers, mtime_header(time(NULL)));
   headers = add_header(headers, content_header(get_mime_type(path)));
+  if(stormfs.expires != NULL)
+    headers = add_header(headers, expires_header(stormfs.expires));
 
   result = stormfs_curl_put_headers(path, headers);
   free_headers(headers);
@@ -535,6 +542,9 @@ stormfs_mkdir(const char *path, mode_t mode)
   headers = add_header(headers, mode_header(mode));
   headers = add_header(headers, mtime_header(time(NULL)));
   headers = add_header(headers, content_header("application/x-directory"));
+  if(stormfs.expires != NULL)
+    headers = add_header(headers, expires_header(stormfs.expires));
+
   result = stormfs_curl_upload(path, headers, fd);
   free_headers(headers);
 
@@ -558,6 +568,8 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
   headers = add_header(headers, uid_header(getuid()));
   headers = add_header(headers, mode_header(mode));
   headers = add_header(headers, mtime_header(time(NULL)));
+  if(stormfs.expires != NULL)
+    headers = add_header(headers, expires_header(stormfs.expires));
 
   result = stormfs_curl_put_headers(path, headers);
   free_headers(headers);
@@ -741,6 +753,8 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     headers = add_header(headers, storage_header(stormfs.storage_class));
     headers = add_header(headers, acl_header(stormfs.acl));
     headers = add_header(headers, mtime_header(time(NULL)));
+    if(stormfs.expires != NULL)
+      headers = add_header(headers, expires_header(stormfs.expires));
 
     result = stormfs_curl_upload(path, headers, fi->fh);
     free_headers(headers);
@@ -927,6 +941,8 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   headers = add_header(headers, mtime_header(ts[1].tv_sec));
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
+  if(stormfs.expires != NULL)
+    headers = add_header(headers, expires_header(stormfs.expires));
 
   result = stormfs_curl_put_headers(path, headers);
   free_headers(headers);
@@ -999,25 +1015,27 @@ usage(const char *progname)
 "usage: %s bucket mountpoint [options]\n"
 "\n"
 "general options:\n"
-"    -o opt,[opt...]        mount options\n"
-"    -h   --help            print help\n"
-"    -V   --version         print version\n"
-"\n"
-"STORMFS options:\n"
-"    -o url=URL             specify a custom service URL\n"
-"    -o acl=ACL             canned acl applied to objects (default: private)\n"
-"                           valid options: {private,\n" 
-"                                           public-read,\n"
-"                                           public-read-write,\n"
-"                                           authenticated-read,\n"
-"                                           bucket-owner-read,\n"
-"                                           bucket-owner-full-control}\n"
-"    -o use_ssl             force the use of SSL\n"
-"    -o no_verify_ssl       skip SSL certificate/host verification\n"
-"    -o use_rrs             use reduced redundancy storage\n"
-"    -o cache=BOOL          enable caching {yes,no} (default: yes)\n"
-"    -o cache_timeout=N     sets timeout for caches in seconds (default: 300)\n"
-"    -o cache_X_timeout=N   sets timeout for {stat,dir,link} cache\n"
+"    -o opt,[opt...]         mount options\n"
+"    -h   --help             print help\n"
+"    -V   --version          print version\n"
+"\n"                         
+"STORMFS options:\n"         
+"    -o url=URL              specify a custom service URL\n"
+"    -o acl=ACL              canned acl applied to objects (default: private)\n"
+"                            valid options: {private,\n" 
+"                                            public-read,\n"
+"                                            public-read-write,\n"
+"                                            authenticated-read,\n"
+"                                            bucket-owner-read,\n"
+"                                            bucket-owner-full-control}\n"
+"    -o expires=RFC1123DATE  expires HTTP header applied to objects\n"
+"                              (default: disabled)\n"
+"    -o use_ssl              force the use of SSL\n"
+"    -o no_verify_ssl        skip SSL certificate/host verification\n"
+"    -o use_rrs              use reduced redundancy storage\n"
+"    -o cache=BOOL           enable caching {yes,no} (default: yes)\n"
+"    -o cache_timeout=N      sets timeout for caches in seconds (default: 300)\n"
+"    -o cache_X_timeout=N    sets timeout for {stat,dir,link} cache\n"
 "\n", progname);
 }
 
