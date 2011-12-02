@@ -256,6 +256,18 @@ get_mime_type(const char *filename)
   return g_hash_table_lookup(stormfs.mime_types, ext);
 }
 
+char *
+get_path(const char *path, const char *name)
+{
+  char *fullpath = g_malloc(sizeof(char) * strlen(path) + strlen(name) + 2);
+  strcpy(fullpath, path);
+  if(strcmp(path, "/") != 0)
+    strncat(fullpath, "/", 1);
+  strncat(fullpath, name, strlen(name));
+
+  return fullpath;
+}
+
 static int
 headers_to_stat(GList *headers, struct stat *stbuf)
 {
@@ -787,16 +799,8 @@ stormfs_rename_directory(const char *from, const char *to)
      
     tmp = g_strndup(start_p, end_p - start_p);
     name = basename(tmp);
-
-    file_from = g_malloc(sizeof(char) * strlen(from) + strlen(name) + 2);
-    file_from = strcpy(file_from, from);
-    file_from = strncat(file_from, "/", 1);
-    file_from = strncat(file_from, name, strlen(name));
-
-    file_to = g_malloc(sizeof(char) * strlen(to) + strlen(name) + 2);
-    file_to = strcpy(file_to, to);
-    file_to = strncat(file_to, "/", 1);
-    file_to = strncat(file_to, name, strlen(name));
+    file_from = get_path(from, name);
+    file_to   = get_path(to, name);
 
     stormfs_getattr(file_from, &st);
     if(S_ISDIR(st.st_mode)) {

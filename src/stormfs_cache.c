@@ -69,18 +69,6 @@ cache_get(const char *path)
   return node;
 }
 
-char *
-get_path(const char *path, const char *name)
-{
-  char *fullpath = g_malloc(sizeof(char) * strlen(path) + strlen(name) + 2);
-  strcpy(fullpath, path);
-  if(strcmp(path, "/") != 0)
-    strncat(fullpath, "/", 1);
-  strncat(fullpath, name, strlen(name));
-
-  return fullpath;
-}
-
 static void
 free_node(gpointer node_)
 {
