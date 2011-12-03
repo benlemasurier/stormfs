@@ -5,6 +5,9 @@
   \__ \ / / / / / / /_/ / /|_/ / /_   \__ \ 
  ___/ // / / /_/ / _, _/ /  / / __/  ___/ / 
 /____//_/  \____/_/ |_/_/  /_/_/    /____/  
+
+
+A FUSE abstraction layer for cloud storage.
   
 
 Installation Requirements:
@@ -74,8 +77,17 @@ Google Cloud Storage[1]
 Testing
 =============================================================================
 StormFS strives to be fully POSIX compliant, the folks at Tuxera have created
-an extensive test suit available at: 
-  http://www.tuxera.com/community/posix-test-suite/
+an extensive test suit available at:
+    http://www.tuxera.com/community/posix-test-suite/
 
-To run the tests, mount a bucket and cd into the root. Then run 
-    prove -r /path/to/fstest
+Once compiled, you can run the tests like so:
+  $ cd /path/to/mounted/bucked/testdir
+  $ prove -r /path/to/fstest
+
+
+BUGS
+=============================================================================
+Bugs can be reported at https://github.com/benlemasurier/stormfs/issues
+
+Please be sure to check whether your bug has already been submitted. If it
+hasn't, try to provide as much information as necessary to reproduce the bug.
