@@ -118,6 +118,28 @@ blkcnt_t get_blocks(off_t size)
   return size / 512 + 1;
 }
 
+static int
+valid_path(const char *path)
+{
+  char *p = NULL;
+  char *tmp = strdup(path);
+
+  if(strlen(path) > PATH_MAX)
+    return -ENAMETOOLONG;
+
+  p = strtok(tmp, "/");
+  while(p != NULL) {
+    if(strlen(p) > NAME_MAX)
+      return -ENAMETOOLONG;
+
+    p = strtok(NULL, "/"); 
+  }
+
+  g_free(tmp);
+
+  return 0;
+}
+
 void
 free_file(struct file *f)
 {
@@ -463,6 +485,9 @@ stormfs_chmod(const char *path, mode_t mode)
 
   DEBUG("chmod: %s\n", path);
 
+  if((result = valid_path(path)) != 0)
+    return result;
+
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
 
@@ -486,6 +511,9 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   errno = 0;
 
   DEBUG("chown: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
 
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
