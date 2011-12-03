@@ -1006,23 +1006,34 @@ set_defaults()
 static void
 validate_config()
 {
+  bool valid = true;
+
   if(!stormfs.bucket) {
     fprintf(stderr, "%s: missing BUCKET command-line option, see %s -h for usage\n",
         stormfs.progname, stormfs.progname);
-    exit(EXIT_FAILURE);
+    valid = false;
   }
 
   if(!stormfs.mountpoint) {
     fprintf(stderr, "%s: missing MOUNTPOINT command-line option, see %s -h for usage\n",
         stormfs.progname, stormfs.progname);
-    exit(EXIT_FAILURE);
+    valid = false;
   }
 
   if(!valid_acl(stormfs.acl)) {
     fprintf(stderr, "%s: invalid ACL %s, see %s -h for usage\n",
         stormfs.progname, stormfs.acl, stormfs.progname);
-    exit(EXIT_FAILURE);
+    valid = false;
   }
+
+  if(stormfs.access_key == NULL || stormfs.secret_key == NULL) {
+    fprintf(stderr, "%s: missing access credentials, verify %s is correct\n",
+        stormfs.progname, stormfs.config);
+    valid = false;
+  }
+
+  if(!valid)
+    exit(EXIT_FAILURE);
 }
 
 static void
