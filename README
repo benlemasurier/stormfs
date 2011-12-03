@@ -70,3 +70,12 @@ Google Cloud Storage[1]
 
 [1] You must enable "Interoperable Access" and use the provided
       "Legacy Storage Access Keys"
+
+Testing
+=============================================================================
+StormFS strives to be fully POSIX compliant, the folks at Tuxera have created
+an extensive test suit available at: 
+  http://www.tuxera.com/community/posix-test-suite/
+
+To run the tests, mount a bucket and cd into the root. Then run 
+    prove -r /path/to/fstest
