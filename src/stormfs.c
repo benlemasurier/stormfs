@@ -1100,7 +1100,7 @@ parse_config(const char *path)
   struct stat *st = g_malloc0(sizeof(struct stat));
 
   if(stat(path, st) == -1) {
-    fprintf(stderr, "%s: missing configuration file %s",
+    fprintf(stderr, "%s: missing configuration file %s\n",
         stormfs.progname, path);
     exit(EXIT_FAILURE);
   }
