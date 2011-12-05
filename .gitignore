@@ -5,7 +5,7 @@ autom4te.cache
 aclocal.m4
 compile
 configure
-config.h
+config.*
 config.log
 depcomp
 install-sh
@@ -17,6 +17,7 @@ config.status
 Makefile
 Makefile.in
 stormfs
+/INSTALL
 
 src/Makefile
 src/Makefile.in
