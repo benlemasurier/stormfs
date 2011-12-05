@@ -482,7 +482,8 @@ rfc2822_timestamp()
   char *date;
 
   time_t t = time(NULL);
-  strftime(s, sizeof(s), "%a, %d %b %Y %T %z", gmtime(&t));
+  // strftime(s, sizeof(s), "%a, %d %b %Y %T %z", gmtime(&t));
+  strftime(s, sizeof(s), "%a, %d %b %Y %T GMT", gmtime(&t));
 
   date = strdup(s);
 

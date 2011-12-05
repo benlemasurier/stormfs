@@ -1107,8 +1107,10 @@ parse_config(const char *path)
 
   validate_config_perms(st);
 
-  if((fd = open(path, O_RDONLY)) == -1)
+  if((fd = open(path, O_RDONLY)) == -1) {
+    perror("open");
     return;
+  }
 
   while((n = read(fd, buf, BUFSIZ)) > 0)
     buf[n] = '\0';
