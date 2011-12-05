@@ -25,7 +25,7 @@
 #include <pthread.h>
 #include <glib.h>
 #include "stormfs.h"
-#include "stormfs_curl.h"
+#include "curl.h"
 
 #define CURL_RETRIES 3
 #define SHA1_BLOCK_SIZE 64

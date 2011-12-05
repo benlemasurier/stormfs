@@ -22,7 +22,7 @@
 #include <fuse_opt.h>
 #include <pthread.h>
 #include "stormfs.h"
-#include "stormfs_cache.h"
+#include "cache.h"
 
 #define DEFAULT_CACHE_TIMEOUT 300
 #define MAX_CACHE_SIZE 10000

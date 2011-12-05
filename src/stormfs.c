@@ -27,8 +27,8 @@
 #include <fuse.h>
 #include <glib.h>
 #include "stormfs.h"
-#include "stormfs_cache.h"
-#include "stormfs_curl.h"
+#include "cache.h"
+#include "curl.h"
 
 enum {
   KEY_HELP,
