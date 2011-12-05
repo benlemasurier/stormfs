@@ -71,6 +71,11 @@ Amazon Simple Storage Service (Amazon S3)
 Eucalyptus (Walrus S3)
 Google Cloud Storage[1]
 
+Support is planned for the following services:
+  Dropbox
+  Rackspace Cloud Files
+  Google Cloud Storage (native API)
+
 [1] You must enable "Interoperable Access" and use the provided
       "Legacy Storage Access Keys"
 
