@@ -359,6 +359,18 @@ cache_mkdir(const char *path, mode_t mode)
 }
 
 static int
+cache_mknod(const char *path, mode_t mode, dev_t rdev)
+{
+  int result;
+  if((result = cache.next_oper->oper.mknod(path, mode, rdev)) != 0)
+    return result;
+
+  cache_invalidate_dir(path);
+
+  return result;
+}
+
+static int
 cache_open(const char *path, struct fuse_file_info *fi)
 {
   FILE *f;
@@ -611,6 +623,7 @@ cache_unity_fill(struct fuse_cache_operations *oper,
   cache_oper->init     = oper->oper.init;
   cache_oper->flush    = oper->oper.flush;
   cache_oper->mkdir    = oper->oper.mkdir;
+  cache_oper->mknod    = oper->oper.mknod;
   cache_oper->open     = oper->oper.open;
   cache_oper->read     = oper->oper.read;
   cache_oper->readdir  = oper->oper.readdir;
@@ -636,6 +649,7 @@ cache_fill(struct fuse_cache_operations *oper,
   cache_oper->getattr  = oper->oper.getattr  ? cache_getattr  : NULL;
   cache_oper->flush    = oper->oper.flush    ? cache_flush    : NULL;
   cache_oper->mkdir    = oper->oper.mkdir    ? cache_mkdir    : NULL;
+  cache_oper->mknod    = oper->oper.mknod    ? cache_mknod    : NULL;
   cache_oper->open     = oper->oper.open     ? cache_open     : NULL;
   cache_oper->read     = oper->oper.read     ? cache_read     : NULL;
   cache_oper->readdir  = oper->list_bucket   ? cache_readdir  : NULL;
