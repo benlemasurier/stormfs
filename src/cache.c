@@ -546,6 +546,7 @@ cache_write(const char *path, const char *buf,
 static int
 create_cache_path(const char *path)
 {
+  fprintf(stderr, "warning: %s does not exist, creating.\n", path);
   return mkdir(path, S_IRWXU);
 }
 
@@ -566,6 +567,11 @@ validate_cache_path(const char *path)
   if(result != 0) {
     perror("stat");
     return result;
+  }
+
+  if(!S_ISDIR(st.st_mode)) {
+    fprintf(stderr, "error: %s is not a directory\n", path);
+    return -ENOTDIR;
   }
 
   return result;

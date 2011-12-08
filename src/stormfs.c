@@ -1298,7 +1298,7 @@ main(int argc, char *argv[])
   DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
   DEBUG("STORMFS acl:           %s\n", stormfs.acl);
 
-  if(cache_parse_options(&args) == -1)
+  if(cache_parse_options(&args) != 0)
     exit(EXIT_FAILURE);
 
   if((status = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
