@@ -18,12 +18,15 @@
 #include <errno.h>
 #include <glib.h>
 #include <sys/select.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <fuse.h>
 #include <fuse_opt.h>
 #include <pthread.h>
 #include "stormfs.h"
 #include "cache.h"
 
+#define DEFAULT_CACHE_PATH "/tmp/stormfs"
 #define DEFAULT_CACHE_TIMEOUT 300
 #define MAX_CACHE_SIZE 10000
 #define MIN_CACHE_CLEAN_INTERVAL 5
@@ -35,9 +38,11 @@ struct cache {
   unsigned dir_timeout;
   unsigned stat_timeout;
   unsigned link_timeout;
+  unsigned file_timeout;
   GHashTable *table;
   pthread_mutex_t lock;
   struct fuse_cache_operations *next_oper;
+  char *path;
 } cache;
 
 struct node {
@@ -45,10 +50,25 @@ struct node {
   time_t dir_valid;
   time_t link_valid;
   time_t stat_valid;
+  time_t file_valid;
   struct stat stat;
   GList *dir;
   char *link;
+  char *path;
 };
+
+static char *
+cache_path(const char *path)
+{
+  size_t path_len  = strlen(path);
+  size_t cache_len = strlen(cache.path);
+  char *cache_path = g_malloc0(sizeof(char) * path_len + cache_len + 1);
+
+  cache_path = strcpy(cache_path, cache.path);
+  cache_path = strncat(cache_path, path, path_len);
+
+  return cache_path;
+}
 
 static struct node *
 cache_lookup(const char *path)
@@ -74,6 +94,7 @@ free_node(gpointer node_)
 {
   struct node *node = (struct node *) node_;
   g_list_free_full(node->dir, g_free);
+  if(node->path != NULL) g_free(node->path);
   g_free(node);
 }
 
@@ -239,6 +260,37 @@ cache_add_link(const char *path, const char *link, size_t size)
   pthread_mutex_unlock(&cache.lock);
 }
 
+static void
+cache_add_file(const char *path, uint64_t fd)
+{
+  int cache_fd;
+  struct node *node;
+  time_t now;
+  char buf[BUFSIZ];
+  ssize_t n;
+
+  pthread_mutex_lock(&cache.lock);
+  node = cache_get(path);
+  now = time(NULL);
+  node->path = cache_path(path);
+  
+  if((cache_fd = open(node->path, O_CREAT | O_WRONLY)) == -1)
+    fprintf(stderr, "FIXME: ZOMGFUCFIXMEOUCHCACHEFAIL\n");
+
+  while((n = read(fd, buf, BUFSIZ)) > 0)
+    if(write(cache_fd, buf, n) == -1)
+      fprintf(stderr, "FIXME: WRITEFAILZOMGFUC\n");
+
+  close(cache_fd);
+
+  printf("ADDED A FILE TO THE CACHE: %s\n", node->path);
+  node->file_valid = time(NULL) + cache.file_timeout;
+  if(node->file_valid > node->valid)
+    node->valid = node->file_valid;
+  cache_clean();
+  pthread_mutex_unlock(&cache.lock);
+}
+
 static int
 cache_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
@@ -322,7 +374,11 @@ cache_open(const char *path, struct fuse_file_info *fi)
   if((result = cache.next_oper->oper.open(path, fi)) != 0)
     return result;
 
-  fi->keep_cache = 1;
+  // this would be fsckn sweet but FUSE is completely undocumented.
+  // writing the mailing list will get you nowhere.
+  //fi->keep_cache = 1;
+
+  cache_add_file(path, fi->fh);
 
   return result;
 }
@@ -565,13 +621,15 @@ cache_init(struct fuse_cache_operations *oper)
 }
 
 static const struct fuse_opt cache_opts[] = {
-  {"cache=yes",             offsetof(struct cache, on), 1},
-  {"cache=no",              offsetof(struct cache, on), 0},
+  {"cache=yes",             offsetof(struct cache, on),           1},
+  {"cache=no",              offsetof(struct cache, on),           0},
+  {"cache_path=%s",         offsetof(struct cache, path),         0},
   {"cache_timeout=%u",      offsetof(struct cache, stat_timeout), 0},
   {"cache_timeout=%u",      offsetof(struct cache, dir_timeout),  0},
   {"cache_stat_timeout=%u", offsetof(struct cache, stat_timeout), 0},
   {"cache_link_timeout=%u", offsetof(struct cache, link_timeout), 0},
   {"cache_dir_timeout=%u",  offsetof(struct cache, dir_timeout),  0},
+  {"cache_file_timeout=%u", offsetof(struct cache, file_timeout),  0},
   FUSE_OPT_END
 };
 
@@ -579,9 +637,11 @@ int
 cache_parse_options(struct fuse_args *args)
 {
   cache.on = 1;
+  cache.path = DEFAULT_CACHE_PATH;
   cache.dir_timeout  = DEFAULT_CACHE_TIMEOUT;
   cache.stat_timeout = DEFAULT_CACHE_TIMEOUT;
   cache.link_timeout = DEFAULT_CACHE_TIMEOUT;
+  cache.file_timeout = DEFAULT_CACHE_TIMEOUT;
 
   return fuse_opt_parse(args, &cache, cache_opts, NULL);
 }
