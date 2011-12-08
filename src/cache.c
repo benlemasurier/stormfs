@@ -261,20 +261,25 @@ cache_add_link(const char *path, const char *link, size_t size)
 }
 
 static void
-cache_add_file(const char *path, uint64_t fd)
+cache_add_file(const char *path, uint64_t fd, mode_t mode)
 {
   int cache_fd;
   struct node *node;
   time_t now;
   char buf[BUFSIZ];
   ssize_t n;
+  struct stat st;
 
   pthread_mutex_lock(&cache.lock);
   node = cache_get(path);
   now = time(NULL);
   node->path = cache_path(path);
+
+  if(stat(node->path, &st) == 0)
+    if(unlink(node->path) != 0)
+      perror("unlink");
   
-  if((cache_fd = open(node->path, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR)) == -1)
+  if((cache_fd = open(node->path, O_CREAT | O_EXCL | O_RDWR, mode)) == -1)
     fprintf(stderr, "FIXME: ZOMGFUCFIXMEOUCHCACHEFAIL\n");
 
   while((n = read(fd, buf, BUFSIZ)) > 0)
@@ -283,7 +288,6 @@ cache_add_file(const char *path, uint64_t fd)
 
   close(cache_fd);
 
-  printf("ADDED A FILE TO THE CACHE: %s\n", node->path);
   node->file_valid = time(NULL) + cache.file_timeout;
   if(node->file_valid > node->valid)
     node->valid = node->file_valid;
@@ -369,12 +373,41 @@ cache_mknod(const char *path, mode_t mode, dev_t rdev)
 static int
 cache_open(const char *path, struct fuse_file_info *fi)
 {
+  FILE *f;
   int result;
+  struct node *node;
+
+  node = cache_lookup(path);
+
+  if(node != NULL && node->path != NULL) {
+    time_t now = time(NULL);
+    if(node->file_valid - now >= 0) {
+      if((unsigned int) fi->flags & O_TRUNC)
+        if(truncate(node->path, 0) == -1)
+          return -errno;
+
+      // FIXME: mode should reflect fi->flags
+      f = fopen(node->path, "a+");
+      fi->fh = fileno(f);
+      fsync(fi->fh);
+
+      return 0;
+    }
+  }
 
   if((result = cache.next_oper->oper.open(path, fi)) != 0)
     return result;
 
-  cache_add_file(path, fi->fh);
+  cache_add_file(path, fi->fh, node->stat.st_mode);
+
+  return result;
+}
+
+static int
+cache_read(const char *path, char *buf, size_t size, off_t offset,
+    struct fuse_file_info *fi)
+{
+  int result = cache.next_oper->oper.read(path, buf, size, offset, fi);
 
   return result;
 }
@@ -463,7 +496,8 @@ cache_release(const char *path, struct fuse_file_info *fi)
 {
   int result = cache.next_oper->oper.release(path, fi);
   if(result == 0)
-    cache_invalidate_dir(path);
+    if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY))
+      cache_invalidate_dir(path);
 
   return result;
 }
@@ -617,6 +651,7 @@ cache_fill(struct fuse_cache_operations *oper,
   cache_oper->mkdir    = oper->oper.mkdir    ? cache_mkdir    : NULL;
   cache_oper->mknod    = oper->oper.mknod    ? cache_mknod    : NULL;
   cache_oper->open     = oper->oper.open     ? cache_open     : NULL;
+  cache_oper->read     = oper->oper.read     ? cache_read     : NULL;
   cache_oper->readdir  = oper->list_bucket   ? cache_readdir  : NULL;
   cache_oper->readlink = oper->oper.readlink ? cache_readlink : NULL;
   cache_oper->release  = oper->oper.release  ? cache_release  : NULL;

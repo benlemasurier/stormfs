@@ -1102,19 +1102,27 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
   struct stat st;
   struct curl_slist *req_headers = NULL;
 
-  if(fstat(fd, &st) != 0)
+  if(fstat(fd, &st) != 0) {
+    perror("fstat");
     return -errno;
+  }
 
   // TODO: support multipart uploads (>5GB files)
   if(st.st_size >= FIVE_GB)
     return -EFBIG;
-  
-  if((f = fdopen(fd, "rb")) == NULL)
+
+  if(lseek(fd, 0, SEEK_SET) == -1) {
+    perror("lseek");
     return -errno;
+  }
+  
+  if((f = fdopen(fd, "rb")) == NULL) {
+    perror("fdopen");
+    return -errno;
+  }
 
   url = get_url(path);
   c = get_curl_handle(url);
-
   req_headers = headers_to_curl_slist(headers);
 
   sign_request("PUT", &req_headers, path);

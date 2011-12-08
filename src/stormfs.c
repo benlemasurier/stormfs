@@ -793,8 +793,10 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     free_headers(headers);
   }
 
-  if(close(fi->fh) != 0)
+  if(close(fi->fh) != 0) {
+    perror("close");
     return -errno;
+  }
 
   return result;
 }
@@ -987,6 +989,7 @@ static int
 stormfs_write(const char *path, const char *buf, 
     size_t size, off_t offset, struct fuse_file_info *fi)
 {
+  DEBUG("write: %s\n", path);
   return pwrite(fi->fh, buf, size, offset);
 }
 
@@ -1185,8 +1188,9 @@ usage(const char *progname)
 "    -o no_verify_ssl        skip SSL certificate/host verification\n"
 "    -o use_rrs              use reduced redundancy storage\n"
 "    -o cache=BOOL           enable caching {yes,no} (default: yes)\n"
+"    -o cache_path=PATH      path to store cached files (default: /tmp/stormfs)\n"
 "    -o cache_timeout=N      sets timeout for caches in seconds (default: 300)\n"
-"    -o cache_X_timeout=N    sets timeout for {stat,dir,link} cache\n"
+"    -o cache_X_timeout=N    sets timeout for {file,stat,dir,link} cache\n"
 "\n", progname);
 }
 
