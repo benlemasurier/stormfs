@@ -587,29 +587,6 @@ stormfs_mkdir(const char *path, mode_t mode)
   return result;
 }
 
-static int
-stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
-{
-  int result;
-  GList *headers = NULL;
-
-  DEBUG("mknod: %s\n", path);
-
-  headers = add_header(headers, storage_header(stormfs.storage_class));
-  headers = add_header(headers, acl_header(stormfs.acl));
-  headers = add_header(headers, gid_header(getgid()));
-  headers = add_header(headers, uid_header(getuid()));
-  headers = add_header(headers, mode_header(mode));
-  headers = add_header(headers, mtime_header(time(NULL)));
-  if(stormfs.expires != NULL)
-    headers = add_header(headers, expires_header(stormfs.expires));
-
-  result = stormfs_curl_put_headers(path, headers);
-  free_headers(headers);
-
-  return result;
-}
-
 int
 stormfs_getattr_multi(const char *path, GList *files)
 {
@@ -1204,7 +1181,6 @@ static struct fuse_cache_operations stormfs_oper = {
     .init     = stormfs_init,
     .flush    = stormfs_flush,
     .mkdir    = stormfs_mkdir,
-    .mknod    = stormfs_mknod,
     .open     = stormfs_open,
     .read     = stormfs_read,
     .readdir  = stormfs_readdir,
