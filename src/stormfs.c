@@ -118,7 +118,7 @@ blkcnt_t get_blocks(off_t size)
   return size / 512 + 1;
 }
 
-static int
+static inline int
 valid_path(const char *path)
 {
   char *p = NULL;
@@ -337,10 +337,13 @@ headers_to_stat(GList *headers, struct stat *stbuf)
 static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
-  int status;
+  int result;
   GList *headers = NULL;
 
   DEBUG("getattr: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
 
   memset(stbuf, 0, sizeof(struct stat));
   stbuf->st_nlink = 1;
@@ -350,11 +353,11 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     return 0;
   }
 
-  if((status = stormfs_curl_head(path, &headers)) != 0)
-    return status;
+  if((result = stormfs_curl_head(path, &headers)) != 0)
+    return result;
   
-  if((status = headers_to_stat(headers, stbuf)) != 0)
-    return status;
+  if((result = headers_to_stat(headers, stbuf)) != 0)
+    return result;
 
   if(S_ISREG(stbuf->st_mode))
     stbuf->st_blocks = get_blocks(stbuf->st_size);
@@ -367,7 +370,13 @@ stormfs_getattr(const char *path, struct stat *stbuf)
 static int
 stormfs_unlink(const char *path)
 {
+  int result;
+
   DEBUG("unlink: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
+
   return stormfs_curl_delete(path);
 }
 
@@ -381,6 +390,9 @@ stormfs_truncate(const char *path, off_t size)
   GList *headers = NULL;
 
   DEBUG("truncate: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
 
   if((f = tmpfile()) == NULL)
     return -errno;
@@ -426,6 +438,9 @@ stormfs_open(const char *path, struct fuse_file_info *fi)
 
   DEBUG("open: %s\n", path);
 
+  if((result = valid_path(path)) != 0)
+    return result;
+
   if((unsigned int) fi->flags & O_TRUNC)
     if((result = stormfs_truncate(path, 0)) != 0)
       return result;
@@ -456,6 +471,9 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   GList *headers = NULL;
 
   DEBUG("create: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
 
   headers = add_header(headers, storage_header(stormfs.storage_class));
   headers = add_header(headers, acl_header(stormfs.acl));
@@ -542,7 +560,12 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
 static int
 stormfs_flush(const char *path, struct fuse_file_info *fi)
 {
+  int result;
+
   DEBUG("flush: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
 
   if(fsync(fi->fh) != 0)
     return -errno;
@@ -559,6 +582,9 @@ stormfs_mkdir(const char *path, mode_t mode)
   GList *headers = NULL;
 
   DEBUG("mkdir: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
 
   if((f = tmpfile()) == NULL)
     return -errno;
@@ -594,6 +620,9 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
   GList *headers = NULL;
 
   DEBUG("mknod: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
 
   if((mode & S_IFMT) != S_IFREG)
     return -EPERM;
@@ -659,7 +688,12 @@ static int
 stormfs_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
 {
+  int result;
+
   DEBUG("read: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
 
   return pread(fi->fh, buf, size, offset);
 }
@@ -708,6 +742,9 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
   DEBUG("readdir: %s\n", path);
 
+  if((result = valid_path(path)) != 0)
+    return result;
+
   if((result = stormfs_list_bucket(path, &files)) != 0)
     return result;
 
@@ -736,6 +773,9 @@ stormfs_readlink(const char *path, char *buf, size_t size)
   struct stat st;
 
   DEBUG("readlink: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
 
   if(size <= 0)
     return 0;
@@ -779,6 +819,9 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
   int result = 0;
 
   DEBUG("release: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
   
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
     GList *headers = NULL;
@@ -884,6 +927,11 @@ stormfs_rename(const char *from, const char *to)
 
   DEBUG("rename: %s -> %s\n", from, to);
 
+  if((result = valid_path(from)) != 0)
+    return result;
+  if((result = valid_path(to)) != 0)
+    return result;
+
   if((result = stormfs_getattr(from, &st)) != 0)
     return -result;
 
@@ -906,6 +954,9 @@ stormfs_rmdir(const char *path)
   char *data;
 
   DEBUG("rmdir: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
 
   if((result = stormfs_curl_get(path, &data)) != 0) {
     g_free(data);
@@ -944,6 +995,11 @@ stormfs_symlink(const char *from, const char *to)
 
   DEBUG("symlink: %s -> %s\n", from, to);
 
+  if((result = valid_path(from)) != 0)
+    return result;
+  if((result = valid_path(to)) != 0)
+    return result;
+
   if((fd = fileno(tmpfile())) == -1)
     return -errno;
 
@@ -971,6 +1027,9 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
 
   DEBUG("utimens: %s\n", path);
 
+  if((result = valid_path(path)) != 0)
+    return result;
+
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
 
@@ -992,7 +1051,13 @@ static int
 stormfs_write(const char *path, const char *buf, 
     size_t size, off_t offset, struct fuse_file_info *fi)
 {
+  int result;
+
   DEBUG("write: %s\n", path);
+
+  if((result = valid_path(path)) != 0)
+    return result;
+
   return pwrite(fi->fh, buf, size, offset);
 }
 
