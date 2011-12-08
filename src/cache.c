@@ -274,7 +274,7 @@ cache_add_file(const char *path, uint64_t fd)
   now = time(NULL);
   node->path = cache_path(path);
   
-  if((cache_fd = open(node->path, O_CREAT | O_WRONLY)) == -1)
+  if((cache_fd = open(node->path, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR)) == -1)
     fprintf(stderr, "FIXME: ZOMGFUCFIXMEOUCHCACHEFAIL\n");
 
   while((n = read(fd, buf, BUFSIZ)) > 0)
@@ -373,10 +373,6 @@ cache_open(const char *path, struct fuse_file_info *fi)
 
   if((result = cache.next_oper->oper.open(path, fi)) != 0)
     return result;
-
-  // this would be fsckn sweet but FUSE is completely undocumented.
-  // writing the mailing list will get you nowhere.
-  //fi->keep_cache = 1;
 
   cache_add_file(path, fi->fh);
 
@@ -547,6 +543,34 @@ cache_write(const char *path, const char *buf,
   return result;
 }
 
+static int
+create_cache_path(const char *path)
+{
+  return mkdir(path, S_IRWXU);
+}
+
+static int
+validate_cache_path(const char *path)
+{
+  int result;
+  struct stat st;
+
+  result = stat(path, &st);
+  if(errno == ENOENT) {
+    if((result = create_cache_path(path)) != 0)
+      return result;
+    else
+      result = stat(path, &st);
+  }
+
+  if(result != 0) {
+    perror("stat");
+    return result;
+  }
+
+  return result;
+}
+
 static void
 cache_unity_fill(struct fuse_cache_operations *oper, 
     struct fuse_operations *cache_oper)
@@ -629,13 +653,15 @@ static const struct fuse_opt cache_opts[] = {
   {"cache_stat_timeout=%u", offsetof(struct cache, stat_timeout), 0},
   {"cache_link_timeout=%u", offsetof(struct cache, link_timeout), 0},
   {"cache_dir_timeout=%u",  offsetof(struct cache, dir_timeout),  0},
-  {"cache_file_timeout=%u", offsetof(struct cache, file_timeout),  0},
+  {"cache_file_timeout=%u", offsetof(struct cache, file_timeout), 0},
   FUSE_OPT_END
 };
 
 int
 cache_parse_options(struct fuse_args *args)
 {
+  int result;
+
   cache.on = 1;
   cache.path = DEFAULT_CACHE_PATH;
   cache.dir_timeout  = DEFAULT_CACHE_TIMEOUT;
@@ -643,5 +669,8 @@ cache_parse_options(struct fuse_args *args)
   cache.link_timeout = DEFAULT_CACHE_TIMEOUT;
   cache.file_timeout = DEFAULT_CACHE_TIMEOUT;
 
-  return fuse_opt_parse(args, &cache, cache_opts, NULL);
+  if((result = fuse_opt_parse(args, &cache, cache_opts, NULL)) == -1)
+    return result;
+
+  return validate_cache_path(cache.path);
 }
