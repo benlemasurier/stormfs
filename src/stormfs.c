@@ -595,6 +595,9 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
 
   DEBUG("mknod: %s\n", path);
 
+  if((mode & S_IFMT) != S_IFREG)
+    return -EPERM;
+
   headers = add_header(headers, storage_header(stormfs.storage_class));
   headers = add_header(headers, acl_header(stormfs.acl));
   headers = add_header(headers, gid_header(getgid()));
