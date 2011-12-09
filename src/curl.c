@@ -641,7 +641,9 @@ set_curl_defaults(CURL **c)
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
   curl_easy_setopt(*c, CURLOPT_DNS_CACHE_TIMEOUT, -1);
   curl_easy_setopt(*c, CURLOPT_SSL_VERIFYHOST, stormfs_curl.verify_ssl);
+  curl_easy_setopt(*c, CURLOPT_SHARE, stormfs_curl.share);
 
+  // curl_easy_setopt(*c, CURLOPT_TCP_NODELAY, 1);
   // curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
   // curl_easy_setopt(*c, CURLOPT_FORBID_REUSE, 1);
 
@@ -769,7 +771,6 @@ get_curl_handle(const char *url)
   c = curl_easy_init();
   set_curl_defaults(&c);
   curl_easy_setopt(c, CURLOPT_URL, url);
-  curl_easy_setopt(c, CURLOPT_SHARE, stormfs_curl.share);
 
   return c;
 }
