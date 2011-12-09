@@ -1368,6 +1368,7 @@ main(int argc, char *argv[])
   stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
   stormfs_curl_verify_ssl(stormfs.verify_ssl);
 
+  g_thread_init(NULL);
   status = stormfs_fuse_main(&args);
   fuse_opt_free_args(&args);
 

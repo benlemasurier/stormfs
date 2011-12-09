@@ -371,7 +371,7 @@ char *
 header_to_s(HTTP_HEADER *h)
 {
   char *s;
-  s = g_malloc(sizeof(char) * strlen(h->key) + strlen(h->value) + 2);
+  s = g_malloc0(sizeof(char) * strlen(h->key) + strlen(h->value) + 2);
   s = strcpy(s, h->key);
   s = strcat(s, ":");
   s = strncat(s, h->value, strlen(h->value));
