@@ -20,6 +20,7 @@
 #include <sys/select.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <libgen.h>
 #include <fuse.h>
 #include <fuse_opt.h>
 #include <pthread.h>
@@ -68,6 +69,45 @@ cache_path(const char *path)
   cache_path = strncat(cache_path, path, path_len);
 
   return cache_path;
+}
+
+static int
+mkpath(const char *path)
+{
+  int result = 0;
+  struct stat st;
+  char *p = NULL, *dir = strdup(path);
+  char *tmp = g_malloc0(sizeof(char) * strlen(cache.path) + strlen(dir) + 1);
+
+  dir = dirname(dir);
+  tmp = strcpy(tmp, cache.path);
+  p = strtok(dir, "/"); 
+  while(p != NULL) {
+    tmp = strncat(tmp, "/", 1);
+    tmp = strncat(tmp, p, strlen(p));
+
+    if(stat(tmp, &st) == 0) {
+      if(S_ISDIR(st.st_mode)) {
+        p = strtok(NULL, "/");
+        continue;
+      }
+
+      result = -ENOTDIR;
+      break;
+    }
+
+    if(mkdir(tmp, S_IRWXU) == -1) {
+      result = -errno;
+      break;
+    }
+
+    p = strtok(NULL, "/");
+  }
+
+  free(tmp);
+  free(dir);
+
+  return result;
 }
 
 static struct node *
@@ -278,13 +318,16 @@ cache_add_file(const char *path, uint64_t fd, mode_t mode)
   if(stat(node->path, &st) == 0)
     if(unlink(node->path) != 0)
       perror("unlink");
+
+  if(mkpath(path) != 0)
+    fprintf(stderr, "error creating cache path: %s\n", path);
   
   if((cache_fd = open(node->path, O_CREAT | O_EXCL | O_RDWR, mode)) == -1)
-    fprintf(stderr, "FIXME: ZOMGFUCFIXMEOUCHCACHEFAIL\n");
+    fprintf(stderr, "error creating cache file: %s\n", path);
 
   while((n = read(fd, buf, BUFSIZ)) > 0)
     if(write(cache_fd, buf, n) == -1)
-      fprintf(stderr, "FIXME: WRITEFAILZOMGFUC\n");
+      fprintf(stderr, "error writing to cache file: %s\n", path);
 
   close(cache_fd);
 
