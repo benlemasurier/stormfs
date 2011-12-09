@@ -37,6 +37,7 @@ struct stormfs_curl {
   const char *bucket;
   const char *access_key;
   const char *secret_key;
+  CURLSH *share;
   pthread_mutex_t lock;
 } stormfs_curl;
 
@@ -768,6 +769,7 @@ get_curl_handle(const char *url)
   c = curl_easy_init();
   set_curl_defaults(&c);
   curl_easy_setopt(c, CURLOPT_URL, url);
+  curl_easy_setopt(c, CURLOPT_SHARE, stormfs_curl.share);
 
   return c;
 }
@@ -796,41 +798,6 @@ stormfs_curl_delete(const char *path)
   destroy_curl_handle(c);
 
   return result;
-}
-
-int
-stormfs_curl_init(const char *bucket, const char *url)
-{
-  CURLcode result;
-  stormfs_curl.url = url;
-  stormfs_curl.bucket = bucket;
-  stormfs_curl.verify_ssl = 1;
-  pthread_mutex_init(&stormfs_curl.lock, NULL);
-
-  if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
-    return -1;
-
-  return 0;
-}
-
-int
-stormfs_curl_set_auth(const char *access_key, const char *secret_key)
-{
-  stormfs_curl.access_key = access_key;
-  stormfs_curl.secret_key = secret_key;
-
-  return 0;
-}
-
-int
-stormfs_curl_verify_ssl(int verify)
-{
-  if(verify == 0)
-    stormfs_curl.verify_ssl = 0;
-  else
-    stormfs_curl.verify_ssl = 1;
-
-  return 0;
 }
 
 int
@@ -1171,9 +1138,52 @@ stormfs_curl_put_headers(const char *path, GList *headers)
   return result;
 }
 
+int
+stormfs_curl_set_auth(const char *access_key, const char *secret_key)
+{
+  stormfs_curl.access_key = access_key;
+  stormfs_curl.secret_key = secret_key;
+
+  return 0;
+}
+
+int
+stormfs_curl_verify_ssl(int verify)
+{
+  if(verify == 0)
+    stormfs_curl.verify_ssl = 0;
+  else
+    stormfs_curl.verify_ssl = 1;
+
+  return 0;
+}
+
 void
 stormfs_curl_destroy()
 {
   pthread_mutex_destroy(&stormfs_curl.lock);
+  curl_share_cleanup(stormfs_curl.share);
   curl_global_cleanup();
+}
+
+int
+stormfs_curl_init(const char *bucket, const char *url)
+{
+  CURLcode result;
+  CURLSHcode scode = CURLSHE_OK;
+  stormfs_curl.url = url;
+  stormfs_curl.bucket = bucket;
+  stormfs_curl.verify_ssl = 1;
+  pthread_mutex_init(&stormfs_curl.lock, NULL);
+
+  if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
+    return -1;
+  if((stormfs_curl.share = curl_share_init()) == NULL)
+    return -1;
+
+  if((scode = curl_share_setopt(stormfs_curl.share, 
+      CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS)) != CURLSHE_OK)
+    return -1;
+
+  return 0;
 }
