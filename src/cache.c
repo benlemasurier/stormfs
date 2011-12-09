@@ -196,6 +196,7 @@ cache_invalidate(const char *path)
 static void
 cache_invalidate_dir(const char *path)
 {
+  printf("THRASHING!!!!!!!!!!!1\n");
   pthread_mutex_lock(&cache.lock);
   cache_purge(path);
   cache_purge_parent(path);
@@ -345,7 +346,8 @@ cache_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   if((result = cache.next_oper->oper.create(path, mode, fi)) != 0)
     return result;
 
-  cache_invalidate_dir(path);
+  cache_add_file(path, fi->fh, mode);
+  // cache_invalidate_dir(path); // FIXME: need this?
   return result;
 }
 
@@ -397,7 +399,7 @@ cache_mkdir(const char *path, mode_t mode)
   if((result = cache.next_oper->oper.mkdir(path, mode)) != 0)
     return result;
 
-  cache_invalidate_dir(path);
+  // cache_invalidate_dir(path); // need this?
   return result;
 }
 
@@ -408,7 +410,7 @@ cache_mknod(const char *path, mode_t mode, dev_t rdev)
   if((result = cache.next_oper->oper.mknod(path, mode, rdev)) != 0)
     return result;
 
-  cache_invalidate_dir(path);
+  // cache_invalidate_dir(path); // need this?
 
   return result;
 }
@@ -540,7 +542,7 @@ cache_release(const char *path, struct fuse_file_info *fi)
   int result = cache.next_oper->oper.release(path, fi);
   if(result == 0)
     if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY))
-      cache_invalidate_dir(path);
+      cache_invalidate(path); //cache_invalidate_dir(path); // need this?
 
   return result;
 }
@@ -574,7 +576,7 @@ cache_symlink(const char *from, const char *to)
   if((result = cache.next_oper->oper.symlink(from, to)) != 0)
     return result;
 
-  cache_invalidate_dir(to);
+  // cache_invalidate(path); //cache_invalidate_dir(to); // need this?
   return result;
 }
 
@@ -582,6 +584,21 @@ static int
 cache_truncate(const char *path, off_t size)
 {
   int result;
+  struct node *node;
+
+  node = cache_lookup(path);
+  if(node != NULL && node->path != NULL) {
+    time_t now = time(NULL);
+    if(node->file_valid - now >= 0) {
+      printf("USING CACHE TRUNCATE!!\n");
+      if((result = truncate(node->path, size)) != 0)
+        return result;
+
+      cache_invalidate(path);
+      return result;
+    }
+  }
+
   if((result = cache.next_oper->oper.truncate(path, size)) != 0)
     return result;
 
@@ -594,7 +611,7 @@ cache_unlink(const char *path)
 {
   int result = cache.next_oper->oper.unlink(path);
   if(result == 0)
-    cache_invalidate_dir(path);
+    cache_invalidate(path); //cache_invalidate_dir(path);
 
   return result;
 }
