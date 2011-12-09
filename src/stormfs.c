@@ -692,9 +692,6 @@ stormfs_read(const char *path, char *buf, size_t size, off_t offset,
 
   DEBUG("read: %s\n", path);
 
-  if((result = valid_path(path)) != 0)
-    return result;
-
   return pread(fi->fh, buf, size, offset);
 }
 
@@ -820,9 +817,6 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
 
   DEBUG("release: %s\n", path);
 
-  if((result = valid_path(path)) != 0)
-    return result;
-  
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
     GList *headers = NULL;
 
@@ -1054,9 +1048,6 @@ stormfs_write(const char *path, const char *buf,
   int result;
 
   DEBUG("write: %s\n", path);
-
-  if((result = valid_path(path)) != 0)
-    return result;
 
   return pwrite(fi->fh, buf, size, offset);
 }
