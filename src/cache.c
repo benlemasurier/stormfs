@@ -196,7 +196,6 @@ cache_invalidate(const char *path)
 static void
 cache_invalidate_dir(const char *path)
 {
-  printf("THRASHING!!!!!!!!!!!1\n");
   pthread_mutex_lock(&cache.lock);
   cache_purge(path);
   cache_purge_parent(path);
