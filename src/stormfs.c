@@ -30,11 +30,7 @@
 #include "cache.h"
 #include "curl.h"
 
-enum {
-  KEY_HELP,
-  KEY_VERSION,
-  KEY_FOREGROUND,
-};
+#define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
 
 struct stormfs {
   bool ssl;
@@ -57,7 +53,11 @@ struct stormfs {
   GHashTable *mime_types;
 } stormfs;
 
-#define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
+enum {
+  KEY_HELP,
+  KEY_VERSION,
+  KEY_FOREGROUND,
+};
 
 static struct fuse_opt stormfs_opts[] = {
   STORMFS_OPT("acl=%s",        acl,           0),
