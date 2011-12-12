@@ -31,6 +31,8 @@
 #define CURL_RETRIES 3
 #define SHA1_BLOCK_SIZE 64
 #define SHA1_LENGTH 20
+#define MAX_REQUESTS 100
+#define POOL_SIZE 100
 
 struct stormfs_curl {
   int verify_ssl;
@@ -38,10 +40,16 @@ struct stormfs_curl {
   const char *bucket;
   const char *access_key;
   const char *secret_key;
+  GList *pool;
   CURLSH *share;
   pthread_mutex_t lock;
   pthread_mutex_t share_lock;
 } curl;
+
+typedef struct {
+  CURL *c;
+  bool in_use;
+} CURL_HANDLE;
 
 typedef struct {
   char   *memory;
@@ -798,12 +806,100 @@ destroy_curl_handle(CURL *c)
   return 0;
 }
 
+CURL_HANDLE *
+create_pooled_handle(const char *url)
+{
+  CURL_HANDLE *ch = g_new0(CURL_HANDLE, 1);
+  ch->c = get_curl_handle(url);
+  ch->in_use = false;
+
+  return ch;
+}
+
+static int
+create_pool(void)
+{
+  for(uint8_t i = 0; i < POOL_SIZE; i++)
+    curl.pool = g_list_append(curl.pool, create_pooled_handle(curl.url));
+
+  return 0;
+}
+
+static int
+destroy_pooled_handle(CURL_HANDLE *ch)
+{
+  pthread_mutex_lock(&curl.lock);
+  curl_easy_cleanup(ch->c);
+  g_free(ch);
+  pthread_mutex_unlock(&curl.lock);
+
+  return 0;
+}
+
+static int
+destroy_pool(void)
+{
+  g_list_free_full(curl.pool, (GDestroyNotify) destroy_pooled_handle);
+  return 0;
+}
+
+CURL *
+get_pooled_handle(const char *url)
+{
+  GList *head = NULL, *next = NULL;
+
+  pthread_mutex_lock(&curl.lock);
+  head = g_list_first(curl.pool);
+  while(head != NULL) {
+    next = head->next;
+    CURL_HANDLE *ch = head->data;
+    if(!ch->in_use) {
+      ch->in_use = true;
+      curl_easy_setopt(ch->c, CURLOPT_URL, url);
+      pthread_mutex_unlock(&curl.lock);
+      return ch->c;
+    }
+
+    head = next;
+  }
+
+  pthread_mutex_unlock(&curl.lock);
+
+  // no handles available in the pool, just create a new one.
+  return get_curl_handle(url);
+}
+
+void
+release_pooled_handle(CURL *c)
+{
+  bool is_pooled_handle = false;
+  GList *head = NULL, *next = NULL;
+
+  pthread_mutex_lock(&curl.lock);
+  head = g_list_first(curl.pool);
+  while(head != NULL) {
+    next = head->next;
+    CURL_HANDLE *ch = head->data;
+    if(ch->c == c) {
+      curl_easy_reset(ch->c);
+      ch->in_use = false;
+      is_pooled_handle = true;
+      break;
+    }
+    head = next;
+  }
+  pthread_mutex_unlock(&curl.lock);
+
+  if(!is_pooled_handle)
+    destroy_curl_handle(c);
+}
+
 int
 stormfs_curl_delete(const char *path)
 {
   int result;
   char *url = get_url(path);
-  CURL *c = get_curl_handle(url);
+  CURL *c = get_pooled_handle(url);
   struct curl_slist *req_headers = NULL; 
 
   sign_request("DELETE", &req_headers, path);
@@ -811,7 +907,7 @@ stormfs_curl_delete(const char *path)
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
 
   result = stormfs_curl_easy_perform(c);
-  destroy_curl_handle(c);
+  release_pooled_handle(c);
 
   return result;
 }
@@ -821,7 +917,7 @@ stormfs_curl_get(const char *path, char **data)
 {
   int result;
   char *url = get_url(path);
-  CURL *c = get_curl_handle(url);
+  CURL *c = get_pooled_handle(url);
   struct curl_slist *req_headers = NULL; 
   HTTP_RESPONSE body;
 
@@ -839,7 +935,7 @@ stormfs_curl_get(const char *path, char **data)
 
   g_free(url);
   g_free(body.memory);
-  destroy_curl_handle(c);
+  release_pooled_handle(c);
   curl_slist_free_all(req_headers);
 
   return result;
@@ -850,7 +946,7 @@ stormfs_curl_get_file(const char *path, FILE *f)
 {
   int result;
   char *url = get_url(path);
-  CURL *c = get_curl_handle(url);
+  CURL *c = get_pooled_handle(url);
   struct curl_slist *req_headers = NULL; 
 
   sign_request("GET", &req_headers, path);
@@ -861,7 +957,7 @@ stormfs_curl_get_file(const char *path, FILE *f)
   rewind(f);
 
   g_free(url);
-  destroy_curl_handle(c);
+  release_pooled_handle(c);
   curl_slist_free_all(req_headers);
 
   return result;
@@ -873,7 +969,7 @@ stormfs_curl_head(const char *path, GList **headers)
   int result;
   char *url = get_url(path);
   char *response_headers;
-  CURL *c = get_curl_handle(url);
+  CURL *c = get_pooled_handle(url);
   struct curl_slist *req_headers = NULL;
   HTTP_RESPONSE data;
 
@@ -899,7 +995,7 @@ stormfs_curl_head(const char *path, GList **headers)
   g_free(url);
   g_free(data.memory);
   g_free(response_headers);
-  destroy_curl_handle(c);
+  release_pooled_handle(c);
   curl_slist_free_all(req_headers);
 
   return result;
@@ -932,7 +1028,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
     CURLMcode err;
     char *full_path = get_path(path, f->name);
     char *url = get_url(full_path);
-    c[i] = get_curl_handle(url);
+    c[i] = get_pooled_handle(url);
     req_headers[i] = NULL;
     responses[i].memory = g_malloc0(1);
     responses[i].size = 0;
@@ -1026,7 +1122,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
   g_free(responses);
   curl_multi_cleanup(multi);
   for(i = 0; i < n_files; i++)
-    destroy_curl_handle(c[i]);
+    release_pooled_handle(c[i]);
 
   return 0;
 }
@@ -1040,7 +1136,7 @@ stormfs_curl_list_bucket(const char *path, char **xml)
 
   while(truncated) {
     char *url = get_list_bucket_url(path, marker);
-    CURL *c = get_curl_handle(url);
+    CURL *c = get_pooled_handle(url);
     struct curl_slist *req_headers = NULL; 
     HTTP_RESPONSE body;
 
@@ -1066,7 +1162,7 @@ stormfs_curl_list_bucket(const char *path, char **xml)
 
     g_free(url);
     g_free(body.memory);
-    destroy_curl_handle(c);
+    release_pooled_handle(c);
     curl_slist_free_all(req_headers);
   }
 
@@ -1105,7 +1201,7 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
   }
 
   url = get_url(path);
-  c = get_curl_handle(url);
+  c = get_pooled_handle(url);
   req_headers = headers_to_curl_slist(headers);
 
   sign_request("PUT", &req_headers, path);
@@ -1117,7 +1213,7 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
   result = stormfs_curl_easy_perform(c);
 
   g_free(url);
-  destroy_curl_handle(c);
+  release_pooled_handle(c);
   curl_slist_free_all(req_headers);
 
   return result;
@@ -1128,7 +1224,7 @@ stormfs_curl_put_headers(const char *path, GList *headers)
 {
   int result;
   char *url = get_url(path);
-  CURL *c = get_curl_handle(url);
+  CURL *c = get_pooled_handle(url);
   struct curl_slist *req_headers = NULL;
   HTTP_RESPONSE body;
 
@@ -1148,7 +1244,7 @@ stormfs_curl_put_headers(const char *path, GList *headers)
 
   g_free(url);
   g_free(body.memory);
-  destroy_curl_handle(c);
+  release_pooled_handle(c);
   curl_slist_free_all(req_headers);
 
   return result;
@@ -1177,6 +1273,7 @@ stormfs_curl_verify_ssl(int verify)
 void
 stormfs_curl_destroy()
 {
+  destroy_pool();
   pthread_mutex_destroy(&curl.lock);
   pthread_mutex_destroy(&curl.share_lock);
   curl_share_cleanup(curl.share);
@@ -1208,6 +1305,8 @@ stormfs_curl_init(const char *bucket, const char *url)
   if((scode = curl_share_setopt(curl.share, 
       CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS)) != CURLSHE_OK)
     return -1;
+
+  create_pool();
 
   return 0;
 }
