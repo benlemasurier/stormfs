@@ -345,8 +345,9 @@ cache_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   if((result = cache.next_oper->oper.create(path, mode, fi)) != 0)
     return result;
 
+  cache_invalidate_dir(path);
   cache_add_file(path, fi->fh, mode);
-  // cache_invalidate_dir(path); // FIXME: need this?
+
   return result;
 }
 
@@ -406,7 +407,7 @@ cache_mkdir(const char *path, mode_t mode)
   if((result = cache.next_oper->oper.mkdir(path, mode)) != 0)
     return result;
 
-  // cache_invalidate_dir(path); // need this?
+  cache_invalidate_dir(path);
   return result;
 }
 
@@ -417,7 +418,7 @@ cache_mknod(const char *path, mode_t mode, dev_t rdev)
   if((result = cache.next_oper->oper.mknod(path, mode, rdev)) != 0)
     return result;
 
-  // cache_invalidate_dir(path); // need this?
+  cache_invalidate_dir(path);
 
   return result;
 }
@@ -549,7 +550,7 @@ cache_release(const char *path, struct fuse_file_info *fi)
   int result = cache.next_oper->oper.release(path, fi);
   if(result == 0)
     if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY))
-      cache_invalidate(path); //cache_invalidate_dir(path); // need this?
+      cache_invalidate_dir(path);
 
   return result;
 }
@@ -583,7 +584,7 @@ cache_symlink(const char *from, const char *to)
   if((result = cache.next_oper->oper.symlink(from, to)) != 0)
     return result;
 
-  // cache_invalidate(path); //cache_invalidate_dir(to); // need this?
+  cache_invalidate_dir(to);
   return result;
 }
 
