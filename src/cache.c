@@ -372,6 +372,14 @@ cache_chown(const char *path, uid_t uid, gid_t gid)
   return result;
 }
 
+static void
+cache_destroy(void *data)
+{
+  g_hash_table_destroy(cache.table);
+  pthread_mutex_destroy(&cache.lock);
+  cache.next_oper->oper.destroy(data);
+}
+
 static int
 cache_getattr(const char *path, struct stat *stbuf)
 {
@@ -705,6 +713,7 @@ cache_fill(struct fuse_cache_operations *oper,
   cache_oper->create   = oper->oper.create   ? cache_create   : NULL;
   cache_oper->chmod    = oper->oper.chmod    ? cache_chmod    : NULL;
   cache_oper->chown    = oper->oper.chown    ? cache_chown    : NULL;
+  cache_oper->destroy  = oper->oper.destroy  ? cache_destroy  : NULL;
   cache_oper->getattr  = oper->oper.getattr  ? cache_getattr  : NULL;
   cache_oper->flush    = oper->oper.flush    ? cache_flush    : NULL;
   cache_oper->mkdir    = oper->oper.mkdir    ? cache_mkdir    : NULL;
