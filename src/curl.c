@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <ctype.h>
 #include <time.h>
@@ -329,13 +330,13 @@ add_header(GList *headers, HTTP_HEADER *h)
   return headers;
 }
 
-static gboolean
+static bool
 is_truncated(char *xml)
 {
   if(strstr(xml, "<IsTruncated>true"))
-    return TRUE;
+    return true;
 
-  return FALSE;
+  return false;
 }
 
 static char *
@@ -1035,7 +1036,7 @@ stormfs_curl_list_bucket(const char *path, char **xml)
 {
   int result;
   char *marker = g_strdup("");
-  gboolean truncated = TRUE;
+  bool truncated = TRUE;
 
   while(truncated) {
     char *url = get_list_bucket_url(path, marker);
@@ -1058,7 +1059,7 @@ stormfs_curl_list_bucket(const char *path, char **xml)
     else
       *xml = append_list_bucket_xml(*xml, body.memory);
 
-    if((truncated = is_truncated(body.memory)) == TRUE) {
+    if((truncated = is_truncated(body.memory)) == true) {
       g_free(marker);
       marker = get_next_marker(body.memory);
     }
