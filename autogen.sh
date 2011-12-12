@@ -1,6 +1,6 @@
 #!/bin/sh
 
-autoreconf -I /usr/local/share/aclocal --force --install \
-  && aclocal \
+autoreconf --force --install \
+  && aclocal -I /usr/local/share/aclocal \
   && automake -a -c \
   && autoconf
