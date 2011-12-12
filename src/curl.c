@@ -39,7 +39,7 @@ struct stormfs_curl {
   const char *secret_key;
   CURLSH *share;
   pthread_mutex_t lock;
-} stormfs_curl;
+} curl;
 
 typedef struct {
   char   *memory;
@@ -141,11 +141,11 @@ get_resource(const char *path)
   char *resource;
 
   path_len   = strlen(path);
-  bucket_len = strlen(stormfs_curl.bucket);
+  bucket_len = strlen(curl.bucket);
   char tmp[1 + path_len + bucket_len + 1];
 
   strcpy(tmp, "/");
-  strncat(tmp, stormfs_curl.bucket, bucket_len);
+  strncat(tmp, curl.bucket, bucket_len);
   strncat(tmp, path, path_len);
   resource = strdup(tmp);
 
@@ -605,12 +605,12 @@ sign_request(const char *method,
   to_sign = strcat(to_sign, amz_headers);
   to_sign = strcat(to_sign, resource);
 
-  signature = hmac_sha1(stormfs_curl.secret_key, to_sign);
+  signature = hmac_sha1(curl.secret_key, to_sign);
   
-  authorization = g_malloc(sizeof(char) * strlen(stormfs_curl.access_key) +
+  authorization = g_malloc(sizeof(char) * strlen(curl.access_key) +
                                           strlen(signature) + 22);
   authorization = strcpy(authorization, "Authorization: AWS ");
-  authorization = strcat(authorization, stormfs_curl.access_key);
+  authorization = strcat(authorization, curl.access_key);
   authorization = strcat(authorization, ":");
   authorization = strcat(authorization, signature);
 
@@ -640,8 +640,8 @@ set_curl_defaults(CURL **c)
   curl_easy_setopt(*c, CURLOPT_CONNECTTIMEOUT, 15L);
   curl_easy_setopt(*c, CURLOPT_USERAGENT, "stormfs");
   curl_easy_setopt(*c, CURLOPT_DNS_CACHE_TIMEOUT, -1);
-  curl_easy_setopt(*c, CURLOPT_SSL_VERIFYHOST, stormfs_curl.verify_ssl);
-  curl_easy_setopt(*c, CURLOPT_SHARE, stormfs_curl.share);
+  curl_easy_setopt(*c, CURLOPT_SSL_VERIFYHOST, curl.verify_ssl);
+  curl_easy_setopt(*c, CURLOPT_SHARE, curl.share);
 
   // curl_easy_setopt(*c, CURLOPT_TCP_NODELAY, 1);
   // curl_easy_setopt(*c, CURLOPT_VERBOSE, 1L);
@@ -656,11 +656,11 @@ get_url(const char *path)
   char *tmp = url_encode((char *) path);
   char *delimiter = "?delimiter=/";
   char *url = g_malloc(sizeof(char) * 
-      strlen(stormfs_curl.url) +
+      strlen(curl.url) +
       strlen(tmp) + 
       strlen(delimiter) + 1);
   
-  url = strcpy(url, stormfs_curl.url);
+  url = strcpy(url, curl.url);
   url = strncat(url, tmp, strlen(tmp));
   url = strncat(url, delimiter, strlen(delimiter));
   g_free(tmp);
@@ -675,7 +675,7 @@ get_list_bucket_url(const char *path, const char *next_marker)
   const char *delimiter  = "?delimiter=/";
   const char *prefix     = "&prefix=";
   const char *marker     = "&marker=";
-  size_t url_len         = strlen(stormfs_curl.url);
+  size_t url_len         = strlen(curl.url);
   size_t delimiter_len   = strlen(delimiter);
   size_t prefix_len      = strlen(prefix);
   size_t path_len        = strlen(path);
@@ -684,7 +684,7 @@ get_list_bucket_url(const char *path, const char *next_marker)
   tmp = g_malloc(sizeof(char) * (url_len + delimiter_len +
       marker_len + prefix_len + 1));
 
-  tmp = strcpy(tmp, stormfs_curl.url);
+  tmp = strcpy(tmp, curl.url);
   tmp = strncat(tmp, delimiter, delimiter_len);
   tmp = strncat(tmp, marker, strlen(marker));
   tmp = strncat(tmp, next_marker, strlen(next_marker));
@@ -865,9 +865,9 @@ stormfs_curl_head(const char *path, GList **headers)
   data.memory = g_malloc(1);
   data.size = 0;
 
-  pthread_mutex_lock(&stormfs_curl.lock);
+  pthread_mutex_lock(&curl.lock);
   sign_request("HEAD", &req_headers, path);
-  pthread_mutex_unlock(&stormfs_curl.lock);
+  pthread_mutex_unlock(&curl.lock);
   curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    // HEAD
   curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  // Last-Modified
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
@@ -877,9 +877,9 @@ stormfs_curl_head(const char *path, GList **headers)
   result = stormfs_curl_easy_perform(c);
 
   response_headers = strdup(data.memory);
-  pthread_mutex_lock(&stormfs_curl.lock);
+  pthread_mutex_lock(&curl.lock);
   extract_meta(response_headers, &(*headers));
-  pthread_mutex_unlock(&stormfs_curl.lock);
+  pthread_mutex_unlock(&curl.lock);
 
   g_free(url);
   g_free(data.memory);
@@ -1142,8 +1142,8 @@ stormfs_curl_put_headers(const char *path, GList *headers)
 int
 stormfs_curl_set_auth(const char *access_key, const char *secret_key)
 {
-  stormfs_curl.access_key = access_key;
-  stormfs_curl.secret_key = secret_key;
+  curl.access_key = access_key;
+  curl.secret_key = secret_key;
 
   return 0;
 }
@@ -1152,9 +1152,9 @@ int
 stormfs_curl_verify_ssl(int verify)
 {
   if(verify == 0)
-    stormfs_curl.verify_ssl = 0;
+    curl.verify_ssl = 0;
   else
-    stormfs_curl.verify_ssl = 1;
+    curl.verify_ssl = 1;
 
   return 0;
 }
@@ -1162,8 +1162,8 @@ stormfs_curl_verify_ssl(int verify)
 void
 stormfs_curl_destroy()
 {
-  pthread_mutex_destroy(&stormfs_curl.lock);
-  curl_share_cleanup(stormfs_curl.share);
+  pthread_mutex_destroy(&curl.lock);
+  curl_share_cleanup(curl.share);
   curl_global_cleanup();
 }
 
@@ -1172,17 +1172,17 @@ stormfs_curl_init(const char *bucket, const char *url)
 {
   CURLcode result;
   CURLSHcode scode = CURLSHE_OK;
-  stormfs_curl.url = url;
-  stormfs_curl.bucket = bucket;
-  stormfs_curl.verify_ssl = 1;
-  pthread_mutex_init(&stormfs_curl.lock, NULL);
+  curl.url = url;
+  curl.bucket = bucket;
+  curl.verify_ssl = 1;
+  pthread_mutex_init(&curl.lock, NULL);
 
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
     return -1;
-  if((stormfs_curl.share = curl_share_init()) == NULL)
+  if((curl.share = curl_share_init()) == NULL)
     return -1;
 
-  if((scode = curl_share_setopt(stormfs_curl.share, 
+  if((scode = curl_share_setopt(curl.share, 
       CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS)) != CURLSHE_OK)
     return -1;
 
