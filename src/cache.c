@@ -618,7 +618,7 @@ cache_unlink(const char *path)
 {
   int result = cache.next_oper->oper.unlink(path);
   if(result == 0)
-    cache_invalidate(path); //cache_invalidate_dir(path);
+    cache_invalidate_dir(path);
 
   return result;
 }
