@@ -39,6 +39,7 @@ struct stormfs_curl {
   const char *secret_key;
   CURLSH *share;
   pthread_mutex_t lock;
+  pthread_mutex_t share_lock;
 } curl;
 
 typedef struct {
@@ -538,6 +539,18 @@ http_response_errno(CURLcode response_code, CURL *handle)
   return 0;
 }
 
+static void
+share_lock(CURL *c, curl_lock_data data, curl_lock_access laccess, void *p)
+{
+  pthread_mutex_lock(&curl.share_lock);
+}
+
+static void
+share_unlock(CURL *c, curl_lock_data data, void *p)
+{
+  pthread_mutex_unlock(&curl.share_lock);
+}
+
 static int
 stormfs_curl_easy_perform(CURL *c)
 {
@@ -779,6 +792,7 @@ static int
 destroy_curl_handle(CURL *c)
 {
   curl_easy_cleanup(c);
+  c = 0;
 
   return 0;
 }
@@ -1163,6 +1177,7 @@ void
 stormfs_curl_destroy()
 {
   pthread_mutex_destroy(&curl.lock);
+  pthread_mutex_destroy(&curl.share_lock);
   curl_share_cleanup(curl.share);
   curl_global_cleanup();
 }
@@ -1176,12 +1191,19 @@ stormfs_curl_init(const char *bucket, const char *url)
   curl.bucket = bucket;
   curl.verify_ssl = 1;
   pthread_mutex_init(&curl.lock, NULL);
+  pthread_mutex_init(&curl.share_lock, NULL);
 
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
     return -1;
   if((curl.share = curl_share_init()) == NULL)
     return -1;
 
+  if((scode = curl_share_setopt(curl.share, 
+      CURLSHOPT_LOCKFUNC, share_lock)) != CURLSHE_OK)
+    return -1;
+  if((scode = curl_share_setopt(curl.share, 
+      CURLSHOPT_UNLOCKFUNC, share_unlock)) != CURLSHE_OK)
+    return -1;
   if((scode = curl_share_setopt(curl.share, 
       CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS)) != CURLSHE_OK)
     return -1;
