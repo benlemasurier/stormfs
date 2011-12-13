@@ -58,6 +58,7 @@ struct node {
   GList *dir;
   char *link;
   char *path;
+  pthread_mutex_t lock;
 };
 
 static char *
@@ -125,6 +126,7 @@ cache_get(const char *path)
   if(node == NULL) {
     char *tmp = strdup(path);
     node = g_new0(struct node, 1);
+    pthread_mutex_init(&node->lock, NULL);
     g_hash_table_insert(cache.table, tmp, node);
   }
 
@@ -136,7 +138,8 @@ free_node(gpointer node_)
 {
   struct node *node = (struct node *) node_;
   g_list_free_full(node->dir, g_free);
-  if(node->path != NULL) g_free(node->path);
+  pthread_mutex_destroy(&node->lock);
+  g_free(node->path);
   g_free(node);
 }
 
@@ -316,7 +319,9 @@ cache_add_file(const char *path, uint64_t fd, mode_t mode)
   node = cache_get(path);
   now = time(NULL);
   node->path = cache_path(path);
+  pthread_mutex_unlock(&cache.lock);
 
+  pthread_mutex_lock(&node->lock);
   if(stat(node->path, &st) == 0)
     if(unlink(node->path) != 0)
       perror("unlink");
@@ -332,7 +337,9 @@ cache_add_file(const char *path, uint64_t fd, mode_t mode)
       fprintf(stderr, "error writing to cache file: %s\n", path);
 
   close(cache_fd);
+  pthread_mutex_unlock(&node->lock);
 
+  pthread_mutex_lock(&cache.lock);
   node->file_valid = time(NULL) + cache.file_timeout;
   if(node->file_valid > node->valid)
     node->valid = node->file_valid;
@@ -432,8 +439,9 @@ cache_open(const char *path, struct fuse_file_info *fi)
   int result;
   struct node *node;
 
+  pthread_mutex_lock(&cache.lock);
   node = cache_lookup(path);
-
+  pthread_mutex_unlock(&cache.lock);
   if(node != NULL && node->path != NULL) {
     time_t now = time(NULL);
     if(node->file_valid - now >= 0) {
@@ -635,7 +643,6 @@ cache_truncate(const char *path, off_t size)
   if(node != NULL && node->path != NULL) {
     time_t now = time(NULL);
     if(node->file_valid - now >= 0) {
-      printf("USING CACHE TRUNCATE!!\n");
       if((result = truncate(node->path, size)) != 0)
         return result;
 
