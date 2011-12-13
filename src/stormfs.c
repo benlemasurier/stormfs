@@ -31,6 +31,8 @@
 #include "curl.h"
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
+#define DEBUG(format, ...) \
+        do { if (stormfs.debug) fprintf(stderr, format, __VA_ARGS__); } while(0)
 
 struct stormfs {
   bool ssl;
@@ -79,9 +81,6 @@ static struct fuse_opt stormfs_opts[] = {
   FUSE_OPT_KEY("--version",     KEY_VERSION),
   FUSE_OPT_END
 };
-
-#define DEBUG(format, ...) \
-        do { if (stormfs.debug) fprintf(stderr, format, __VA_ARGS__); } while(0)
 
 static uid_t
 get_uid(const char *s)
@@ -297,6 +296,29 @@ get_path(const char *path, const char *name)
   return fullpath;
 }
 
+GList *
+add_optional_headers(GList *headers)
+{
+  headers = add_header(headers, storage_header(stormfs.storage_class));
+  headers = add_header(headers, acl_header(stormfs.acl));
+  if(stormfs.expires != NULL)
+    headers = add_header(headers, expires_header(stormfs.expires));
+
+  return headers;
+}
+
+GList *
+stat_to_headers(GList *headers, struct stat st)
+{
+  headers = add_header(headers, gid_header(st.st_gid));
+  headers = add_header(headers, uid_header(st.st_uid));
+  headers = add_header(headers, mode_header(st.st_mode));
+  headers = add_header(headers, mtime_header(st.st_mtime));
+  headers = add_header(headers, ctime_header(st.st_ctime));
+
+  return headers;
+}
+
 static int
 headers_to_stat(GList *headers, struct stat *stbuf)
 {
@@ -411,14 +433,11 @@ stormfs_truncate(const char *path, off_t size)
   if(ftruncate(fd, size) != 0)
     return -errno;
 
-  headers = add_header(headers, storage_header(stormfs.storage_class));
-  headers = add_header(headers, acl_header(stormfs.acl));
   headers = add_header(headers, gid_header(getgid()));
   headers = add_header(headers, uid_header(getuid()));
   headers = add_header(headers, mode_header(st.st_mode));
   headers = add_header(headers, mtime_header(time(NULL)));
-  if(stormfs.expires != NULL)
-    headers = add_header(headers, expires_header(stormfs.expires));
+  headers = add_optional_headers(headers);
 
   result = stormfs_curl_upload(path, headers, fd);
   free_headers(headers);
@@ -475,15 +494,12 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   if((result = valid_path(path)) != 0)
     return result;
 
-  headers = add_header(headers, storage_header(stormfs.storage_class));
-  headers = add_header(headers, acl_header(stormfs.acl));
   headers = add_header(headers, gid_header(getgid()));
   headers = add_header(headers, uid_header(getuid()));
   headers = add_header(headers, mode_header(mode));
   headers = add_header(headers, mtime_header(time(NULL)));
   headers = add_header(headers, content_header(get_mime_type(path)));
-  if(stormfs.expires != NULL)
-    headers = add_header(headers, expires_header(stormfs.expires));
+  headers = add_optional_headers(headers);
 
   result = stormfs_curl_put_headers(path, headers);
   free_headers(headers);
@@ -627,14 +643,11 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
   if((mode & S_IFMT) != S_IFREG)
     return -EPERM;
 
-  headers = add_header(headers, storage_header(stormfs.storage_class));
-  headers = add_header(headers, acl_header(stormfs.acl));
   headers = add_header(headers, gid_header(getgid()));
   headers = add_header(headers, uid_header(getuid()));
   headers = add_header(headers, mode_header(mode));
   headers = add_header(headers, mtime_header(time(NULL)));
-  if(stormfs.expires != NULL)
-    headers = add_header(headers, expires_header(stormfs.expires));
+  headers = add_optional_headers(headers);
 
   result = stormfs_curl_put_headers(path, headers);
   free_headers(headers);
@@ -821,12 +834,8 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     if((result = stormfs_curl_head(path, &headers)) != 0)
       return result;
 
-    headers = add_header(headers, storage_header(stormfs.storage_class));
-    headers = add_header(headers, acl_header(stormfs.acl));
     headers = add_header(headers, mtime_header(time(NULL)));
-    if(stormfs.expires != NULL)
-      headers = add_header(headers, expires_header(stormfs.expires));
-
+    headers = add_optional_headers(headers);
     result = stormfs_curl_upload(path, headers, fi->fh);
     free_headers(headers);
   }
@@ -1025,13 +1034,10 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
 
-  headers = add_header(headers, storage_header(stormfs.storage_class));
-  headers = add_header(headers, acl_header(stormfs.acl));
   headers = add_header(headers, mtime_header(ts[1].tv_sec));
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
-  if(stormfs.expires != NULL)
-    headers = add_header(headers, expires_header(stormfs.expires));
+  headers = add_optional_headers(headers);
 
   result = stormfs_curl_put_headers(path, headers);
   free_headers(headers);

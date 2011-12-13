@@ -41,6 +41,8 @@ struct stormfs_curl {
   const char *access_key;
   const char *secret_key;
   GList *pool;
+  GList *marker;
+  bool pool_full;
   CURLSH *share;
   pthread_mutex_t lock;
   pthread_mutex_t share_lock;
@@ -205,6 +207,18 @@ copy_source_header(const char *path)
 
   h->key = strdup("x-amz-copy-source");
   h->value = get_resource(path);
+
+  return h;
+}
+
+HTTP_HEADER *
+ctime_header(time_t t)
+{
+  char *s = time_to_s(t);
+  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+
+  h->key = strdup("x-amz-meta-ctime");
+  h->value = s;
 
   return h;
 }
@@ -819,6 +833,7 @@ create_pooled_handle(const char *url)
 static int
 create_pool(void)
 {
+  curl.pool_full = false;
   for(uint8_t i = 0; i < POOL_SIZE; i++)
     curl.pool = g_list_append(curl.pool, create_pooled_handle(curl.url));
 
@@ -849,18 +864,33 @@ get_pooled_handle(const char *url)
   GList *head = NULL, *next = NULL;
 
   pthread_mutex_lock(&curl.lock);
-  head = g_list_first(curl.pool);
-  while(head != NULL) {
-    next = head->next;
+  
+  /* attempt to immediately grab the next available handle */
+  if(curl.marker != NULL)
+    head = curl.marker;
+  else
+    head = g_list_first(curl.pool);
+
+  while(head != NULL && !curl.pool_full) {
+    if(head->next != NULL)
+      next = head->next;
+    else
+      next = g_list_first(curl.pool);
+
     CURL_HANDLE *ch = head->data;
     if(!ch->in_use) {
       ch->in_use = true;
       curl_easy_setopt(ch->c, CURLOPT_URL, url);
+      curl.marker = next;
       pthread_mutex_unlock(&curl.lock);
       return ch->c;
     }
 
     head = next;
+    if(head == curl.marker) {
+      curl.pool_full = true;
+      break;
+    }
   }
 
   pthread_mutex_unlock(&curl.lock);
@@ -883,6 +913,7 @@ release_pooled_handle(CURL *c)
     if(ch->c == c) {
       curl_easy_reset(ch->c);
       ch->in_use = false;
+      curl.pool_full = false;
       is_pooled_handle = true;
       break;
     }
@@ -1209,7 +1240,6 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
   curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);
   curl_easy_setopt(c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size); 
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
-
   result = stormfs_curl_easy_perform(c);
 
   g_free(url);

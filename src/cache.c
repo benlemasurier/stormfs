@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <errno.h>
 #include <glib.h>
@@ -25,6 +26,7 @@
 #include <fuse_opt.h>
 #include <pthread.h>
 #include "stormfs.h"
+#include "curl.h"
 #include "cache.h"
 
 #define DEFAULT_CACHE_PATH "/tmp/stormfs"
@@ -547,7 +549,42 @@ cache_readlink(const char *path, char *buf, size_t size)
 static int
 cache_release(const char *path, struct fuse_file_info *fi)
 {
-  int result = cache.next_oper->oper.release(path, fi);
+  int result = 0;
+  struct node *node;
+  bool stat_valid = false;
+  bool file_valid = false;
+
+  pthread_mutex_lock(&cache.lock);
+  node = cache_lookup(path);
+  if(node != NULL) {
+    time_t now = time(NULL);
+    stat_valid = (node->stat_valid - now >= 0) ? true : false;
+    file_valid = (node->file_valid - now >= 0) ? true : false;
+
+    if(stat_valid && file_valid) {
+      if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
+        GList *headers = NULL;
+        headers = stat_to_headers(headers, node->stat);
+        headers = add_optional_headers(headers);
+        result = stormfs_curl_upload(path, headers, fi->fh);
+        free_headers(headers);
+        pthread_mutex_unlock(&cache.lock);
+        cache_invalidate_dir(path);
+      } else {
+        pthread_mutex_unlock(&cache.lock);
+      }
+
+      if(close(fi->fh) != 0) {
+        perror("close");
+        return -errno;
+      }
+
+      return result;
+    }
+  }
+  pthread_mutex_unlock(&cache.lock);
+
+  result = cache.next_oper->oper.release(path, fi);
   if(result == 0)
     if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY))
       cache_invalidate_dir(path);
