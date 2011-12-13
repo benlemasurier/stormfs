@@ -419,8 +419,8 @@ stormfs_truncate(const char *path, off_t size)
   if((f = tmpfile()) == NULL)
     return -errno;
 
-  if((result = stormfs_getattr(path, &st)) != 0)
-    return result;
+  if((result = cache_getattr(path, &st)) != 0)
+    return -result;
 
   if((result = stormfs_curl_get_file(path, f)) != 0) {
     fclose(f);
@@ -898,7 +898,9 @@ stormfs_rename_directory(const char *from, const char *to)
     file_from = get_path(from, name);
     file_to   = get_path(to, name);
 
-    stormfs_getattr(file_from, &st);
+    if((result = cache_getattr(file_from, &st)) != 0)
+      return -result;
+
     if(S_ISDIR(st.st_mode)) {
       if((result = stormfs_rename_directory(file_from, file_to)) != 0)
         return result;
@@ -933,7 +935,7 @@ stormfs_rename(const char *from, const char *to)
   if((result = valid_path(to)) != 0)
     return result;
 
-  if((result = stormfs_getattr(from, &st)) != 0)
+  if((result = cache_getattr(from, &st)) != 0)
     return -result;
 
   // TODO: handle multipart files

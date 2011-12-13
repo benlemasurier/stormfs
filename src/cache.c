@@ -383,7 +383,7 @@ cache_destroy(void *data)
   cache.next_oper->oper.destroy(data);
 }
 
-static int
+int
 cache_getattr(const char *path, struct stat *stbuf)
 {
   int result;
