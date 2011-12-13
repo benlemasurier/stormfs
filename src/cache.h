@@ -19,6 +19,7 @@ struct fuse_cache_operations {
 
 int cache_parse_options(struct fuse_args *args);
 int cache_getattr(const char *path, struct stat *stbuf);
+int cache_truncate(const char *path, off_t size);
 
 struct fuse_operations *cache_init(struct fuse_cache_operations *oper);
 

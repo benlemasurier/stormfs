@@ -633,7 +633,7 @@ cache_symlink(const char *from, const char *to)
   return result;
 }
 
-static int
+int
 cache_truncate(const char *path, off_t size)
 {
   int result;

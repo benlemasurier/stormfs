@@ -461,7 +461,7 @@ stormfs_open(const char *path, struct fuse_file_info *fi)
     return result;
 
   if((unsigned int) fi->flags & O_TRUNC)
-    if((result = stormfs_truncate(path, 0)) != 0)
+    if((result = cache_truncate(path, 0)) != 0)
       return result;
 
   if((f = tmpfile()) == NULL)
