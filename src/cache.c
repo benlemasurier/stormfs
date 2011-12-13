@@ -43,7 +43,7 @@ struct cache {
   unsigned link_timeout;
   unsigned file_timeout;
   GHashTable *table;
-  pthread_mutex_t lock;
+  pthread_spinlock_t lock;
   struct fuse_cache_operations *next_oper;
   char *path;
 } cache;
@@ -58,7 +58,7 @@ struct node {
   GList *dir;
   char *link;
   char *path;
-  pthread_mutex_t lock;
+  pthread_spinlock_t lock;
 };
 
 static char *
@@ -126,7 +126,7 @@ cache_get(const char *path)
   if(node == NULL) {
     char *tmp = strdup(path);
     node = g_new0(struct node, 1);
-    pthread_mutex_init(&node->lock, NULL);
+    pthread_spin_init(&node->lock, 0);
     g_hash_table_insert(cache.table, tmp, node);
   }
 
@@ -138,7 +138,7 @@ free_node(gpointer node_)
 {
   struct node *node = (struct node *) node_;
   g_list_free_full(node->dir, g_free);
-  pthread_mutex_destroy(&node->lock);
+  pthread_spin_destroy(&node->lock);
   g_free(node->path);
   g_free(node);
 }
@@ -193,18 +193,18 @@ cache_invalidate(const char *path)
   if(!cache.on) 
     return;
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   cache_purge(path);
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 }
 
 static void
 cache_invalidate_dir(const char *path)
 {
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   cache_purge(path);
   cache_purge_parent(path);
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 }
 
 static int
@@ -220,14 +220,14 @@ cache_del_children(const char *key, void *val_, const char *path)
 static void
 cache_do_rename(const char *from, const char *to)
 {
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   g_hash_table_foreach_remove(cache.table, (GHRFunc) cache_del_children,
       (char *) from);
   cache_purge(from);
   cache_purge(to);
   cache_purge_parent(from);
   cache_purge_parent(to);
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 }
 
 void
@@ -239,7 +239,7 @@ cache_add_attr(const char *path, const struct stat *stbuf)
   if(!cache.on)
     return;
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   node = cache_get(path);
   now  = time(NULL);
   node->stat = *stbuf;
@@ -247,7 +247,7 @@ cache_add_attr(const char *path, const struct stat *stbuf)
   if(node->stat_valid > node->valid)
     node->valid = node->stat_valid;
   cache_clean();
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 }
 
 static int
@@ -256,7 +256,7 @@ cache_get_attr(const char *path, struct stat *stbuf)
   int result = -EAGAIN;
   struct node *node;
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   node = cache_lookup(path);
   if(node != NULL) {
     time_t now = time(NULL);
@@ -265,7 +265,7 @@ cache_get_attr(const char *path, struct stat *stbuf)
       result = 0;
     }
   }
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 
   return result;
 }
@@ -276,7 +276,7 @@ cache_add_dir(const char *path, GList *files)
   time_t now;
   struct node *node;
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   node = cache_get(path);
   now = time(NULL);
   node->dir = files;
@@ -284,7 +284,7 @@ cache_add_dir(const char *path, GList *files)
   if(node->dir_valid > node->valid)
     node->valid = node->dir_valid;
   cache_clean();
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 }
 
 static void
@@ -293,7 +293,7 @@ cache_add_link(const char *path, const char *link, size_t size)
   struct node *node;
   time_t now;
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   node = cache_get(path);
   now = time(NULL);
   g_free(node->link);
@@ -302,7 +302,7 @@ cache_add_link(const char *path, const char *link, size_t size)
   if(node->link_valid > node->valid)
     node->valid = node->link_valid;
   cache_clean();
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 }
 
 static void
@@ -315,13 +315,13 @@ cache_add_file(const char *path, uint64_t fd, mode_t mode)
   ssize_t n;
   struct stat st;
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   node = cache_get(path);
   now = time(NULL);
   node->path = cache_path(path);
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 
-  pthread_mutex_lock(&node->lock);
+  pthread_spin_lock(&node->lock);
   if(stat(node->path, &st) == 0)
     if(unlink(node->path) != 0)
       perror("unlink");
@@ -337,14 +337,14 @@ cache_add_file(const char *path, uint64_t fd, mode_t mode)
       fprintf(stderr, "error writing to cache file: %s\n", path);
 
   close(cache_fd);
-  pthread_mutex_unlock(&node->lock);
+  pthread_spin_unlock(&node->lock);
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   node->file_valid = time(NULL) + cache.file_timeout;
   if(node->file_valid > node->valid)
     node->valid = node->file_valid;
   cache_clean();
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 }
 
 static int
@@ -386,7 +386,7 @@ static void
 cache_destroy(void *data)
 {
   g_hash_table_destroy(cache.table);
-  pthread_mutex_destroy(&cache.lock);
+  pthread_spin_destroy(&cache.lock);
   cache.next_oper->oper.destroy(data);
 }
 
@@ -439,9 +439,9 @@ cache_open(const char *path, struct fuse_file_info *fi)
   int result;
   struct node *node;
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   node = cache_lookup(path);
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
   if(node != NULL && node->path != NULL) {
     time_t now = time(NULL);
     if(node->file_valid - now >= 0) {
@@ -488,7 +488,7 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   filler(buf, ".",  0, 0);
   filler(buf, "..", 0, 0);
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   node = cache_lookup(path);
   if(node != NULL && node->dir != NULL) {
     head = g_list_first(node->dir);
@@ -498,10 +498,10 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
       filler(buf, (const char *) file->name, 0, 0);
       head = next;
     }
-    pthread_mutex_unlock(&cache.lock);
+    pthread_spin_unlock(&cache.lock);
     return 0;
   }
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 
   result = cache.next_oper->list_bucket(path, &files);
   if(result != 0) {
@@ -534,18 +534,18 @@ cache_readlink(const char *path, char *buf, size_t size)
   struct node *node;
   int result;
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   node = cache_lookup(path);
   if(node != NULL) {
     time_t now = time(NULL);
     if(node->link_valid - now >= 0) {
       strncpy(buf, node->link, size - 1);
       buf[size-1] = '\0';
-      pthread_mutex_unlock(&cache.lock);
+      pthread_spin_unlock(&cache.lock);
       return 0;
     }
   }
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 
   if((result = cache.next_oper->oper.readlink(path, buf, size)) != 0)
     return result;
@@ -562,7 +562,7 @@ cache_release(const char *path, struct fuse_file_info *fi)
   bool stat_valid = false;
   bool file_valid = false;
 
-  pthread_mutex_lock(&cache.lock);
+  pthread_spin_lock(&cache.lock);
   node = cache_lookup(path);
   if(node != NULL) {
     time_t now = time(NULL);
@@ -576,10 +576,10 @@ cache_release(const char *path, struct fuse_file_info *fi)
         headers = add_optional_headers(headers);
         result = stormfs_curl_upload(path, headers, fi->fh);
         free_headers(headers);
-        pthread_mutex_unlock(&cache.lock);
+        pthread_spin_unlock(&cache.lock);
         cache_invalidate_dir(path);
       } else {
-        pthread_mutex_unlock(&cache.lock);
+        pthread_spin_unlock(&cache.lock);
       }
 
       if(close(fi->fh) != 0) {
@@ -590,7 +590,7 @@ cache_release(const char *path, struct fuse_file_info *fi)
       return result;
     }
   }
-  pthread_mutex_unlock(&cache.lock);
+  pthread_spin_unlock(&cache.lock);
 
   result = cache.next_oper->oper.release(path, fi);
   if(result == 0)
@@ -786,7 +786,7 @@ cache_init(struct fuse_cache_operations *oper)
   cache_unity_fill(oper, &cache_oper);
   if(cache.on) {
     cache_fill(oper, &cache_oper);
-    pthread_mutex_init(&cache.lock, NULL);
+    pthread_spin_init(&cache.lock, 0);
     cache.table = g_hash_table_new_full(g_str_hash, g_str_equal,
         g_free, free_node);
     if(cache.table == NULL) {
