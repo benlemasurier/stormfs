@@ -419,10 +419,12 @@ headers_to_curl_slist(GList *headers)
     next = head->next;
     HTTP_HEADER *h = head->data;
 
+    char *s = header_to_s(h);
     if(strstr(h->key, "x-amz-") != NULL || strstr(h->key, "Expires") != NULL)
-      curl_headers = curl_slist_append(curl_headers, header_to_s(h));
+      curl_headers = curl_slist_append(curl_headers, s);
     else if(strstr(h->key, "Content-Type") != NULL)
-      curl_headers = curl_slist_append(curl_headers, header_to_s(h));
+      curl_headers = curl_slist_append(curl_headers, s);
+    g_free(s);
 
     head = next;
   }
