@@ -280,7 +280,7 @@ cache_add_dir(const char *path, GList *files)
   pthread_mutex_lock(&lock);
   node = cache_get(path);
   now = time(NULL);
-  node->dir = files;
+  node->dir = g_list_copy(files);
   node->dir_valid = time(NULL) + cache.dir_timeout;
   if(node->dir_valid > node->valid)
     node->valid = node->dir_valid;
@@ -524,6 +524,7 @@ cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
   head = g_list_first(files);
   cache_add_dir(path, head);
+  g_list_free_full(files, (GDestroyNotify) free_file);
 
   return result;
 }
