@@ -44,8 +44,8 @@ struct stormfs_curl {
   GList *marker;
   bool pool_full;
   CURLSH *share;
-  pthread_spinlock_t lock;
-  pthread_spinlock_t share_lock;
+  pthread_mutex_t lock;
+  pthread_mutex_t share_lock;
 } curl;
 
 typedef struct {
@@ -565,13 +565,13 @@ http_response_errno(CURLcode response_code, CURL *handle)
 static void
 share_lock(CURL *c, curl_lock_data data, curl_lock_access laccess, void *p)
 {
-  pthread_spin_lock(&curl.share_lock);
+  pthread_mutex_lock(&curl.share_lock);
 }
 
 static void
 share_unlock(CURL *c, curl_lock_data data, void *p)
 {
-  pthread_spin_unlock(&curl.share_lock);
+  pthread_mutex_unlock(&curl.share_lock);
 }
 
 static int
@@ -861,7 +861,7 @@ get_pooled_handle(const char *url)
 {
   GList *head = NULL, *next = NULL;
 
-  pthread_spin_lock(&curl.lock);
+  pthread_mutex_lock(&curl.lock);
   
   /* attempt to immediately grab the next available handle */
   if(curl.marker != NULL)
@@ -880,7 +880,7 @@ get_pooled_handle(const char *url)
       ch->in_use = true;
       curl_easy_setopt(ch->c, CURLOPT_URL, url);
       curl.marker = next;
-      pthread_spin_unlock(&curl.lock);
+      pthread_mutex_unlock(&curl.lock);
       return ch->c;
     }
 
@@ -891,7 +891,7 @@ get_pooled_handle(const char *url)
     }
   }
 
-  pthread_spin_unlock(&curl.lock);
+  pthread_mutex_unlock(&curl.lock);
 
   // no handles available in the pool, just create a new one.
   return get_curl_handle(url);
@@ -903,7 +903,7 @@ release_pooled_handle(CURL *c)
   bool is_pooled_handle = false;
   GList *head = NULL, *next = NULL;
 
-  pthread_spin_lock(&curl.lock);
+  pthread_mutex_lock(&curl.lock);
   head = g_list_first(curl.pool);
   while(head != NULL) {
     next = head->next;
@@ -917,7 +917,7 @@ release_pooled_handle(CURL *c)
     }
     head = next;
   }
-  pthread_spin_unlock(&curl.lock);
+  pthread_mutex_unlock(&curl.lock);
 
   if(!is_pooled_handle)
     destroy_curl_handle(c);
@@ -1005,9 +1005,9 @@ stormfs_curl_head(const char *path, GList **headers)
   data.memory = g_malloc(1);
   data.size = 0;
 
-  pthread_spin_lock(&curl.lock);
+  pthread_mutex_lock(&curl.lock);
   sign_request("HEAD", &req_headers, path);
-  pthread_spin_unlock(&curl.lock);
+  pthread_mutex_unlock(&curl.lock);
   curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    // HEAD
   curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  // Last-Modified
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
@@ -1017,9 +1017,9 @@ stormfs_curl_head(const char *path, GList **headers)
   result = stormfs_curl_easy_perform(c);
 
   response_headers = strdup(data.memory);
-  pthread_spin_lock(&curl.lock);
+  pthread_mutex_lock(&curl.lock);
   extract_meta(response_headers, &(*headers));
-  pthread_spin_unlock(&curl.lock);
+  pthread_mutex_unlock(&curl.lock);
 
   g_free(url);
   g_free(data.memory);
@@ -1302,8 +1302,8 @@ void
 stormfs_curl_destroy()
 {
   destroy_pool();
-  pthread_spin_destroy(&curl.lock);
-  pthread_spin_destroy(&curl.share_lock);
+  pthread_mutex_destroy(&curl.lock);
+  pthread_mutex_destroy(&curl.share_lock);
   curl_share_cleanup(curl.share);
   curl_global_cleanup();
 }
@@ -1316,8 +1316,8 @@ stormfs_curl_init(const char *bucket, const char *url)
   curl.url = url;
   curl.bucket = bucket;
   curl.verify_ssl = 1;
-  pthread_spin_init(&curl.lock, 0);
-  pthread_spin_init(&curl.share_lock, 0);
+  pthread_mutex_init(&curl.lock, NULL);
+  pthread_mutex_init(&curl.share_lock, NULL);
 
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
     return -1;
