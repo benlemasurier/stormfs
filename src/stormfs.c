@@ -153,12 +153,14 @@ GList *
 add_file_to_list(GList *list, const char *name, struct stat *st)
 {
   struct file *f = g_new0(struct file, 1);
+  struct stat *stbuf = g_new0(struct stat, 1);
+
   f->name = g_strdup(name);
   
-  if(st == NULL)
-    st = g_malloc0(sizeof(struct stat));
+  if(st != NULL)
+    memcpy(stbuf, st, sizeof(struct stat));
 
-  f->stbuf = st;
+  f->stbuf = stbuf;
 
   return g_list_append(list, f);
 }
