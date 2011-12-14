@@ -144,15 +144,15 @@ void
 free_file(struct file *f)
 {
   g_free(f->name);
-  g_list_free_full(f->headers, (GDestroyNotify) free_header);
   g_free(f->stbuf);
+  g_list_free_full(f->headers, (GDestroyNotify) free_header);
   g_free(f);
 }
 
 GList *
 add_file_to_list(GList *list, const char *name, struct stat *st)
 {
-  struct file *f = g_malloc0(sizeof(struct file));
+  struct file *f = g_new0(struct file, 1);
   f->name = g_strdup(name);
   
   if(st == NULL)
@@ -161,6 +161,23 @@ add_file_to_list(GList *list, const char *name, struct stat *st)
   f->stbuf = st;
 
   return g_list_append(list, f);
+}
+
+GList *
+copy_file_list(GList *list)
+{
+  GList *new = NULL;
+  GList *head = NULL, *next = NULL;
+
+  head = g_list_first(list);
+  while(head != NULL) {
+    next = head->next;
+    struct file *f = head->data;
+    new = add_file_to_list(new, f->name, f->stbuf);
+    head = next;
+  }
+
+  return new;
 }
 
 static int

@@ -18,6 +18,7 @@ struct file {
 };
 
 GList *add_optional_headers(GList *headers);
+GList *copy_file_list(GList *list);
 char *get_path(const char *path, const char *name);
 char *stormfs_virtual_url(char *url, char *bucket);
 void free_file(struct file *f);

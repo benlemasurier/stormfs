@@ -139,7 +139,7 @@ static void
 free_node(gpointer node_)
 {
   struct node *node = (struct node *) node_;
-  g_list_free_full(node->dir, g_free);
+  g_list_free_full(node->dir, (GDestroyNotify) free_file);
   g_free(node->path);
   g_free(node);
 }
@@ -280,7 +280,7 @@ cache_add_dir(const char *path, GList *files)
   pthread_mutex_lock(&lock);
   node = cache_get(path);
   now = time(NULL);
-  node->dir = g_list_copy(files);
+  node->dir = copy_file_list(files);
   node->dir_valid = time(NULL) + cache.dir_timeout;
   if(node->dir_valid > node->valid)
     node->valid = node->dir_valid;
