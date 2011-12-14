@@ -1411,11 +1411,9 @@ main(int argc, char *argv[])
   else
     result = fuse_loop(fuse);
 
-  if(result == -1)
-    result = 1;
-  else
-    result = 0;
+  result = (result == -1) ? 1 : 0;
 
+  fuse_exit(fuse);
   fuse_remove_signal_handlers(fuse_get_session(fuse));
   fuse_unmount(stormfs.mountpoint, ch);
   fuse_destroy(fuse);
