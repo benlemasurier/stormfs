@@ -843,10 +843,8 @@ create_pool(void)
 static int
 destroy_pooled_handle(CURL_HANDLE *ch)
 {
-  pthread_spin_lock(&curl.lock);
   curl_easy_cleanup(ch->c);
   g_free(ch);
-  pthread_spin_unlock(&curl.lock);
 
   return 0;
 }

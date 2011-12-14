@@ -270,7 +270,7 @@ get_mime_type(const char *filename)
     if(ext != NULL)
       g_free(ext);  
 
-    ext = strdup(p);
+    ext = p;
     p = strtok(NULL, ".");
   }
 
@@ -1142,18 +1142,16 @@ validate_config_perms(struct stat *st)
 }
 
 char *
-get_config_value(const char *value)
+get_config_value(char *s)
 {
-  char *s = strdup(value);
-
   while(*s == ' ') s++;
 
-  char *end = s + strlen(s) + 1;
+  char *end = s + strlen(s);
   while(end > s && *end == ' ') end--;
 
-  *(end + 1) = '\0';
+  *(end) = '\0';
 
-  return strdup(s);
+  return g_strdup(s);
 }
 
 static void
@@ -1175,6 +1173,7 @@ parse_config(const char *path)
 
   if((fd = open(path, O_RDONLY)) == -1) {
     perror("open");
+    g_free(st);
     return;
   }
 
@@ -1211,6 +1210,7 @@ parse_config(const char *path)
     p = strtok(NULL, "\n");
   }
 
+  g_free(st);
   return;
 }
 
@@ -1379,6 +1379,7 @@ main(int argc, char *argv[])
   g_thread_init(NULL);
   status = stormfs_fuse_main(&args);
   fuse_opt_free_args(&args);
+  g_thread_exit(NULL);
 
   return status;
 }
