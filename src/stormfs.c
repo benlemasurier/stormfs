@@ -25,6 +25,7 @@
 #include <grp.h>
 #include <libgen.h>
 #include <fuse.h>
+#include <fuse_lowlevel.h>
 #include <glib.h>
 #include "stormfs.h"
 #include "cache.h"
@@ -38,7 +39,7 @@ struct stormfs {
   bool ssl;
   bool rrs;
   bool debug;
-  bool foreground;
+  int foreground;
   int verify_ssl;
   char *acl;
   char *url;
@@ -267,9 +268,6 @@ get_mime_type(const char *filename)
 
   p = strtok(name, ".");
   while(p != NULL) {
-    if(ext != NULL)
-      g_free(ext);  
-
     ext = p;
     p = strtok(NULL, ".");
   }
@@ -1221,6 +1219,7 @@ stormfs_destroy(void *data)
   g_free(stormfs.access_key);
   g_free(stormfs.secret_key);
   g_free(stormfs.virtual_url);
+  g_free(stormfs.mountpoint);
   g_hash_table_destroy(stormfs.mime_types);
 }
 
@@ -1315,7 +1314,7 @@ stormfs_opt_proc(void *data, const char *arg, int key,
       return 1;
 
     case KEY_FOREGROUND:
-      stormfs.foreground = true;
+      stormfs.foreground = 1;
       return 1;
 
     case KEY_HELP:
@@ -1339,7 +1338,10 @@ stormfs_opt_proc(void *data, const char *arg, int key,
 int
 main(int argc, char *argv[])
 {
-  int status;
+  int result;
+  int multithreaded;
+  struct fuse *fuse;
+  struct fuse_chan *ch;
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
   memset(&stormfs, 0, sizeof(struct stormfs));
@@ -1368,7 +1370,7 @@ main(int argc, char *argv[])
   if(cache_parse_options(&args) != 0)
     exit(EXIT_FAILURE);
 
-  if((status = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
+  if((result = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
     fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs.progname);
     exit(EXIT_FAILURE);
   }
@@ -1376,10 +1378,49 @@ main(int argc, char *argv[])
   stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
   stormfs_curl_verify_ssl(stormfs.verify_ssl);
 
+  if((result = fuse_parse_cmdline(&args, &stormfs.mountpoint, 
+      &multithreaded, &stormfs.foreground)) == -1)
+    exit(EXIT_FAILURE);
+  
+  if((ch = fuse_mount(stormfs.mountpoint, &args)) == NULL)
+    exit(EXIT_FAILURE);
+
+  if((result = fcntl(fuse_chan_fd(ch), F_SETFD, FD_CLOEXEC)) == -1)
+    perror("WARNING: failed to set FD_CLOESEC on fuse device");
+
+  fuse = fuse_new(ch, &args, cache_init(&stormfs_oper), 
+      sizeof(struct fuse_operations), NULL);
+  if(fuse == NULL) {
+    fuse_unmount(stormfs.mountpoint, ch);
+    exit(EXIT_FAILURE);
+  }
+
   g_thread_init(NULL);
-  status = stormfs_fuse_main(&args);
+  result = fuse_daemonize(stormfs.foreground);
+  if(result != -1)
+    result = fuse_set_signal_handlers(fuse_get_session(fuse));
+
+  if(result == -1) {
+    fuse_unmount(stormfs.mountpoint, ch);
+    fuse_destroy(fuse);
+    exit(EXIT_FAILURE);
+  }
+
+  if(multithreaded)
+    result = fuse_loop_mt(fuse);
+  else
+    result = fuse_loop(fuse);
+
+  if(result == -1)
+    result = 1;
+  else
+    result = 0;
+
+  fuse_remove_signal_handlers(fuse_get_session(fuse));
+  fuse_unmount(stormfs.mountpoint, ch);
+  fuse_destroy(fuse);
   fuse_opt_free_args(&args);
   g_thread_exit(NULL);
 
-  return status;
+  return result;
 }
