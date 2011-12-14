@@ -263,12 +263,16 @@ cache_mime_types()
 const char *
 get_mime_type(const char *filename)
 {
+  char *type = NULL;
   char *p = NULL, *ext = NULL;
   char *name = strdup(filename);
 
   p = strtok(name, ".");
   while(p != NULL) {
-    ext = p;
+    if(ext != NULL)
+      g_free(ext);
+
+    ext = g_strdup(p);
     p = strtok(NULL, ".");
   }
 
@@ -279,7 +283,11 @@ get_mime_type(const char *filename)
 
   g_free(name);
 
-  return g_hash_table_lookup(stormfs.mime_types, ext);
+  if(ext != NULL)
+    type = g_hash_table_lookup(stormfs.mime_types, ext);
+
+  g_free(ext);
+  return type;
 }
 
 char *

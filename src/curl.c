@@ -33,6 +33,7 @@
 #define SHA1_LENGTH 20
 #define MAX_REQUESTS 100
 #define POOL_SIZE 100
+#define DEFAULT_MIME_TYPE "application/octet-stream"
 
 static pthread_mutex_t lock        = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t shared_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -183,7 +184,7 @@ content_header(const char *type)
 
   h->key   = strdup("Content-Type");
   if(type == NULL)
-    h->value = strdup("application/octet-stream");
+    h->value = strdup(DEFAULT_MIME_TYPE);
   else
     h->value = strdup(type);
 
