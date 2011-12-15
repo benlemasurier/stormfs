@@ -47,6 +47,7 @@ struct stormfs_curl {
   GList *pool;
   GList *marker;
   bool pool_full;
+  CURLM *multi;
   CURLSH *share;
 } curl;
 
@@ -1025,13 +1026,9 @@ stormfs_curl_head_multi(const char *path, GList *files)
   CURL *c[n_files];
   HTTP_RESPONSE *responses;
   struct curl_slist *req_headers[n_files];
-  CURLM *multi;
   GList *head = NULL, *next = NULL;
 
   responses = g_malloc0(sizeof(HTTP_RESPONSE) * n_files);
-
-  if((multi = curl_multi_init()) == NULL)
-    return -1;
 
   i = 0;
   n_running = 0;
@@ -1056,7 +1053,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
     curl_easy_setopt(c[i], CURLOPT_HEADERFUNCTION, write_memory_cb);
 
     if(n_running < MAX_REQUESTS && n_running < n_files) {
-      if((err = curl_multi_add_handle(multi, c[i])) != CURLM_OK)
+      if((err = curl_multi_add_handle(curl.multi, c[i])) != CURLM_OK)
         return -EIO;
 
       n_running++;
@@ -1070,7 +1067,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
     head = next;
   }
 
-  curl_multi_perform(multi, &running_handles);
+  curl_multi_perform(curl.multi, &running_handles);
   while(running_handles) {
     if(running_handles) {
       int max_fd = -1;
@@ -1087,7 +1084,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
       timeout.tv_sec  = 1;
       timeout.tv_usec = 0;
 
-      curl_multi_timeout(multi, &curl_timeout);
+      curl_multi_timeout(curl.multi, &curl_timeout);
       if(curl_timeout >= 0) {
         timeout.tv_sec = curl_timeout / 1000;
         if(timeout.tv_sec > 1)
@@ -1096,7 +1093,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
           timeout.tv_usec = (curl_timeout % 1000) * 1000;
       }
 
-      err = curl_multi_fdset(multi, &fd_r, &fd_w, &fd_e, &max_fd);
+      err = curl_multi_fdset(curl.multi, &fd_r, &fd_w, &fd_e, &max_fd);
       if(err != CURLM_OK)
         return -EIO;
 
@@ -1104,11 +1101,11 @@ stormfs_curl_head_multi(const char *path, GList *files)
         return -errno;
     }
 
-    curl_multi_perform(multi, &running_handles);
+    curl_multi_perform(curl.multi, &running_handles);
 
     CURLMsg *msg;
     int remaining;
-    while((msg = curl_multi_info_read(multi, &remaining))) {
+    while((msg = curl_multi_info_read(curl.multi, &remaining))) {
       if(msg->msg != CURLMSG_DONE)
         continue;
 
@@ -1126,7 +1123,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
       if(n_running < MAX_REQUESTS && last_req_idx < (n_files - 1)) {
         CURLMcode err;
         last_req_idx++;;
-        if((err = curl_multi_add_handle(multi, c[last_req_idx])) != CURLM_OK)
+        if((err = curl_multi_add_handle(curl.multi, c[last_req_idx])) != CURLM_OK)
           return -EIO;
 
         n_running++;
@@ -1135,7 +1132,6 @@ stormfs_curl_head_multi(const char *path, GList *files)
   }
 
   g_free(responses);
-  curl_multi_cleanup(multi);
   for(i = 0; i < n_files; i++)
     release_pooled_handle(c[i]);
 
@@ -1289,6 +1285,7 @@ stormfs_curl_destroy()
 {
   destroy_pool();
   curl_share_cleanup(curl.share);
+  curl_multi_cleanup(curl.multi);
   curl_global_cleanup();
 }
 
@@ -1304,6 +1301,8 @@ stormfs_curl_init(const char *bucket, const char *url)
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
     return -1;
   if((curl.share = curl_share_init()) == NULL)
+    return -1;
+  if((curl.multi = curl_multi_init()) == NULL)
     return -1;
 
   if((scode = curl_share_setopt(curl.share, 
