@@ -150,18 +150,13 @@ url_encode(char *s)
 static char *
 get_resource(const char *path)
 {
-  int path_len;
-  int bucket_len;
-  char *resource;
+  int path_len = strlen(path);
+  int bucket_len = strlen(curl.bucket);
+  char *resource = g_malloc0(sizeof(char) * path_len + bucket_len + 2);
 
-  path_len   = strlen(path);
-  bucket_len = strlen(curl.bucket);
-  char tmp[1 + path_len + bucket_len + 1];
-
-  strcpy(tmp, "/");
-  strncat(tmp, curl.bucket, bucket_len);
-  strncat(tmp, path, path_len);
-  resource = strdup(tmp);
+  strncpy(resource, "/", 1);
+  strncat(resource, curl.bucket, bucket_len);
+  strncat(resource, path, path_len);
 
   return resource;
 }
@@ -205,7 +200,7 @@ copy_meta_header()
 HTTP_HEADER *
 copy_source_header(const char *path)
 {
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key = strdup("x-amz-copy-source");
   h->value = get_resource(path);
@@ -310,38 +305,25 @@ GList *
 strip_header(GList *headers, const char *key)
 {
   GList *new = NULL;
-  GList *head = NULL;
-  GList *next = NULL;
+  GList *head = NULL, *next = NULL;
 
   head = g_list_first(headers);
   while(head != NULL) {
     next = head->next;
     HTTP_HEADER *header = head->data;
 
-    if(strstr(header->key, key) != NULL) {
-      g_free(header->key);
-      g_free(header->value);
-      g_free(header);
-
-      head = next;
-      continue;
+    if(strstr(header->key, key) == NULL) {
+      HTTP_HEADER *h;
+      h = g_new0(HTTP_HEADER, 1);
+      h->key   = strdup(header->key);
+      h->value = strdup(header->value);
+      new = g_list_append(new, h);
     }
 
-    HTTP_HEADER *h;
-    h = g_malloc(sizeof(HTTP_HEADER));
-    h->key   = strdup(header->key);
-    h->value = strdup(header->value);
-
-    g_free(header->key);
-    g_free(header->value);
-    g_free(header);
-
-    new = g_list_append(new, h);
     head = next;
   }
 
-  g_list_free(headers);
-
+  free_headers(headers);
   return new;
 }
 
