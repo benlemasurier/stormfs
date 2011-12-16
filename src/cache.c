@@ -703,6 +703,7 @@ validate_cache_path(const char *path)
   int result;
   struct stat st;
 
+  errno = 0;
   result = stat(path, &st);
   if(errno == ENOENT) {
     if((result = create_cache_path(path)) != 0)

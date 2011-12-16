@@ -27,6 +27,8 @@
 #include <fuse.h>
 #include <fuse_lowlevel.h>
 #include <glib.h>
+#include <pthread.h>
+#include <signal.h>
 #include "stormfs.h"
 #include "cache.h"
 #include "curl.h"
@@ -54,6 +56,8 @@ struct stormfs {
   char *expires;
   mode_t root_mode;
   GHashTable *mime_types;
+  GMainLoop *event_loop;
+  pthread_t fuse_thread_id;
 } stormfs;
 
 enum {
@@ -1243,6 +1247,7 @@ static void
 stormfs_destroy(void *data)
 {
   stormfs_curl_destroy();
+  g_main_loop_quit(stormfs.event_loop);
   g_free(stormfs.access_key);
   g_free(stormfs.secret_key);
   g_free(stormfs.virtual_url);
@@ -1362,15 +1367,56 @@ stormfs_opt_proc(void *data, const char *arg, int key,
   }
 }
 
+static void
+show_debug_header()
+{
+  DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
+  DEBUG("STORMFS url:           %s\n", stormfs.url);
+  DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
+  DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
+  DEBUG("STORMFS acl:           %s\n", stormfs.acl);
+}
+
+static void *
+stormfs_fuse_loop(void *p)
+{
+  struct fuse_args *args = p;
+
+  fuse_main(args->argc, args->argv, cache_init(&stormfs_oper), NULL);
+  printf("PAST FUSE LOOP\n");
+    
+  pthread_exit(NULL);
+  return NULL;
+}
+
+static int
+stormfs_session_loop(struct fuse_args *args)
+{
+  pthread_t fuse_thread;
+  pthread_attr_t thread_attr;
+
+  printf("stormfs_session_loop\n");
+
+  stormfs.event_loop = g_main_loop_new(NULL, FALSE);
+
+  pthread_attr_init(&thread_attr);
+  pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_DETACHED);
+  stormfs.fuse_thread_id = pthread_create(&fuse_thread, &thread_attr,
+      stormfs_fuse_loop, (void *) args);
+
+  g_main_loop_run(stormfs.event_loop);
+  printf("PAST G_MAIN_LOOP\n");
+
+  return 0;
+}
+
 int
 main(int argc, char *argv[])
 {
   int result;
-  int multithreaded;
-  struct fuse *fuse;
-  struct fuse_chan *ch;
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
+  g_thread_init(NULL);
   memset(&stormfs, 0, sizeof(struct stormfs));
   stormfs.progname = argv[0];
   set_defaults();
@@ -1382,68 +1428,25 @@ main(int argc, char *argv[])
 
   parse_config(stormfs.config);
   validate_config();
-
   if(stormfs.rrs)
     stormfs.storage_class = "REDUCED_REDUNDANCY";
-
   stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
-
-  DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
-  DEBUG("STORMFS url:           %s\n", stormfs.url);
-  DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
-  DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
-  DEBUG("STORMFS acl:           %s\n", stormfs.acl);
+  show_debug_header();
 
   if(cache_parse_options(&args) != 0)
     exit(EXIT_FAILURE);
 
+  // FIXME: need to find a better way to pass curl a list of options
+  //         - maybe just send the entire stormfs structure.
   if((result = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
     fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs.progname);
     exit(EXIT_FAILURE);
   }
-
   stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
   stormfs_curl_verify_ssl(stormfs.verify_ssl);
 
-  if((result = fuse_parse_cmdline(&args, &stormfs.mountpoint, 
-      &multithreaded, &stormfs.foreground)) == -1)
-    exit(EXIT_FAILURE);
-  
-  if((ch = fuse_mount(stormfs.mountpoint, &args)) == NULL)
-    exit(EXIT_FAILURE);
+  stormfs_session_loop(&args);
 
-  if((result = fcntl(fuse_chan_fd(ch), F_SETFD, FD_CLOEXEC)) == -1)
-    perror("WARNING: failed to set FD_CLOESEC on fuse device");
-
-  fuse = fuse_new(ch, &args, cache_init(&stormfs_oper), 
-      sizeof(struct fuse_operations), NULL);
-  if(fuse == NULL) {
-    fuse_unmount(stormfs.mountpoint, ch);
-    exit(EXIT_FAILURE);
-  }
-
-  g_thread_init(NULL);
-  result = fuse_daemonize(stormfs.foreground);
-  if(result != -1)
-    result = fuse_set_signal_handlers(fuse_get_session(fuse));
-
-  if(result == -1) {
-    fuse_unmount(stormfs.mountpoint, ch);
-    fuse_destroy(fuse);
-    exit(EXIT_FAILURE);
-  }
-
-  if(multithreaded)
-    result = fuse_loop_mt(fuse);
-  else
-    result = fuse_loop(fuse);
-
-  result = (result == -1) ? 1 : 0;
-
-  fuse_exit(fuse);
-  fuse_remove_signal_handlers(fuse_get_session(fuse));
-  fuse_unmount(stormfs.mountpoint, ch);
-  fuse_destroy(fuse);
   fuse_opt_free_args(&args);
   g_thread_exit(NULL);
 

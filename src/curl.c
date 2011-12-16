@@ -53,8 +53,6 @@ struct stormfs_curl {
   CURLSH *share;
   guint timer;
   int hiper_running;
-  GMainLoop *event_loop;
-  GMainContext *context;
 } curl;
 
 typedef struct {
@@ -925,6 +923,178 @@ release_pooled_handle(CURL *c)
     destroy_curl_handle(c);
 }
 
+static void
+check_hiper_info()
+{
+  CURL *easy;
+  CURLMsg *message;
+  CURLMcode c;
+  int messages_remaining = 0;
+
+  printf("check_hiper_info\n");
+  printf("\t%d still running\n", curl.hiper_running);
+
+  while((message = curl_multi_info_read(curl.hiper, &messages_remaining))) {
+    if(message->msg == CURLMSG_DONE) {
+      easy = message->easy_handle;
+      c = message->data.result;
+      printf("\t\tDONE: %d\n", c);
+      curl_easy_cleanup(easy);
+    }
+  }
+}
+
+static gboolean
+event_cb(GIOChannel *ch, GIOCondition condition, gpointer p)
+{
+  (void) p;
+  int action;
+  CURLMcode c;
+  int fd = g_io_channel_unix_get_fd(ch);
+
+  printf("event_cb\n");
+
+  action = (condition & G_IO_IN  ? CURL_CSELECT_IN  : 0) |
+           (condition & G_IO_OUT ? CURL_CSELECT_OUT : 0);
+
+  c = curl_multi_socket_action(curl.hiper, fd, action, &curl.hiper_running);
+  // FIXME: check ^ return value.
+
+  check_hiper_info();
+  if(curl.hiper_running) {
+    return TRUE;
+  } else {
+    printf("last transfer completed, removing timeout\n");
+
+    if(curl.timer)
+      g_source_remove(curl.timer);
+
+    return FALSE;
+  }
+}
+
+static gboolean
+timer_cb(gpointer p)
+{
+  (void) p;
+  CURLMcode c;
+  printf("timer_cb\n");
+
+  c = curl_multi_socket_action(curl.hiper, CURL_SOCKET_TIMEOUT, 
+      0, &curl.hiper_running);
+  // FIXME: verify return status ^
+  printf("timer_cb: sock_action return was: %d\n", c);
+
+  check_hiper_info();
+
+  return FALSE;
+}
+
+static int
+hiper_timer_cb(CURLM *multi, long timeout_ms, void *p)
+{
+  (void) p;
+  (void) multi;
+  printf("hiper_timer_cb\n");
+
+  struct timeval timeout;
+  timeout.tv_sec  = timeout_ms / 1000;
+  timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+  curl.timer = g_timeout_add(timeout_ms, timer_cb, NULL);
+
+  return 0;
+}
+
+static void
+modify_socket(HIPER_SOCKET *socket, curl_socket_t s, CURL *easy, int action)
+{
+  GIOCondition type;
+
+  printf("modify_socket\n");
+
+  type = (action & CURL_POLL_IN  ? G_IO_IN  : 0) |
+         (action & CURL_POLL_OUT ? G_IO_OUT : 0);
+
+  if(socket->ev)
+    g_source_remove(socket->ev);
+
+  socket->fd = s;
+  socket->action = action;
+  socket->easy = easy;
+  socket->ev = g_io_add_watch(socket->ch, type, event_cb, NULL);
+}
+
+static void
+create_socket(curl_socket_t s, CURL *easy, int action)
+{
+  printf("create_socket\n");
+
+  HIPER_SOCKET *socket = g_new0(HIPER_SOCKET, 1);
+  socket->ch = g_io_channel_unix_new(s);
+  modify_socket(socket, s, easy, action);
+  curl_multi_assign(curl.hiper, s, socket);
+}
+
+static void
+destroy_socket(HIPER_SOCKET *socket)
+{
+  printf("destroy_socket\n");
+
+  if(!socket)
+    return;
+
+  if(socket->ev)
+    g_source_remove(socket->ev);
+
+  g_free(socket);
+}
+
+static int
+socket_cb(CURL *easy, curl_socket_t s, int action, void *global, void *socket_p)
+{
+  (void) global;
+  printf("socket_cb\n");
+
+  // socket_p was previously set via `curl_multi_assign()`
+  HIPER_SOCKET *socket = socket_p;
+
+  if(action == CURL_POLL_REMOVE) {
+    destroy_socket(socket);
+  } else {
+    if(!socket)
+      create_socket(s, easy, action);
+    else
+      modify_socket(socket, s, easy, action);
+  }
+
+  // this function _must_ return 0
+  return 0;
+}
+
+static void
+new_hiper_connection(const char *url)
+{
+  printf("new_hiper_connection: %s\n", url);
+  CURLMcode c;
+  CURL *easy = get_curl_handle(url);
+
+
+  c = curl_multi_add_handle(curl.hiper, easy);
+  // FIXME: check return value ^
+}
+
+int
+hiper_init()
+{
+  printf("hiper_init\n");
+
+  curl_multi_setopt(curl.hiper, CURLMOPT_SOCKETFUNCTION, socket_cb);
+  curl_multi_setopt(curl.hiper, CURLMOPT_TIMERFUNCTION, hiper_timer_cb);
+
+  return 0;
+}
+
 int
 stormfs_curl_delete(const char *path)
 {
@@ -1156,6 +1326,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
 int
 stormfs_curl_list_bucket(const char *path, char **xml)
 {
+  new_hiper_connection("http://www.sparkfun.com/index");
   int result;
   char *marker = g_strdup("");
   bool truncated = TRUE;
@@ -1298,205 +1469,11 @@ stormfs_curl_verify_ssl(int verify)
 void
 stormfs_curl_destroy()
 {
-  g_main_loop_unref(curl.event_loop);
   destroy_pool();
   curl_share_cleanup(curl.share);
   curl_multi_cleanup(curl.multi);
   curl_multi_cleanup(curl.hiper);
   curl_global_cleanup();
-}
-
-static void
-check_hiper_info()
-{
-  CURL *easy;
-  CURLMsg *message;
-  CURLMcode c;
-  int messages_remaining = 0;
-
-  printf("check_hiper_info\n");
-  printf("\t%d still running\n", curl.hiper_running);
-
-  while((message = curl_multi_info_read(curl.hiper, &messages_remaining))) {
-    if(message->msg == CURLMSG_DONE) {
-      easy = message->easy_handle;
-      c = message->data.result;
-      printf("\t\tDONE: %d\n", c);
-      curl_easy_cleanup(easy);
-    }
-  }
-}
-
-static gboolean
-event_cb(GIOChannel *ch, GIOCondition condition, gpointer p)
-{
-  (void) p;
-  int action;
-  CURLMcode c;
-  int fd = g_io_channel_unix_get_fd(ch);
-
-  printf("event_cb\n");
-
-  action = (condition & G_IO_IN  ? CURL_CSELECT_IN  : 0) |
-           (condition & G_IO_OUT ? CURL_CSELECT_OUT : 0);
-
-  c = curl_multi_socket_action(curl.hiper, fd, action, &curl.hiper_running);
-  // FIXME: check ^ return value.
-
-  check_hiper_info();
-  if(curl.hiper_running) {
-    return TRUE;
-  } else {
-    printf("last transfer completed, removing timeout\n");
-
-    if(curl.timer)
-      g_source_remove(curl.timer);
-
-    return FALSE;
-  }
-}
-
-static gboolean
-timer_cb(gpointer p)
-{
-  (void) p;
-  CURLMcode c;
-  printf("timer_cb\n");
-
-  c = curl_multi_socket_action(curl.hiper, CURL_SOCKET_TIMEOUT, 
-      0, &curl.hiper_running);
-  // FIXME: verify return status ^
-  printf("timer_cb: sock_action return was: %d\n", c);
-
-  check_hiper_info();
-
-  return FALSE;
-}
-
-static int
-hiper_timer_cb(CURLM *multi, long timeout_ms, void *p)
-{
-  (void) p;
-  (void) multi;
-  printf("hiper_timer_cb\n");
-
-  struct timeval timeout;
-  timeout.tv_sec  = timeout_ms / 1000;
-  timeout.tv_usec = (timeout_ms % 1000) * 1000;
-
-  curl.timer = g_timeout_add(timeout_ms, timer_cb, NULL);
-
-  return 0;
-}
-
-static void
-modify_socket(HIPER_SOCKET *socket, curl_socket_t s, CURL *easy, int action)
-{
-  GIOCondition type;
-
-  printf("modify_socket\n");
-
-  type = (action & CURL_POLL_IN  ? G_IO_IN  : 0) |
-         (action & CURL_POLL_OUT ? G_IO_OUT : 0);
-
-  if(socket->ev)
-    g_source_remove(socket->ev);
-
-  socket->fd = s;
-  socket->action = action;
-  socket->easy = easy;
-  socket->ev = g_io_add_watch(socket->ch, type, event_cb, NULL);
-}
-
-static void
-create_socket(curl_socket_t s, CURL *easy, int action)
-{
-  printf("create_socket\n");
-
-  HIPER_SOCKET *socket = g_new0(HIPER_SOCKET, 1);
-  socket->ch = g_io_channel_unix_new(s);
-  modify_socket(socket, s, easy, action);
-  curl_multi_assign(curl.hiper, s, socket);
-}
-
-static void
-destroy_socket(HIPER_SOCKET *socket)
-{
-  printf("destroy_socket\n");
-
-  if(!socket)
-    return;
-
-  if(socket->ev)
-    g_source_remove(socket->ev);
-
-  g_free(socket);
-}
-
-static int
-socket_cb(CURL *easy, curl_socket_t s, int action, void *global, void *socket_p)
-{
-  (void) global;
-  printf("socket_cb\n");
-
-  // socket_p was previously set via `curl_multi_assign()`
-  HIPER_SOCKET *socket = socket_p;
-
-  if(action == CURL_POLL_REMOVE) {
-    destroy_socket(socket);
-  } else {
-    if(!socket)
-      create_socket(s, easy, action);
-    else
-      modify_socket(socket, s, easy, action);
-  }
-
-  // this function _must_ return 0
-  return 0;
-}
-
-static void
-new_hiper_connection(const char *url)
-{
-  printf("new_hiper_connection: %s\n", url);
-  CURLMcode c;
-  CURL *easy = get_curl_handle(url);
-
-
-  c = curl_multi_add_handle(curl.hiper, easy);
-  // FIXME: check return value ^
-}
-
-static void *
-hiper_event_loop(void *arg)
-{
-  printf("hiper_event_loop\n");
-
-  curl.context = g_main_context_new();
-  g_main_context_push_thread_default(curl.context);
-  curl.event_loop = g_main_loop_new(curl.context, FALSE);
-  g_main_loop_run(curl.event_loop);
-
-  return NULL;
-}
-
-int
-hiper_init()
-{
-  pthread_t event_thread;
-  pthread_attr_t thread_attr;
-
-  printf("hiper_init\n");
-
-  curl_multi_setopt(curl.hiper, CURLMOPT_SOCKETFUNCTION, socket_cb);
-  curl_multi_setopt(curl.hiper, CURLMOPT_TIMERFUNCTION, hiper_timer_cb);
-
-  pthread_attr_init(&thread_attr);
-  pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_DETACHED);
-  event_thread = pthread_create(&event_thread, &thread_attr,
-      hiper_event_loop, NULL);
-
-  return 0;
 }
 
 int
@@ -1516,6 +1493,7 @@ stormfs_curl_init(const char *bucket, const char *url)
     return -1;
   if((curl.hiper = curl_multi_init()) == NULL)
     return -1;
+
   if(hiper_init() != 0)
     return -1;
 
@@ -1530,8 +1508,6 @@ stormfs_curl_init(const char *bucket, const char *url)
     return -1;
 
   create_pool();
-
-  new_hiper_connection("http://www.sparkfun.com/index");
 
   return 0;
 }
