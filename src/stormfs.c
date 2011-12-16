@@ -28,7 +28,6 @@
 #include <fuse_lowlevel.h>
 #include <glib.h>
 #include <pthread.h>
-#include <signal.h>
 #include "stormfs.h"
 #include "cache.h"
 #include "curl.h"
