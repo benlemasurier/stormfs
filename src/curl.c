@@ -1494,10 +1494,7 @@ stormfs_curl_set_auth(const char *access_key, const char *secret_key)
 int
 stormfs_curl_verify_ssl(int verify)
 {
-  if(verify == 0)
-    curl.verify_ssl = 0;
-  else
-    curl.verify_ssl = 1;
+  curl.verify_ssl = (verify == 0) ? 0 : 1;
 
   return 0;
 }
