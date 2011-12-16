@@ -831,7 +831,7 @@ create_pooled_handle(const char *url)
 }
 
 static int
-create_pool(void)
+pool_init()
 {
   curl.pool_full = false;
   for(uint8_t i = 0; i < POOL_SIZE; i++)
@@ -1088,8 +1088,31 @@ hiper_init()
 {
   printf("hiper_init\n");
 
+  if((curl.hiper = curl_multi_init()) == NULL)
+    return -1;
+
   curl_multi_setopt(curl.hiper, CURLMOPT_SOCKETFUNCTION, socket_cb);
   curl_multi_setopt(curl.hiper, CURLMOPT_TIMERFUNCTION, hiper_timer_cb);
+
+  return 0;
+}
+
+int
+share_init()
+{
+  CURLSHcode scode = CURLSHE_OK;
+
+  if((curl.share = curl_share_init()) == NULL)
+    return -1;
+  if((scode = curl_share_setopt(curl.share, 
+      CURLSHOPT_LOCKFUNC, share_lock)) != CURLSHE_OK)
+    return -1;
+  if((scode = curl_share_setopt(curl.share, 
+      CURLSHOPT_UNLOCKFUNC, share_unlock)) != CURLSHE_OK)
+    return -1;
+  if((scode = curl_share_setopt(curl.share, 
+      CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS)) != CURLSHE_OK)
+    return -1;
 
   return 0;
 }
@@ -1199,10 +1222,6 @@ stormfs_curl_head(const char *path, GList **headers)
 
   result = stormfs_curl_easy_perform(c);
 
-  CURL *test = get_pooled_handle(url);
-  rc = curl_multi_add_handle(curl.hiper, test);
-  printf("GOT HERE!!!!!!!!!1\n");
-
   response_headers = strdup(data.memory);
   pthread_mutex_lock(&lock);
   extract_meta(response_headers, &(*headers));
@@ -1213,6 +1232,9 @@ stormfs_curl_head(const char *path, GList **headers)
   g_free(response_headers);
   release_pooled_handle(c);
   curl_slist_free_all(req_headers);
+
+  CURL *test = get_curl_handle(url);
+  rc = curl_multi_add_handle(curl.hiper, test);
 
   return result;
 }
@@ -1493,35 +1515,20 @@ stormfs_curl_destroy()
 int
 stormfs_curl_init(const char *bucket, const char *url)
 {
-  CURLcode result;
-  CURLSHcode scode = CURLSHE_OK;
   curl.url = url;
   curl.bucket = bucket;
   curl.verify_ssl = 1;
 
-  if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
+  if(curl_global_init(CURL_GLOBAL_ALL) != CURLE_OK)
     return -1;
-  if((curl.share = curl_share_init()) == NULL)
+  if(share_init() != 0)
     return -1;
   if((curl.multi = curl_multi_init()) == NULL)
     return -1;
-  if((curl.hiper = curl_multi_init()) == NULL)
-    return -1;
-
   if(hiper_init() != 0)
     return -1;
-
-  if((scode = curl_share_setopt(curl.share, 
-      CURLSHOPT_LOCKFUNC, share_lock)) != CURLSHE_OK)
+  if(pool_init() != 0)
     return -1;
-  if((scode = curl_share_setopt(curl.share, 
-      CURLSHOPT_UNLOCKFUNC, share_unlock)) != CURLSHE_OK)
-    return -1;
-  if((scode = curl_share_setopt(curl.share, 
-      CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS)) != CURLSHE_OK)
-    return -1;
-
-  create_pool();
 
   return 0;
 }
