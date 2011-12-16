@@ -1095,6 +1095,17 @@ hiper_init()
   return 0;
 }
 
+void *
+hiper_event_loop(void *p)
+{
+  GMainLoop *event_loop = p;
+  printf("hiper_event_loop\n");
+
+  g_main_loop_run(event_loop);
+
+  return NULL;
+}
+
 int
 stormfs_curl_delete(const char *path)
 {

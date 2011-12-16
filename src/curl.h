@@ -32,6 +32,8 @@ GList *add_header(GList *headers, HTTP_HEADER *h);
 void free_header(HTTP_HEADER *h);
 void free_headers(GList *headers);
 
+void *hiper_event_loop();
+
 int stormfs_curl_delete(const char *path);
 void stormfs_curl_destroy();
 int stormfs_curl_get(const char *path, char **data);

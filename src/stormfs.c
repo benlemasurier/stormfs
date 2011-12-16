@@ -715,6 +715,10 @@ stormfs_getattr_multi(const char *path, GList *files)
 static void *
 stormfs_init(struct fuse_conn_info *conn)
 {
+  pthread_t fuse_thread;
+  pthread_attr_t thread_attr;
+  stormfs.event_loop = g_main_loop_new(NULL, FALSE);
+
   if(conn->capable & FUSE_CAP_ATOMIC_O_TRUNC)
     conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
 
@@ -722,6 +726,11 @@ stormfs_init(struct fuse_conn_info *conn)
     conn->want |= FUSE_CAP_BIG_WRITES;
 
   cache_mime_types();
+
+  pthread_attr_init(&thread_attr);
+  pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_DETACHED);
+  stormfs.fuse_thread_id = pthread_create(&fuse_thread, &thread_attr,
+      hiper_event_loop, stormfs.event_loop);
 
   return NULL;
 }
@@ -1340,7 +1349,7 @@ stormfs_opt_proc(void *data, const char *arg, int key,
       if(validate_mountpoint(arg, &stbuf) == -1)
         exit(EXIT_FAILURE);
 
-      stormfs.mountpoint = (char *) arg;
+      stormfs.mountpoint = strdup((char *) arg);
       stormfs.root_mode = stbuf.st_mode;
 
       return 1;
@@ -1375,39 +1384,6 @@ show_debug_header()
   DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
   DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
   DEBUG("STORMFS acl:           %s\n", stormfs.acl);
-}
-
-static void *
-stormfs_fuse_loop(void *p)
-{
-  struct fuse_args *args = p;
-
-  fuse_main(args->argc, args->argv, cache_init(&stormfs_oper), NULL);
-  printf("PAST FUSE LOOP\n");
-    
-  pthread_exit(NULL);
-  return NULL;
-}
-
-static int
-stormfs_session_loop(struct fuse_args *args)
-{
-  pthread_t fuse_thread;
-  pthread_attr_t thread_attr;
-
-  printf("stormfs_session_loop\n");
-
-  stormfs.event_loop = g_main_loop_new(NULL, FALSE);
-
-  pthread_attr_init(&thread_attr);
-  pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_DETACHED);
-  stormfs.fuse_thread_id = pthread_create(&fuse_thread, &thread_attr,
-      stormfs_fuse_loop, (void *) args);
-
-  g_main_loop_run(stormfs.event_loop);
-  printf("PAST G_MAIN_LOOP\n");
-
-  return 0;
 }
 
 int
@@ -1445,7 +1421,7 @@ main(int argc, char *argv[])
   stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
   stormfs_curl_verify_ssl(stormfs.verify_ssl);
 
-  stormfs_session_loop(&args);
+  stormfs_fuse_main(&args);
 
   fuse_opt_free_args(&args);
   g_thread_exit(NULL);
