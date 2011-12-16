@@ -1079,7 +1079,6 @@ new_hiper_connection(const char *url)
   CURLMcode c;
   CURL *easy = get_curl_handle(url);
 
-
   c = curl_multi_add_handle(curl.hiper, easy);
   // FIXME: check return value ^
 }
@@ -1183,6 +1182,7 @@ stormfs_curl_head(const char *path, GList **headers)
   char *response_headers;
   CURL *c = get_pooled_handle(url);
   struct curl_slist *req_headers = NULL;
+  CURLMcode rc;
   HTTP_RESPONSE data;
 
   data.memory = g_malloc(1);
@@ -1198,6 +1198,10 @@ stormfs_curl_head(const char *path, GList **headers)
   curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
 
   result = stormfs_curl_easy_perform(c);
+
+  CURL *test = get_pooled_handle(url);
+  rc = curl_multi_add_handle(curl.hiper, test);
+  printf("GOT HERE!!!!!!!!!1\n");
 
   response_headers = strdup(data.memory);
   pthread_mutex_lock(&lock);
@@ -1337,7 +1341,6 @@ stormfs_curl_head_multi(const char *path, GList *files)
 int
 stormfs_curl_list_bucket(const char *path, char **xml)
 {
-  new_hiper_connection("http://www.sparkfun.com/index");
   int result;
   char *marker = g_strdup("");
   bool truncated = TRUE;
