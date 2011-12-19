@@ -1118,6 +1118,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
       extract_meta(responses[i].memory, &(f->headers));
       g_free(responses[i].memory);
       curl_slist_free_all(req_headers[i]);
+      curl_multi_remove_handle(curl.multi, c[i]);
       n_running--;
 
       if(n_running < MAX_REQUESTS && last_req_idx < (n_files - 1)) {
