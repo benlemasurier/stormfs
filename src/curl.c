@@ -220,11 +220,10 @@ copy_source_header(const char *path)
 HTTP_HEADER *
 ctime_header(time_t t)
 {
-  char *s = time_to_s(t);
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key = strdup("x-amz-meta-ctime");
-  h->value = s;
+  h->value = time_to_s(t);
 
   return h;
 }
@@ -925,6 +924,7 @@ stormfs_curl_delete(const char *path)
 
   result = stormfs_curl_easy_perform(c);
   release_pooled_handle(c);
+  curl_slist_free_all(req_headers);
   g_free(url);
 
   return result;
