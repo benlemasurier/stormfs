@@ -63,7 +63,8 @@ typedef struct {
 
 typedef struct {
   CURL *c;
-  char *url;
+  char *path;
+  bool done;
   HTTP_RESPONSE response;
   struct curl_slist *request_headers;
 } HTTP_REQUEST;
@@ -1041,29 +1042,29 @@ stormfs_curl_head_multi(const char *path, GList *files)
     struct file *f = head->data;
 
     CURLMcode err;
-    char *full_path = get_path(path, f->name);
-    requests[i].url = get_url(full_path);
-    requests[i].c = get_pooled_handle(requests[i].url);
     requests[i].request_headers = NULL;
     requests[i].response.memory = g_malloc0(1);
     requests[i].response.size = 0;
-
-    sign_request("HEAD", &requests[i].request_headers, full_path);
-    curl_easy_setopt(requests[i].c, CURLOPT_NOBODY, 1L);    // HEAD
-    curl_easy_setopt(requests[i].c, CURLOPT_FILETIME, 1L);  // Last-Modified
-    curl_easy_setopt(requests[i].c, CURLOPT_HTTPHEADER, requests[i].request_headers);
-    curl_easy_setopt(requests[i].c, CURLOPT_HEADERDATA, (void *) &requests[i].response);
-    curl_easy_setopt(requests[i].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+    requests[i].path = get_path(path, f->name);
+    requests[i].done = false;
 
     if(n_running < MAX_REQUESTS && n_running < n_files) {
+      char *url = get_url(requests[i].path);
+      requests[i].c = get_pooled_handle(url);
+      sign_request("HEAD", &requests[i].request_headers, requests[i].path);
+      curl_easy_setopt(requests[i].c, CURLOPT_NOBODY, 1L);    // HEAD
+      curl_easy_setopt(requests[i].c, CURLOPT_FILETIME, 1L);  // Last-Modified
+      curl_easy_setopt(requests[i].c, CURLOPT_HTTPHEADER, requests[i].request_headers);
+      curl_easy_setopt(requests[i].c, CURLOPT_HEADERDATA, (void *) &requests[i].response);
+      curl_easy_setopt(requests[i].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+      g_free(url);
+
       if((err = curl_multi_add_handle(curl.multi, requests[i].c)) != CURLM_OK)
         return -EIO;
 
       n_running++;
       last_req_idx = i;
     }
-
-    g_free(full_path);
 
     i++;
     head = next;
@@ -1112,7 +1113,9 @@ stormfs_curl_head_multi(const char *path, GList *files)
         continue;
 
       for(i = 0; i < n_files; i++) {
-        if(msg->easy_handle == requests[i].c)
+        // requests *might* share the same handle out of the pool,
+        // make sure the request hasn't also been marked as completed
+        if(msg->easy_handle == requests[i].c && !requests[i].done)
           break;
       }
 
@@ -1121,11 +1124,24 @@ stormfs_curl_head_multi(const char *path, GList *files)
       g_free(requests[i].response.memory);
       curl_slist_free_all(requests[i].request_headers);
       curl_multi_remove_handle(curl.multi, requests[i].c);
+      release_pooled_handle(requests[i].c);
+      requests[i].done = true;
       n_running--;
 
       if(n_running < MAX_REQUESTS && last_req_idx < (n_files - 1)) {
         CURLMcode err;
         last_req_idx++;;
+
+        char *url = get_url(requests[last_req_idx].path);
+        requests[last_req_idx].c = get_pooled_handle(url);
+        sign_request("HEAD", &requests[last_req_idx].request_headers, requests[last_req_idx].path);
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_NOBODY, 1L);    // HEAD
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_FILETIME, 1L);  // Last-Modified
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HTTPHEADER, requests[last_req_idx].request_headers);
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HEADERDATA, (void *) &requests[last_req_idx].response);
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+        g_free(url);
+
         if((err = curl_multi_add_handle(curl.multi, requests[last_req_idx].c)) != CURLM_OK)
           return -EIO;
 
@@ -1135,8 +1151,9 @@ stormfs_curl_head_multi(const char *path, GList *files)
   }
 
   for(i = 0; i < n_files; i++) {
-    release_pooled_handle(requests[i].c);
-    g_free(requests[i].url);
+    if(requests[i].c != NULL)
+      release_pooled_handle(requests[i].c);
+    g_free(requests[i].path);
   }
   g_free(requests);
 
