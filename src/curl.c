@@ -939,7 +939,7 @@ check_hiper_info()
       easy = message->easy_handle;
       c = message->data.result;
       printf("\t\tDONE: %d\n", c);
-      curl_easy_cleanup(easy);
+      //curl_easy_cleanup(easy);
     }
   }
 }
@@ -960,6 +960,8 @@ event_cb(GIOChannel *ch, GIOCondition condition, gpointer p)
   c = curl_multi_socket_action(curl.hiper, fd, action, &curl.hiper_running);
   // FIXME: check ^ return value.
 
+  // removing this for now, getattr should handle the removal
+  // and cleanup of handles
   check_hiper_info();
   if(curl.hiper_running) {
     return TRUE;
@@ -985,7 +987,8 @@ timer_cb(gpointer p)
   // FIXME: verify return status ^
   printf("timer_cb: sock_action return was: %d\n", c);
 
-  check_hiper_info();
+  // probably don't need this.
+  // check_hiper_info();
 
   return FALSE;
 }
@@ -1205,7 +1208,6 @@ stormfs_curl_head(const char *path, GList **headers)
   char *response_headers;
   CURL *c = get_pooled_handle(url);
   struct curl_slist *req_headers = NULL;
-  CURLMcode rc;
   HTTP_RESPONSE data;
 
   data.memory = g_malloc(1);
@@ -1233,16 +1235,12 @@ stormfs_curl_head(const char *path, GList **headers)
   release_pooled_handle(c);
   curl_slist_free_all(req_headers);
 
-  CURL *test = get_curl_handle(url);
-  rc = curl_multi_add_handle(curl.hiper, test);
-
   return result;
 }
 
 int
 stormfs_curl_head_multi(const char *path, GList *files)
 {
-  int running_handles;
   size_t i, n_running, last_req_idx = 0;
   size_t n_files = g_list_length(files);
   CURL *c[n_files];
@@ -1275,7 +1273,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
     curl_easy_setopt(c[i], CURLOPT_HEADERFUNCTION, write_memory_cb);
 
     if(n_running < MAX_REQUESTS && n_running < n_files) {
-      if((err = curl_multi_add_handle(curl.multi, c[i])) != CURLM_OK)
+      if((err = curl_multi_add_handle(curl.hiper, c[i])) != CURLM_OK)
         return -EIO;
 
       n_running++;
@@ -1289,47 +1287,15 @@ stormfs_curl_head_multi(const char *path, GList *files)
     head = next;
   }
 
-  curl_multi_perform(curl.multi, &running_handles);
-  while(running_handles) {
-    if(running_handles) {
-      int max_fd = -1;
-      long curl_timeout = -1;
-      struct timeval timeout;
-      CURLMcode err;
-
-      fd_set fd_r;
-      fd_set fd_w;
-      fd_set fd_e;
-      FD_ZERO(&fd_r);
-      FD_ZERO(&fd_w);
-      FD_ZERO(&fd_e);
-      timeout.tv_sec  = 1;
-      timeout.tv_usec = 0;
-
-      curl_multi_timeout(curl.multi, &curl_timeout);
-      if(curl_timeout >= 0) {
-        timeout.tv_sec = curl_timeout / 1000;
-        if(timeout.tv_sec > 1)
-          timeout.tv_sec = 1;
-        else 
-          timeout.tv_usec = (curl_timeout % 1000) * 1000;
-      }
-
-      err = curl_multi_fdset(curl.multi, &fd_r, &fd_w, &fd_e, &max_fd);
-      if(err != CURLM_OK)
-        return -EIO;
-
-      if(select(max_fd + 1, &fd_r, &fd_w, &fd_e, &timeout) == -1)
-        return -errno;
-    }
-
-    curl_multi_perform(curl.multi, &running_handles);
-
+  // curl_multi_socket_action(curl.hiper, CURL_SOCKET_TIMEOUT, 0, &curl.hiper_running);
+  while(n_running > 0) {
     CURLMsg *msg;
     int remaining;
-    while((msg = curl_multi_info_read(curl.multi, &remaining))) {
-      if(msg->msg != CURLMSG_DONE)
+    while((msg = curl_multi_info_read(curl.hiper, &remaining))) {
+      if(msg->msg != CURLMSG_DONE) {
+        printf("RETURN CODE IS %d\n", msg->msg);
         continue;
+      }
 
       for(i = 0; i < n_files; i++) {
         if(msg->easy_handle == c[i])
@@ -1345,17 +1311,20 @@ stormfs_curl_head_multi(const char *path, GList *files)
       if(n_running < MAX_REQUESTS && last_req_idx < (n_files - 1)) {
         CURLMcode err;
         last_req_idx++;;
-        if((err = curl_multi_add_handle(curl.multi, c[last_req_idx])) != CURLM_OK)
+        if((err = curl_multi_add_handle(curl.hiper, c[last_req_idx])) != CURLM_OK)
           return -EIO;
 
+        // curl_multi_socket_action(curl.hiper, CURL_SOCKET_TIMEOUT, 0, &curl.hiper_running);
         n_running++;
       }
     }
   }
 
   g_free(responses);
-  for(i = 0; i < n_files; i++)
+  for(i = 0; i < n_files; i++) {
+    curl_multi_remove_handle(curl.hiper, c[i]);
     release_pooled_handle(c[i]);
+  }
 
   return 0;
 }
