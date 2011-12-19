@@ -1247,6 +1247,7 @@ stormfs_destroy(void *data)
   g_free(stormfs.secret_key);
   g_free(stormfs.virtual_url);
   g_free(stormfs.mountpoint);
+  g_free(stormfs.bucket);
   g_hash_table_destroy(stormfs.mime_types);
 }
 
