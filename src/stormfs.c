@@ -132,7 +132,7 @@ valid_path(const char *path)
     if(strlen(p) > NAME_MAX)
       return -ENAMETOOLONG;
 
-    p = strtok(NULL, "/"); 
+    p = strtok(NULL, "/");
   }
 
   g_free(tmp);
@@ -156,7 +156,7 @@ add_file_to_list(GList *list, const char *name, struct stat *st)
   struct stat *stbuf = g_new0(struct stat, 1);
 
   f->name = g_strdup(name);
-  
+
   if(st != NULL)
     memcpy(stbuf, st, sizeof(struct stat));
 
@@ -233,11 +233,11 @@ cache_mime_types()
   char *type, *ext, *cur;
   char line[BUFSIZ];
 
-  stormfs.mime_types = g_hash_table_new_full(g_str_hash, g_str_equal, 
+  stormfs.mime_types = g_hash_table_new_full(g_str_hash, g_str_equal,
       g_free, g_free);
 
   if((f = fopen("/etc/mime.types", "r")) == NULL) {
-    fprintf(stderr, "%s: unable to open /etc/mime.types: %s\n", 
+    fprintf(stderr, "%s: unable to open /etc/mime.types: %s\n",
         stormfs.progname, strerror(errno));
     return -errno;
   }
@@ -245,7 +245,7 @@ cache_mime_types()
   while(fgets(line, BUFSIZ, f) != NULL) {
     if(*line == 0 || *line == '#')
       continue;
-    
+
     type = line;
     cur  = line;
 
@@ -402,7 +402,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
 
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
-  
+
   if((result = headers_to_stat(headers, stbuf)) != 0)
     return result;
 
@@ -616,7 +616,7 @@ stormfs_flush(const char *path, struct fuse_file_info *fi)
 
 static int
 stormfs_mkdir(const char *path, mode_t mode)
-{ 
+{
   FILE *f;
   int fd;
   int result;
@@ -752,7 +752,7 @@ stormfs_list_bucket(const char *path, GList **files)
   while(start_p != NULL) {
     char *name;
     char *end_p = strstr(start_p, "</Key>");
-     
+
     name = g_strndup(start_p, end_p - start_p);
     *files = add_file_to_list(*files, basename(name), NULL);
     g_free(name);
@@ -767,7 +767,7 @@ stormfs_list_bucket(const char *path, GList **files)
 }
 
 static int
-stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
+stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
   int result;
@@ -917,7 +917,7 @@ stormfs_rename_directory(const char *from, const char *to)
     char *name, *tmp, *file_from, *file_to;
     char *end_p = strstr(start_p, "</Key>");
     struct stat st;
-     
+
     tmp = g_strndup(start_p, end_p - start_p);
     name = basename(tmp);
     file_from = get_path(from, name);
@@ -967,7 +967,7 @@ stormfs_rename(const char *from, const char *to)
   if(st.st_size >= FIVE_GB)
     return -ENOTSUP;
 
-  if(S_ISDIR(st.st_mode)) 
+  if(S_ISDIR(st.st_mode))
     result = stormfs_rename_directory(from, to);
   else
     result = stormfs_rename_file(from, to);
@@ -1073,7 +1073,7 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
 }
 
 static int
-stormfs_write(const char *path, const char *buf, 
+stormfs_write(const char *path, const char *buf,
     size_t size, off_t offset, struct fuse_file_info *fi)
 {
   DEBUG("write: %s\n", path);
@@ -1260,12 +1260,12 @@ usage(const char *progname)
 "    -o opt,[opt...]         mount options\n"
 "    -h   --help             print help\n"
 "    -V   --version          print version\n"
-"\n"                         
-"STORMFS options:\n"         
+"\n"
+"STORMFS options:\n"
 "    -o config=CONFIG        path to configuration file (default: /etc/stormfs.conf)\n"
 "    -o url=URL              specify a custom service URL\n"
 "    -o acl=ACL              canned acl applied to objects (default: private)\n"
-"                            valid options: {private,\n" 
+"                            valid options: {private,\n"
 "                                            public-read,\n"
 "                                            public-read-write,\n"
 "                                            authenticated-read,\n"
@@ -1405,17 +1405,17 @@ main(int argc, char *argv[])
   stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
   stormfs_curl_verify_ssl(stormfs.verify_ssl);
 
-  if((result = fuse_parse_cmdline(&args, &stormfs.mountpoint, 
+  if((result = fuse_parse_cmdline(&args, &stormfs.mountpoint,
       &multithreaded, &stormfs.foreground)) == -1)
     exit(EXIT_FAILURE);
-  
+
   if((ch = fuse_mount(stormfs.mountpoint, &args)) == NULL)
     exit(EXIT_FAILURE);
 
   if((result = fcntl(fuse_chan_fd(ch), F_SETFD, FD_CLOEXEC)) == -1)
     perror("WARNING: failed to set FD_CLOESEC on fuse device");
 
-  fuse = fuse_new(ch, &args, cache_init(&stormfs_oper), 
+  fuse = fuse_new(ch, &args, cache_init(&stormfs_oper),
       sizeof(struct fuse_operations), NULL);
   if(fuse == NULL) {
     fuse_unmount(stormfs.mountpoint, ch);

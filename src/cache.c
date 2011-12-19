@@ -87,7 +87,7 @@ mkpath(const char *path)
 
   dir = dirname(dir);
   tmp = strcpy(tmp, cache.path);
-  p = strtok(dir, "/"); 
+  p = strtok(dir, "/");
   while(p != NULL) {
     tmp = strncat(tmp, "/", 1);
     tmp = strncat(tmp, p, strlen(p));
@@ -191,7 +191,7 @@ cache_purge_parent(const char *path)
 static void
 cache_invalidate(const char *path)
 {
-  if(!cache.on) 
+  if(!cache.on)
     return;
 
   pthread_mutex_lock(&lock);
@@ -329,7 +329,7 @@ cache_add_file(const char *path, uint64_t fd, mode_t mode)
 
   if(mkpath(path) != 0)
     fprintf(stderr, "error creating cache path: %s\n", path);
-  
+
   if((cache_fd = open(node->path, O_CREAT | O_EXCL | O_RDWR, mode)) == -1)
     fprintf(stderr, "error creating cache file: %s\n", path);
 
@@ -476,12 +476,12 @@ cache_read(const char *path, char *buf, size_t size, off_t offset,
 }
 
 static int
-cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler, 
+cache_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
   int result;
   struct node *node;
-  GList *files   = NULL, 
+  GList *files   = NULL,
         *head    = NULL,
         *next    = NULL;
 
@@ -680,7 +680,7 @@ cache_utimens(const char *path, const struct timespec ts[2])
 }
 
 static int
-cache_write(const char *path, const char *buf, 
+cache_write(const char *path, const char *buf,
     size_t size, off_t offset, struct fuse_file_info *fi)
 {
   int result = cache.next_oper->oper.write(path, buf, size, offset, fi);
@@ -726,7 +726,7 @@ validate_cache_path(const char *path)
 }
 
 static void
-cache_unity_fill(struct fuse_cache_operations *oper, 
+cache_unity_fill(struct fuse_cache_operations *oper,
     struct fuse_operations *cache_oper)
 {
   cache_oper->create   = oper->oper.create;

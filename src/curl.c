@@ -134,11 +134,11 @@ url_encode(char *s)
 
   // NOTE: '/' will not be url encoded
   while(*p) {
-    if(isalnum(*p) || *p == '/' || *p == '-' || *p == '_' || *p == '.' || *p == '~') 
+    if(isalnum(*p) || *p == '/' || *p == '-' || *p == '_' || *p == '.' || *p == '~')
       *pbuf++ = *p;
-    else if(*p == ' ') 
+    else if(*p == ' ')
       *pbuf++ = '+';
-    else 
+    else
       *pbuf++ = '%', *pbuf++ = char_to_hex(*p >> 4), *pbuf++ = char_to_hex(*p & 15);
 
     p++;
@@ -367,7 +367,7 @@ append_list_bucket_xml(char *xml, char *xml_to_append)
   // TODO: should be able to use a little less memory here.
   xml = g_realloc(xml, sizeof(char) *
       strlen(xml) + strlen(xml_to_append) + 1);
-  
+
   append_pos = strstr(xml, "</ListBucket");
   to_append  = strstr(xml_to_append, "<Contents");
 
@@ -517,7 +517,7 @@ http_response_errno(CURLcode response_code, CURL *handle)
       if(http_response == 404)
         return -ENOENT;
       if(http_response >= 400 && http_response < 500)
-        return -EIO; 
+        return -EIO;
       if(http_response >= 500)
         return -EAGAIN;
 
@@ -581,7 +581,7 @@ stormfs_curl_easy_perform(CURL *c)
 }
 
 static int
-sign_request(const char *method, 
+sign_request(const char *method,
     struct curl_slist **headers, const char *path)
 {
   char *signature;
@@ -629,7 +629,7 @@ sign_request(const char *method,
   to_sign = strcat(to_sign, resource);
 
   signature = hmac_sha1(curl.secret_key, to_sign);
-  
+
   authorization = g_malloc(sizeof(char) * strlen(curl.access_key) +
                                           strlen(signature) + 22);
   authorization = strcpy(authorization, "Authorization: AWS ");
@@ -678,11 +678,11 @@ get_url(const char *path)
 {
   char *tmp = url_encode((char *) path);
   char *delimiter = "?delimiter=/";
-  char *url = g_malloc(sizeof(char) * 
+  char *url = g_malloc(sizeof(char) *
       strlen(curl.url) +
-      strlen(tmp) + 
+      strlen(tmp) +
       strlen(delimiter) + 1);
-  
+
   url = strcpy(url, curl.url);
   url = strncat(url, tmp, strlen(tmp));
   url = strncat(url, delimiter, strlen(delimiter));
@@ -849,7 +849,7 @@ get_pooled_handle(const char *url)
   GList *head = NULL, *next = NULL;
 
   pthread_mutex_lock(&lock);
-  
+
   /* attempt to immediately grab the next available handle */
   if(curl.marker != NULL)
     head = curl.marker;
@@ -916,7 +916,7 @@ stormfs_curl_delete(const char *path)
   int result;
   char *url = get_url(path);
   CURL *c = get_pooled_handle(url);
-  struct curl_slist *req_headers = NULL; 
+  struct curl_slist *req_headers = NULL;
 
   sign_request("DELETE", &req_headers, path);
   curl_easy_setopt(c, CURLOPT_CUSTOMREQUEST, "DELETE");
@@ -934,7 +934,7 @@ stormfs_curl_get(const char *path, char **data)
   int result;
   char *url = get_url(path);
   CURL *c = get_pooled_handle(url);
-  struct curl_slist *req_headers = NULL; 
+  struct curl_slist *req_headers = NULL;
   HTTP_RESPONSE body;
 
   body.memory = g_malloc(1);
@@ -963,7 +963,7 @@ stormfs_curl_get_file(const char *path, FILE *f)
   int result;
   char *url = get_url(path);
   CURL *c = get_pooled_handle(url);
-  struct curl_slist *req_headers = NULL; 
+  struct curl_slist *req_headers = NULL;
 
   sign_request("GET", &req_headers, path);
   curl_easy_setopt(c, CURLOPT_WRITEDATA, f);
@@ -1089,7 +1089,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
         timeout.tv_sec = curl_timeout / 1000;
         if(timeout.tv_sec > 1)
           timeout.tv_sec = 1;
-        else 
+        else
           timeout.tv_usec = (curl_timeout % 1000) * 1000;
       }
 
@@ -1148,7 +1148,7 @@ stormfs_curl_list_bucket(const char *path, char **xml)
   while(truncated) {
     char *url = get_list_bucket_url(path, marker);
     CURL *c = get_pooled_handle(url);
-    struct curl_slist *req_headers = NULL; 
+    struct curl_slist *req_headers = NULL;
     HTTP_RESPONSE body;
 
     body.memory = g_malloc(1);
@@ -1205,7 +1205,7 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
     perror("lseek");
     return -errno;
   }
-  
+
   if((f = fdopen(fd, "rb")) == NULL) {
     perror("fdopen");
     return -errno;
@@ -1218,7 +1218,7 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
   sign_request("PUT", &req_headers, path);
   curl_easy_setopt(c, CURLOPT_INFILE, f);
   curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);
-  curl_easy_setopt(c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size); 
+  curl_easy_setopt(c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size);
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
   result = stormfs_curl_easy_perform(c);
 
@@ -1305,13 +1305,13 @@ stormfs_curl_init(const char *bucket, const char *url)
   if((curl.multi = curl_multi_init()) == NULL)
     return -1;
 
-  if((scode = curl_share_setopt(curl.share, 
+  if((scode = curl_share_setopt(curl.share,
       CURLSHOPT_LOCKFUNC, share_lock)) != CURLSHE_OK)
     return -1;
-  if((scode = curl_share_setopt(curl.share, 
+  if((scode = curl_share_setopt(curl.share,
       CURLSHOPT_UNLOCKFUNC, share_unlock)) != CURLSHE_OK)
     return -1;
-  if((scode = curl_share_setopt(curl.share, 
+  if((scode = curl_share_setopt(curl.share,
       CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS)) != CURLSHE_OK)
     return -1;
 
