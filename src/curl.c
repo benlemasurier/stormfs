@@ -932,6 +932,7 @@ stormfs_curl_delete(const char *path)
 
   result = stormfs_curl_easy_perform(c);
   release_pooled_handle(c);
+  g_free(url);
 
   return result;
 }
