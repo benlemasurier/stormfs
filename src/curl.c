@@ -313,7 +313,6 @@ uid_header(uid_t uid)
 GList *
 strip_header(GList *headers, const char *key)
 {
-  GList *new = NULL;
   GList *head = NULL, *next = NULL;
 
   head = g_list_first(headers);
@@ -321,19 +320,13 @@ strip_header(GList *headers, const char *key)
     next = head->next;
     HTTP_HEADER *header = head->data;
 
-    if(strstr(header->key, key) == NULL) {
-      HTTP_HEADER *h;
-      h = g_new0(HTTP_HEADER, 1);
-      h->key   = strdup(header->key);
-      h->value = strdup(header->value);
-      new = g_list_append(new, h);
-    }
+    if(strstr(header->key, key) != NULL)
+      headers = g_list_remove(headers, head);
 
     head = next;
   }
 
-  free_headers(headers);
-  return new;
+  return headers;
 }
 
 GList *
