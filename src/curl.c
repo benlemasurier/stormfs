@@ -802,7 +802,6 @@ static int
 destroy_curl_handle(CURL *c)
 {
   curl_easy_cleanup(c);
-  c = 0;
 
   return 0;
 }
@@ -818,19 +817,9 @@ create_pooled_handle(const char *url)
 }
 
 static int
-pool_init(void)
-{
-  curl.pool_full = false;
-  for(uint8_t i = 0; i < POOL_SIZE; i++)
-    curl.pool = g_list_append(curl.pool, create_pooled_handle(curl.url));
-
-  return 0;
-}
-
-static int
 destroy_pooled_handle(CURL_HANDLE *ch)
 {
-  curl_easy_cleanup(ch->c);
+  destroy_curl_handle(ch->c);
   g_free(ch);
 
   return 0;
@@ -840,6 +829,17 @@ static int
 destroy_pool(void)
 {
   g_list_free_full(curl.pool, (GDestroyNotify) destroy_pooled_handle);
+
+  return 0;
+}
+
+static int
+pool_init(void)
+{
+  curl.pool_full = false;
+  for(uint8_t i = 0; i < POOL_SIZE; i++)
+    curl.pool = g_list_append(curl.pool, create_pooled_handle(curl.url));
+
   return 0;
 }
 
