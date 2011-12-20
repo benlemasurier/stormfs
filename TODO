@@ -1,4 +1,5 @@
 * Handle multipart (>5GB) files
 * S3 Bulk delete (rm -rf somedir)
-
+* OSX has no "mime-support" package, but an equivelant file
+    is available on the system. Figure out which one to use.
 * verify memory operations in put/get files

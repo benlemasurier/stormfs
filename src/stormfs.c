@@ -118,7 +118,7 @@ blkcnt_t get_blocks(off_t size)
   return size / 512 + 1;
 }
 
-static inline int
+static int
 valid_path(const char *path)
 {
   char *p = NULL;
@@ -135,7 +135,7 @@ valid_path(const char *path)
     p = strtok(NULL, "/");
   }
 
-  g_free(tmp);
+  free(tmp);
 
   return 0;
 }
@@ -289,23 +289,23 @@ get_mime_type(const char *filename)
   p = strtok(name, ".");
   while(p != NULL) {
     if(ext != NULL)
-      g_free(ext);
+      free(ext);
 
-    ext = g_strdup(p);
+    ext = strdup(p);
     p = strtok(NULL, ".");
   }
 
   if(strcmp(filename, ext) == 0) {
-    g_free(name);
+    free(name);
     return NULL;
   }
 
-  g_free(name);
+  free(name);
 
   if(ext != NULL)
     type = g_hash_table_lookup(stormfs.mime_types, ext);
 
-  g_free(ext);
+  free(ext);
   return type;
 }
 
