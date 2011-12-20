@@ -1240,29 +1240,18 @@ int
 stormfs_curl_put_headers(const char *path, GList *headers)
 {
   int result;
-  char *url = get_url(path);
-  CURL *c = get_pooled_handle(url);
-  struct curl_slist *req_headers = NULL;
-  HTTP_RESPONSE body;
+  HTTP_REQUEST *request = new_request(path);
+  request->headers = headers_to_curl_slist(headers);
 
-  body.memory = g_malloc(1);
-  body.size = 0;
+  sign_request("PUT", &request->headers, request->path);
+  curl_easy_setopt(request->c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
+  curl_easy_setopt(request->c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
+  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
+  curl_easy_setopt(request->c, CURLOPT_WRITEDATA, (void *) &request->response);
+  curl_easy_setopt(request->c, CURLOPT_WRITEFUNCTION, write_memory_cb);
+  result = stormfs_curl_easy_perform(request->c);
 
-  req_headers = headers_to_curl_slist(headers);
-
-  sign_request("PUT", &req_headers, path);
-  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
-  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
-  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
-  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
-
-  result = stormfs_curl_easy_perform(c);
-
-  g_free(url);
-  g_free(body.memory);
-  release_pooled_handle(c);
-  curl_slist_free_all(req_headers);
+  free_request(request);
 
   return result;
 }
