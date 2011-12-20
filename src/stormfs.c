@@ -312,7 +312,9 @@ get_mime_type(const char *filename)
 char *
 get_path(const char *path, const char *name)
 {
-  char *fullpath = g_malloc(sizeof(char) * strlen(path) + strlen(name) + 2);
+  char *fullpath;
+  
+  fullpath = g_malloc(sizeof(char) * strlen(path) + strlen(name) + 2);
   strcpy(fullpath, path);
   if(strcmp(path, "/") != 0)
     strncat(fullpath, "/", 1);
@@ -444,9 +446,13 @@ stormfs_truncate(const char *path, off_t size)
   if((f = tmpfile()) == NULL)
     return -errno;
 
+  /* If O_TRUNC was passed during open() on a newly
+     created file, the cache won't intercept the call to truncate().
+     This is sort of a hack to prevent multiple remote getattr() lookups */
   if((result = cache_getattr(path, &st)) != 0)
     return -result;
 
+  /* FIXME: the same sort of hack from above should be applied here */
   if((result = stormfs_curl_get_file(path, f)) != 0) {
     fclose(f);
     return result;
@@ -500,9 +506,6 @@ stormfs_open(const char *path, struct fuse_file_info *fi)
   if((fd = fileno(f)) == -1)
     return -errno;
 
-  if(fsync(fd) != 0)
-    return -errno;
-
   fi->fh = fd;
 
   return 0;
@@ -527,6 +530,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   headers = add_optional_headers(headers);
 
   result = stormfs_curl_put_headers(path, headers);
+
   free_headers(headers);
   if(result != 0)
     return result;
@@ -608,6 +612,9 @@ stormfs_flush(const char *path, struct fuse_file_info *fi)
   if((result = valid_path(path)) != 0)
     return result;
 
+  /* FIXME: verify that this is actually useful. The FUSE docs
+     are clear that flush != fsync. flush is called once for each
+     close() on an open file descriptor. */
   if(fsync(fi->fh) != 0)
     return -errno;
 
@@ -642,8 +649,7 @@ stormfs_mkdir(const char *path, mode_t mode)
   headers = add_header(headers, mode_header(mode));
   headers = add_header(headers, mtime_header(time(NULL)));
   headers = add_header(headers, content_header("application/x-directory"));
-  if(stormfs.expires != NULL)
-    headers = add_header(headers, expires_header(stormfs.expires));
+  headers = add_optional_headers(headers);
 
   result = stormfs_curl_upload(path, headers, fd);
   free_headers(headers);
@@ -659,13 +665,14 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
   int result;
   GList *headers = NULL;
+  (void) rdev;
 
   DEBUG("mknod: %s\n", path);
 
   if((result = valid_path(path)) != 0)
     return result;
 
-  if((mode & S_IFMT) != S_IFREG)
+  if(!S_ISREG(mode))
     return -EPERM;
 
   headers = add_header(headers, gid_header(getgid()));
@@ -739,7 +746,7 @@ stormfs_list_bucket(const char *path, GList **files)
 
   result = stormfs_curl_list_bucket(path, &xml);
   if(result != 0) {
-    g_free(xml);
+    free(xml);
     return -EIO;
   }
 
@@ -755,13 +762,13 @@ stormfs_list_bucket(const char *path, GList **files)
 
     name = g_strndup(start_p, end_p - start_p);
     *files = add_file_to_list(*files, basename(name), NULL);
-    g_free(name);
+    free(name);
 
     if((start_p = strstr(end_p, "<Key>")) != NULL)
       start_p += strlen("<Key>");
   }
 
-  g_free(xml);
+  free(xml);
 
   return 0;
 }
@@ -771,7 +778,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
   int result;
-  GList *files = NULL, *next = NULL;
+  GList *files = NULL, *head = NULL, *next = NULL;
 
   DEBUG("readdir: %s\n", path);
 
@@ -784,12 +791,12 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   filler(buf, ".",  0, 0);
   filler(buf, "..", 0, 0);
 
-  files = g_list_first(files);
-  while(files != NULL) {
-    next = files->next;
-    struct file *file = files->data;
+  head = g_list_first(files);
+  while(head != NULL) {
+    next = head->next;
+    struct file *file = head->data;
     filler(buf, (char *) file->name, file->stbuf, 0);
-    files = next;
+    head = next;
   }
 
   g_list_free_full(files, (GDestroyNotify) free_file);
