@@ -1,2 +1,4 @@
 * Handle multipart (>5GB) files
 * S3 Bulk delete (rm -rf somedir)
+
+* verify memory operations in put/get files
