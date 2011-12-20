@@ -63,10 +63,11 @@ typedef struct {
 
 typedef struct {
   CURL *c;
+  char *url;
   char *path;
   bool done;
   HTTP_RESPONSE response;
-  struct curl_slist *request_headers;
+  struct curl_slist *headers;
 } HTTP_REQUEST;
 
 static char *
@@ -155,7 +156,7 @@ url_encode(char *s)
   *pbuf = '\0';
   return buf;
 }
-
+ 
 static char *
 get_resource(const char *path)
 {
@@ -910,22 +911,44 @@ release_pooled_handle(CURL *c)
     destroy_curl_handle(c);
 }
 
+HTTP_REQUEST *
+new_request(const char *path)
+{
+  HTTP_REQUEST *request = g_new0(HTTP_REQUEST, 1);
+
+  request->done = false;
+  request->path = g_strdup(path);
+  request->url = get_url(path);
+  request->c = get_pooled_handle(request->url);
+
+  return request;
+} 
+
+static int
+free_request(HTTP_REQUEST *request)
+{
+  g_free(request->response.memory);
+  release_pooled_handle(request->c);
+  g_free(request->url);
+  g_free(request->path);
+  curl_slist_free_all(request->headers);
+  g_free(request);
+
+  return 0;
+}
+
 int
 stormfs_curl_delete(const char *path)
 {
   int result;
-  char *url = get_url(path);
-  CURL *c = get_pooled_handle(url);
-  struct curl_slist *req_headers = NULL;
+  HTTP_REQUEST *request = new_request(path);
 
-  sign_request("DELETE", &req_headers, path);
-  curl_easy_setopt(c, CURLOPT_CUSTOMREQUEST, "DELETE");
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  sign_request("DELETE", &request->headers, request->path);
+  curl_easy_setopt(request->c, CURLOPT_CUSTOMREQUEST, "DELETE");
+  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
 
-  result = stormfs_curl_easy_perform(c);
-  release_pooled_handle(c);
-  curl_slist_free_all(req_headers);
-  g_free(url);
+  result = stormfs_curl_easy_perform(request->c);
+  free_request(request);
 
   return result;
 }
@@ -1036,7 +1059,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
     struct file *f = head->data;
 
     CURLMcode err;
-    requests[i].request_headers = NULL;
+    requests[i].headers = NULL;
     requests[i].response.memory = g_malloc0(1);
     requests[i].response.size = 0;
     requests[i].path = get_path(path, f->name);
@@ -1045,10 +1068,10 @@ stormfs_curl_head_multi(const char *path, GList *files)
     if(n_running < MAX_REQUESTS && n_running < n_files) {
       char *url = get_url(requests[i].path);
       requests[i].c = get_pooled_handle(url);
-      sign_request("HEAD", &requests[i].request_headers, requests[i].path);
+      sign_request("HEAD", &requests[i].headers, requests[i].path);
       curl_easy_setopt(requests[i].c, CURLOPT_NOBODY, 1L);    // HEAD
       curl_easy_setopt(requests[i].c, CURLOPT_FILETIME, 1L);  // Last-Modified
-      curl_easy_setopt(requests[i].c, CURLOPT_HTTPHEADER, requests[i].request_headers);
+      curl_easy_setopt(requests[i].c, CURLOPT_HTTPHEADER, requests[i].headers);
       curl_easy_setopt(requests[i].c, CURLOPT_HEADERDATA, (void *) &requests[i].response);
       curl_easy_setopt(requests[i].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
       g_free(url);
@@ -1116,7 +1139,7 @@ stormfs_curl_head_multi(const char *path, GList *files)
       struct file *f = g_list_nth_data(files, i);
       extract_meta(requests[i].response.memory, &(f->headers));
       g_free(requests[i].response.memory);
-      curl_slist_free_all(requests[i].request_headers);
+      curl_slist_free_all(requests[i].headers);
       curl_multi_remove_handle(curl.multi, requests[i].c);
       release_pooled_handle(requests[i].c);
       requests[i].done = true;
@@ -1128,10 +1151,10 @@ stormfs_curl_head_multi(const char *path, GList *files)
 
         char *url = get_url(requests[last_req_idx].path);
         requests[last_req_idx].c = get_pooled_handle(url);
-        sign_request("HEAD", &requests[last_req_idx].request_headers, requests[last_req_idx].path);
+        sign_request("HEAD", &requests[last_req_idx].headers, requests[last_req_idx].path);
         curl_easy_setopt(requests[last_req_idx].c, CURLOPT_NOBODY, 1L);    // HEAD
         curl_easy_setopt(requests[last_req_idx].c, CURLOPT_FILETIME, 1L);  // Last-Modified
-        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HTTPHEADER, requests[last_req_idx].request_headers);
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HTTPHEADER, requests[last_req_idx].headers);
         curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HEADERDATA, (void *) &requests[last_req_idx].response);
         curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
         g_free(url);
