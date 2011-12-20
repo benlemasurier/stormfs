@@ -965,7 +965,6 @@ stormfs_curl_get(const char *path, char **data)
   curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
   curl_easy_setopt(request->c, CURLOPT_WRITEDATA, (void *) &request->response);
   curl_easy_setopt(request->c, CURLOPT_WRITEFUNCTION, write_memory_cb);
-
   result = stormfs_curl_easy_perform(request->c);
 
   *data = strdup(request->response.memory);
@@ -978,20 +977,15 @@ int
 stormfs_curl_get_file(const char *path, FILE *f)
 {
   int result;
-  char *url = get_url(path);
-  CURL *c = get_pooled_handle(url);
-  struct curl_slist *req_headers = NULL;
+  HTTP_REQUEST *request = new_request(path);
 
-  sign_request("GET", &req_headers, path);
-  curl_easy_setopt(c, CURLOPT_WRITEDATA, f);
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  sign_request("GET", &request->headers, path);
+  curl_easy_setopt(request->c, CURLOPT_WRITEDATA, f);
+  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
+  result = stormfs_curl_easy_perform(request->c);
 
-  result = stormfs_curl_easy_perform(c);
   rewind(f);
-
-  g_free(url);
-  release_pooled_handle(c);
-  curl_slist_free_all(req_headers);
+  free_request(request);
 
   return result;
 }
