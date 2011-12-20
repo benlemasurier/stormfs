@@ -1,6 +1,7 @@
 *~
 *.swp
 *.swo
+*.dSYM
 .DS_Store
 autom4te.cache
 aclocal.m4
