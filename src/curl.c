@@ -1003,9 +1003,7 @@ stormfs_curl_head(const char *path, GList **headers)
   data.memory = g_malloc(1);
   data.size = 0;
 
-  pthread_mutex_lock(&lock);
   sign_request("HEAD", &req_headers, path);
-  pthread_mutex_unlock(&lock);
   curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    // HEAD
   curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  // Last-Modified
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
@@ -1015,9 +1013,7 @@ stormfs_curl_head(const char *path, GList **headers)
   result = stormfs_curl_easy_perform(c);
 
   response_headers = strdup(data.memory);
-  pthread_mutex_lock(&lock);
   extract_meta(response_headers, &(*headers));
-  pthread_mutex_unlock(&lock);
 
   g_free(url);
   g_free(data.memory);
