@@ -994,28 +994,18 @@ int
 stormfs_curl_head(const char *path, GList **headers)
 {
   int result;
-  char *url = get_url(path);
-  CURL *c = get_pooled_handle(url);
-  struct curl_slist *req_headers = NULL;
-  HTTP_RESPONSE data;
+  HTTP_REQUEST *request = new_request(path);
 
-  data.memory = g_malloc(1);
-  data.size = 0;
+  sign_request("HEAD", &request->headers, request->path);
+  curl_easy_setopt(request->c, CURLOPT_NOBODY, 1L);    // HEAD
+  curl_easy_setopt(request->c, CURLOPT_FILETIME, 1L);  // Last-Modified
+  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
+  curl_easy_setopt(request->c, CURLOPT_HEADERDATA, (void *) &request->response);
+  curl_easy_setopt(request->c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+  result = stormfs_curl_easy_perform(request->c);
 
-  sign_request("HEAD", &req_headers, path);
-  curl_easy_setopt(c, CURLOPT_NOBODY, 1L);    // HEAD
-  curl_easy_setopt(c, CURLOPT_FILETIME, 1L);  // Last-Modified
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
-  curl_easy_setopt(c, CURLOPT_HEADERDATA, (void *) &data);
-  curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
-  result = stormfs_curl_easy_perform(c);
-
-  extract_meta(data.memory, &(*headers));
-
-  g_free(url);
-  g_free(data.memory);
-  release_pooled_handle(c);
-  curl_slist_free_all(req_headers);
+  extract_meta(request->response.memory, &(*headers));
+  free_request(request);
 
   return result;
 }
