@@ -860,6 +860,8 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
 
   DEBUG("release: %s\n", path);
 
+  /* if the file was opened read-only, we can assume it didn't change
+      and skip the upload process */
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
     GList *headers = NULL;
 
@@ -941,15 +943,15 @@ stormfs_rename_directory(const char *from, const char *to)
         return result;
     }
 
-    g_free(tmp);
-    g_free(file_to);
-    g_free(file_from);
+    free(tmp);
+    free(file_to);
+    free(file_from);
 
     if((start_p = strstr(end_p, "<Key>")) != NULL)
       start_p += strlen("<Key>");
   }
 
-  g_free(xml);
+  free(xml);
 
   return stormfs_rename_file(from, to);
 }
@@ -994,7 +996,7 @@ stormfs_rmdir(const char *path)
     return result;
 
   if((result = stormfs_curl_get(path, &data)) != 0) {
-    g_free(data);
+    free(data);
     return result;
   }
 
