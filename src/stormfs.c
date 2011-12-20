@@ -1001,11 +1001,11 @@ stormfs_rmdir(const char *path)
   }
 
   if(strstr(data, "ETag") != NULL) {
-    g_free(data);
+    free(data);
     return -ENOTEMPTY;
   }
 
-  g_free(data);
+  free(data);
 
   return stormfs_curl_delete(path);
 }
@@ -1185,7 +1185,7 @@ get_config_value(char *s)
 
   *(end) = '\0';
 
-  return g_strdup(s);
+  return strdup(s);
 }
 
 static void
@@ -1388,6 +1388,7 @@ main(int argc, char *argv[])
   int result;
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
+  g_thread_init(NULL);
   memset(&stormfs, 0, sizeof(struct stormfs));
   stormfs.progname = argv[0];
   set_defaults();
