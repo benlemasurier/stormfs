@@ -920,6 +920,8 @@ new_request(const char *path)
   request->path = g_strdup(path);
   request->url = get_url(path);
   request->c = get_pooled_handle(request->url);
+  request->response.memory = g_malloc0(1);
+  request->response.size = 0;
 
   return request;
 } 
@@ -957,27 +959,17 @@ int
 stormfs_curl_get(const char *path, char **data)
 {
   int result;
-  char *url = get_url(path);
-  CURL *c = get_pooled_handle(url);
-  struct curl_slist *req_headers = NULL;
-  HTTP_RESPONSE body;
+  HTTP_REQUEST *request = new_request(path);
 
-  body.memory = g_malloc(1);
-  body.size = 0;
+  sign_request("GET", &request->headers, request->path);
+  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
+  curl_easy_setopt(request->c, CURLOPT_WRITEDATA, (void *) &request->response);
+  curl_easy_setopt(request->c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
-  sign_request("GET", &req_headers, path);
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
-  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
-  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
+  result = stormfs_curl_easy_perform(request->c);
 
-  result = stormfs_curl_easy_perform(c);
-
-  *data = strdup(body.memory);
-
-  g_free(url);
-  g_free(body.memory);
-  release_pooled_handle(c);
-  curl_slist_free_all(req_headers);
+  *data = strdup(request->response.memory);
+  free_request(request);
 
   return result;
 }
