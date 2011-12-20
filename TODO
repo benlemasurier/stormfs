@@ -1,0 +1,2 @@
+* Handle multipart (>5GB) files
+* S3 Bulk delete (rm -rf somedir)
