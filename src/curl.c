@@ -995,7 +995,6 @@ stormfs_curl_head(const char *path, GList **headers)
 {
   int result;
   char *url = get_url(path);
-  char *response_headers;
   CURL *c = get_pooled_handle(url);
   struct curl_slist *req_headers = NULL;
   HTTP_RESPONSE data;
@@ -1009,15 +1008,12 @@ stormfs_curl_head(const char *path, GList **headers)
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
   curl_easy_setopt(c, CURLOPT_HEADERDATA, (void *) &data);
   curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
-
   result = stormfs_curl_easy_perform(c);
 
-  response_headers = strdup(data.memory);
-  extract_meta(response_headers, &(*headers));
+  extract_meta(data.memory, &(*headers));
 
   g_free(url);
   g_free(data.memory);
-  g_free(response_headers);
   release_pooled_handle(c);
   curl_slist_free_all(req_headers);
 
