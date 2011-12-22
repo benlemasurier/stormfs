@@ -322,8 +322,10 @@ strip_header(GList *headers, const char *key)
     next = head->next;
     HTTP_HEADER *header = head->data;
 
-    if(strstr(header->key, key) != NULL)
-      headers = g_list_remove(headers, head);
+    if(strstr(header->key, key) != NULL) {
+      printf("SHOULD BE REMOVING: %s\n", header->key);
+      headers = g_list_remove(headers, head->data);
+    }
 
     head = next;
   }
