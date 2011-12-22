@@ -17,6 +17,8 @@
 #include <errno.h>
 #include <ctype.h>
 #include <time.h>
+#include <sys/time.h>
+#include <sys/select.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -174,7 +176,7 @@ get_resource(const char *path)
 HTTP_HEADER *
 acl_header(const char *acl)
 {
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key = strdup("x-amz-acl");
   h->value = strdup(acl);
@@ -185,7 +187,7 @@ acl_header(const char *acl)
 HTTP_HEADER *
 content_header(const char *type)
 {
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key   = strdup("Content-Type");
   if(type == NULL)
@@ -199,7 +201,7 @@ content_header(const char *type)
 HTTP_HEADER *
 copy_meta_header()
 {
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key   = strdup("x-amz-metadata-directive");
   h->value = strdup("COPY");
@@ -232,7 +234,7 @@ ctime_header(time_t t)
 HTTP_HEADER *
 expires_header(const char *expires)
 {
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key = strdup("Expires");
   h->value = strdup(expires);
@@ -244,7 +246,7 @@ HTTP_HEADER *
 gid_header(gid_t gid)
 {
   char *s = gid_to_s(gid);
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key   = strdup("x-amz-meta-gid");
   h->value = s;
@@ -256,7 +258,7 @@ HTTP_HEADER *
 mode_header(mode_t mode)
 {
   char *s = mode_to_s(mode);
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key   = strdup("x-amz-meta-mode");
   h->value = s;
@@ -268,7 +270,7 @@ HTTP_HEADER *
 mtime_header(time_t t)
 {
   char *s = time_to_s(t);
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key = strdup("x-amz-meta-mtime");
   h->value = s;
@@ -279,7 +281,7 @@ mtime_header(time_t t)
 HTTP_HEADER *
 replace_header()
 {
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key   = strdup("x-amz-metadata-directive");
   h->value = strdup("REPLACE");
@@ -290,7 +292,7 @@ replace_header()
 HTTP_HEADER *
 storage_header(const char *class)
 {
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key = strdup("x-amz-storage-class");
   h->value = strdup(class);
@@ -302,7 +304,7 @@ HTTP_HEADER *
 uid_header(uid_t uid)
 {
   char *s = uid_to_s(uid);
-  HTTP_HEADER *h = g_malloc(sizeof(HTTP_HEADER));
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key   = strdup("x-amz-meta-uid");
   h->value = s;
@@ -929,12 +931,12 @@ new_request(const char *path)
 static int
 free_request(HTTP_REQUEST *request)
 {
-  g_free(request->response.memory);
+  free(request->response.memory);
   release_pooled_handle(request->c);
-  g_free(request->url);
-  g_free(request->path);
+  free(request->url);
+  free(request->path);
   curl_slist_free_all(request->headers);
-  g_free(request);
+  free(request);
 
   return 0;
 }
