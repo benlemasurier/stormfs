@@ -82,10 +82,10 @@ mkpath(const char *path)
 {
   int result = 0;
   struct stat st;
-  char *p = NULL, *dir = strdup(path);
+  char *path_copy = strdup(path);
+  char *p = NULL, *dir = dirname(path_copy);
   char *tmp = g_malloc0(sizeof(char) * strlen(cache.path) + strlen(dir) + 1);
 
-  dir = dirname(dir);
   tmp = strcpy(tmp, cache.path);
   p = strtok(dir, "/");
   while(p != NULL) {
@@ -111,7 +111,7 @@ mkpath(const char *path)
   }
 
   free(tmp);
-  free(dir);
+  free(path_copy);
 
   return result;
 }
