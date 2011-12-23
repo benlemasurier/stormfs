@@ -1388,7 +1388,6 @@ main(int argc, char *argv[])
   int result;
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-  g_thread_init(NULL);
   memset(&stormfs, 0, sizeof(struct stormfs));
   stormfs.progname = argv[0];
   set_defaults();
@@ -1418,10 +1417,11 @@ main(int argc, char *argv[])
   stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
   stormfs_curl_verify_ssl(stormfs.verify_ssl);
 
+  g_thread_init(NULL);
   stormfs_fuse_main(&args);
+  g_thread_exit(NULL);
 
   fuse_opt_free_args(&args);
-  g_thread_exit(NULL);
 
   return result;
 }
