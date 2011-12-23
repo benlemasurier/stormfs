@@ -49,6 +49,7 @@ struct stormfs {
   char *virtual_url;
   char *access_key;
   char *secret_key;
+  char *mime_path;
   char *mountpoint;
   char *storage_class;
   char *expires;
@@ -71,6 +72,7 @@ static struct fuse_opt stormfs_opts[] = {
   STORMFS_OPT("no_verify_ssl", verify_ssl,    0),
   STORMFS_OPT("use_rrs",       rrs,           true),
   STORMFS_OPT("stormfs_debug", debug,         true),
+  STORMFS_OPT("mime_path=%s",  mime_path,     0),
 
   FUSE_OPT_KEY("-d",            KEY_FOREGROUND),
   FUSE_OPT_KEY("--debug",       KEY_FOREGROUND),
@@ -236,9 +238,9 @@ cache_mime_types()
   stormfs.mime_types = g_hash_table_new_full(g_str_hash, g_str_equal,
       g_free, g_free);
 
-  if((f = fopen("/etc/mime.types", "r")) == NULL) {
-    fprintf(stderr, "%s: unable to open /etc/mime.types: %s\n",
-        stormfs.progname, strerror(errno));
+  if((f = fopen(stormfs.mime_path, "r")) == NULL) {
+    fprintf(stderr, "%s: unable to open %s: %s\n",
+        stormfs.progname, stormfs.mime_path, strerror(errno));
     return -errno;
   }
 
@@ -1129,6 +1131,7 @@ set_defaults()
   stormfs.url = "http://s3.amazonaws.com";
   stormfs.storage_class = "STANDARD";
   stormfs.config = "/etc/stormfs.conf";
+  stormfs.mime_path = "/etc/mime.types";
 }
 
 static void
@@ -1240,6 +1243,8 @@ parse_config(const char *path)
       stormfs.verify_ssl = 0;
     if(strstr(p, "use_rrs") != NULL)
       stormfs.rrs = true;
+    if(strstr(p, "mime_path") != NULL)
+      stormfs.mime_path = get_config_value(strstr(p, "=") + 1);
 
     p = strtok(NULL, "\n");
   }
@@ -1286,6 +1291,7 @@ usage(const char *progname)
 "    -o use_ssl              force the use of SSL\n"
 "    -o no_verify_ssl        skip SSL certificate/host verification\n"
 "    -o use_rrs              use reduced redundancy storage\n"
+"    -o mime_path            path to mime.types (default: /etc/mime.types)\n"
 "    -o cache=BOOL           enable caching {yes,no} (default: yes)\n"
 "    -o cache_path=PATH      path to store cached files (default: /tmp/stormfs)\n"
 "    -o cache_timeout=N      sets timeout for caches in seconds (default: 300)\n"
