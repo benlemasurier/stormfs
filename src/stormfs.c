@@ -493,7 +493,7 @@ stormfs_open(const char *path, struct fuse_file_info *fi)
   if((result = valid_path(path)) != 0)
     return result;
 
-  if((unsigned int) fi->flags & O_TRUNC)
+  if(fi->flags & O_TRUNC)
     if((result = cache_truncate(path, 0)) != 0)
       return result;
 
@@ -517,12 +517,22 @@ static int
 stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   int result;
+  int fd;
+  FILE *f;
   GList *headers = NULL;
 
   DEBUG("create: %s\n", path);
 
   if((result = valid_path(path)) != 0)
     return result;
+
+  if((f = tmpfile()) == NULL)
+    return -errno;
+
+  if((fd = fileno(f)) == -1)
+    return -errno;
+
+  fi->fh = fd;
 
   headers = add_header(headers, gid_header(getgid()));
   headers = add_header(headers, uid_header(getuid()));
@@ -534,10 +544,6 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   result = stormfs_curl_put_headers(path, headers);
 
   free_headers(headers);
-  if(result != 0)
-    return result;
-
-  result = stormfs_open(path, fi);
 
   return result;
 }
