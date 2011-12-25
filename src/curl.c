@@ -158,7 +158,7 @@ url_encode(char *s)
   *pbuf = '\0';
   return buf;
 }
- 
+
 static char *
 get_resource(const char *path)
 {
