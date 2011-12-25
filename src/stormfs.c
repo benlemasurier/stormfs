@@ -104,6 +104,12 @@ get_mode(const char *s)
 }
 
 static time_t
+get_ctime(const char *s)
+{
+  return (time_t) strtoul(s, (char **) NULL, 10);
+}
+
+static time_t
 get_mtime(const char *s)
 {
   return (time_t) strtoul(s, (char **) NULL, 10);
@@ -342,8 +348,8 @@ stat_to_headers(GList *headers, struct stat st)
   headers = add_header(headers, gid_header(st.st_gid));
   headers = add_header(headers, uid_header(st.st_uid));
   headers = add_header(headers, mode_header(st.st_mode));
-  headers = add_header(headers, mtime_header(st.st_mtime));
   headers = add_header(headers, ctime_header(st.st_ctime));
+  headers = add_header(headers, mtime_header(st.st_mtime));
 
   return headers;
 }
@@ -364,6 +370,8 @@ headers_to_stat(GList *headers, struct stat *stbuf)
       stbuf->st_uid = get_uid(header->value);
     else if(strcmp(header->key, "x-amz-meta-gid") == 0)
       stbuf->st_gid = get_gid(header->value);
+    else if(strcmp(header->key, "x-amz-meta-ctime") == 0)
+      stbuf->st_ctime = get_ctime(header->value);
     else if(strcmp(header->key, "x-amz-meta-mtime") == 0)
       stbuf->st_mtime = get_mtime(header->value);
     else if(strcmp(header->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
@@ -537,6 +545,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   headers = add_header(headers, gid_header(getgid()));
   headers = add_header(headers, uid_header(getuid()));
   headers = add_header(headers, mode_header(mode));
+  headers = add_header(headers, ctime_header(time(NULL)));
   headers = add_header(headers, mtime_header(time(NULL)));
   headers = add_header(headers, content_header(get_mime_type(path)));
   headers = add_optional_headers(headers);

@@ -223,10 +223,11 @@ copy_source_header(const char *path)
 HTTP_HEADER *
 ctime_header(time_t t)
 {
+  char *s = time_to_s(t);
   HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key = strdup("x-amz-meta-ctime");
-  h->value = time_to_s(t);
+  h->value = s;
 
   return h;
 }
@@ -751,7 +752,7 @@ static int
 extract_meta(char *headers, GList **meta)
 {
   char *p;
-  char *to_extract[8] = {
+  char *to_extract[9] = {
     "Content-Type",
     "Content-Length",
     "Last-Modified",
@@ -759,6 +760,7 @@ extract_meta(char *headers, GList **meta)
     "x-amz-meta-gid",
     "x-amz-meta-uid",
     "x-amz-meta-mode",
+    "x-amz-meta-ctime",
     "x-amz-meta-mtime"
   };
 
@@ -766,7 +768,7 @@ extract_meta(char *headers, GList **meta)
   while(p != NULL) {
     int i;
 
-    for(i = 0; i < 8; i++) {
+    for(i = 0; i < 9; i++) {
       HTTP_HEADER *h;
       char *key = to_extract[i];
       char *value;
@@ -1329,7 +1331,8 @@ stormfs_curl_init(const char *bucket, const char *url)
     return -1;
   if(multi_init() != 0)
     return -1;
-  if(pool_init() != 0);
+  if(pool_init() != 0)
+    return -1;
 
   return 0;
 }
