@@ -349,10 +349,14 @@ static int
 cache_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   int result;
+
+  // invalidate the directory beforehand
+  // allows the next layer to populate the new cache
+  cache_invalidate_dir(path);
+
   if((result = cache.next_oper->oper.create(path, mode, fi)) != 0)
     return result;
 
-  cache_invalidate_dir(path);
   cache_add_file(path, fi->fh, mode);
 
   return result;

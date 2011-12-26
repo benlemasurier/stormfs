@@ -554,6 +554,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   headers = add_optional_headers(headers);
 
   result = stormfs_curl_put_headers(path, headers);
+  cache_add_attr(path, &st);
 
   free_headers(headers);
 
