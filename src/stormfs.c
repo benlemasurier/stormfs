@@ -527,7 +527,6 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   int result;
   int fd;
   FILE *f;
-  struct stat *st = g_new0(struct stat, 1);
   GList *headers = NULL;
 
   DEBUG("create: %s\n", path);
@@ -551,14 +550,9 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   headers = add_header(headers, content_header(get_mime_type(path)));
   headers = add_optional_headers(headers);
 
-  if((result = stormfs_curl_put_headers(path, headers)) != 0) {
-    free_headers(headers);
-    return result;
-  }
+  result = stormfs_curl_put_headers(path, headers);
 
-  result = headers_to_stat(headers, st);
-  cache_add_attr(path, st);
-  free(st);
+  free_headers(headers);
 
   return result;
 }
@@ -670,7 +664,6 @@ stormfs_mkdir(const char *path, mode_t mode)
   headers = add_header(headers, gid_header(getgid()));
   headers = add_header(headers, uid_header(getuid()));
   headers = add_header(headers, mode_header(mode));
-  headers = add_header(headers, ctime_header(time(NULL)));
   headers = add_header(headers, mtime_header(time(NULL)));
   headers = add_header(headers, content_header("application/x-directory"));
   headers = add_optional_headers(headers);
@@ -1085,35 +1078,21 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
 {
   int result;
   GList *headers = NULL;
-  struct stat *st = g_new0(struct stat, 1);
 
   DEBUG("utimens: %s\n", path);
 
-  if((result = valid_path(path)) != 0) {
-    free(st);
+  if((result = valid_path(path)) != 0)
     return result;
-  }
 
-  if((result = cache_getattr(path, st)) != 0) {
-    free(st);
+  if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
-  }
 
-  headers = stat_to_headers(headers, *st);
   headers = add_header(headers, mtime_header(ts[1].tv_sec));
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
   headers = add_optional_headers(headers);
 
-  if((result = stormfs_curl_put_headers(path, headers)) != 0) {
-    free_headers(headers);
-    return result;
-  }
-
-  result = headers_to_stat(headers, st);
-  cache_add_attr(path, st);
-
-  free(st);
+  result = stormfs_curl_put_headers(path, headers);
   free_headers(headers);
 
   return result;
