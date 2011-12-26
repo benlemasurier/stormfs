@@ -527,6 +527,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   int result;
   int fd;
   FILE *f;
+  struct stat st;
   GList *headers = NULL;
 
   DEBUG("create: %s\n", path);
@@ -542,11 +543,13 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
   fi->fh = fd;
 
-  headers = add_header(headers, gid_header(getgid()));
-  headers = add_header(headers, uid_header(getuid()));
-  headers = add_header(headers, mode_header(mode));
-  headers = add_header(headers, ctime_header(time(NULL)));
-  headers = add_header(headers, mtime_header(time(NULL)));
+  st.st_gid = getgid();
+  st.st_uid = getuid();
+  st.st_mode = mode;
+  st.st_ctime = time(NULL);
+  st.st_mtime = time(NULL);
+
+  headers = stat_to_headers(headers, st);
   headers = add_header(headers, content_header(get_mime_type(path)));
   headers = add_optional_headers(headers);
 
