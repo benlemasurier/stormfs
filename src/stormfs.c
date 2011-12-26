@@ -527,6 +527,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   int result;
   int fd;
   FILE *f;
+  struct stat *st = g_new0(struct stat, 1);
   GList *headers = NULL;
 
   DEBUG("create: %s\n", path);
@@ -550,9 +551,14 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   headers = add_header(headers, content_header(get_mime_type(path)));
   headers = add_optional_headers(headers);
 
-  result = stormfs_curl_put_headers(path, headers);
+  if((result = stormfs_curl_put_headers(path, headers)) != 0) {
+    free_headers(headers);
+    return result;
+  }
 
-  free_headers(headers);
+  result = headers_to_stat(headers, st);
+  cache_add_attr(path, st);
+  free(st);
 
   return result;
 }
@@ -1078,21 +1084,35 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
 {
   int result;
   GList *headers = NULL;
+  struct stat *st = g_new0(struct stat, 1);
 
   DEBUG("utimens: %s\n", path);
 
-  if((result = valid_path(path)) != 0)
+  if((result = valid_path(path)) != 0) {
+    free(st);
     return result;
+  }
 
-  if((result = stormfs_curl_head(path, &headers)) != 0)
+  if((result = cache_getattr(path, st)) != 0) {
+    free(st);
     return result;
+  }
 
+  headers = stat_to_headers(headers, *st);
   headers = add_header(headers, mtime_header(ts[1].tv_sec));
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
   headers = add_optional_headers(headers);
 
-  result = stormfs_curl_put_headers(path, headers);
+  if((result = stormfs_curl_put_headers(path, headers)) != 0) {
+    free_headers(headers);
+    return result;
+  }
+
+  result = headers_to_stat(headers, st);
+  cache_add_attr(path, st);
+
+  free(st);
   free_headers(headers);
 
   return result;
