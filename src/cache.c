@@ -349,14 +349,10 @@ static int
 cache_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   int result;
-
-  // invalidate the directory before creating the file.
-  // this allows stormfs_create() to populate the new file attributes
-  cache_invalidate_dir(path);
-
   if((result = cache.next_oper->oper.create(path, mode, fi)) != 0)
     return result;
 
+  cache_invalidate_dir(path);
   cache_add_file(path, fi->fh, mode);
 
   return result;
@@ -673,9 +669,11 @@ cache_unlink(const char *path)
 static int
 cache_utimens(const char *path, const struct timespec ts[2])
 {
-  // stormfs_truncate() will update the cache.
-  // don't attempt to invalidate here.
-  return cache.next_oper->oper.utimens(path, ts);
+  int result = cache.next_oper->oper.utimens(path, ts);
+  if(result == 0)
+    cache_invalidate(path);
+
+  return result;
 }
 
 static int
