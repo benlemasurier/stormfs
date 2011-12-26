@@ -657,13 +657,11 @@ stormfs_mkdir(const char *path, mode_t mode)
   if((fd = fileno(f)) == -1)
     return -errno;
 
-  if(fsync(fd) != 0)
-    return -errno;
-
   headers = add_header(headers, acl_header(stormfs.acl));
   headers = add_header(headers, gid_header(getgid()));
   headers = add_header(headers, uid_header(getuid()));
   headers = add_header(headers, mode_header(mode));
+  headers = add_header(headers, ctime_header(time(NULL)));
   headers = add_header(headers, mtime_header(time(NULL)));
   headers = add_header(headers, content_header("application/x-directory"));
   headers = add_optional_headers(headers);
