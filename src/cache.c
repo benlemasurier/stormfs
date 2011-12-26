@@ -244,7 +244,7 @@ cache_add_attr(const char *path, const struct stat *stbuf)
   node = cache_get(path);
   now  = time(NULL);
   node->stat = *stbuf;
-  node->stat_valid = time(NULL) + cache.stat_timeout;
+  node->stat_valid = now + cache.stat_timeout;
   if(node->stat_valid > node->valid)
     node->valid = node->stat_valid;
   cache_clean();
@@ -274,14 +274,13 @@ cache_get_attr(const char *path, struct stat *stbuf)
 static void
 cache_add_dir(const char *path, GList *files)
 {
-  time_t now;
+  time_t now = time(NULL);
   struct node *node;
 
   pthread_mutex_lock(&lock);
   node = cache_get(path);
-  now = time(NULL);
   node->dir = copy_file_list(files);
-  node->dir_valid = time(NULL) + cache.dir_timeout;
+  node->dir_valid = now + cache.dir_timeout;
   if(node->dir_valid > node->valid)
     node->valid = node->dir_valid;
   cache_clean();
@@ -292,14 +291,13 @@ static void
 cache_add_link(const char *path, const char *link, size_t size)
 {
   struct node *node;
-  time_t now;
+  time_t now = time(NULL);
 
   pthread_mutex_lock(&lock);
   node = cache_get(path);
-  now = time(NULL);
   g_free(node->link);
   node->link = g_strndup(link, strnlen(link, size - 1));
-  node->link_valid = time(NULL) + cache.link_timeout;
+  node->link_valid = now + cache.link_timeout;
   if(node->link_valid > node->valid)
     node->valid = node->link_valid;
   cache_clean();
@@ -311,14 +309,13 @@ cache_add_file(const char *path, uint64_t fd, mode_t mode)
 {
   int cache_fd;
   struct node *node;
-  time_t now;
+  time_t now = time(NULL);
   char buf[BUFSIZ];
   ssize_t n;
   struct stat st;
 
   pthread_mutex_lock(&lock);
   node = cache_get(path);
-  now = time(NULL);
   node->path = cache_path(path);
   pthread_mutex_unlock(&lock);
 
@@ -341,7 +338,7 @@ cache_add_file(const char *path, uint64_t fd, mode_t mode)
   pthread_mutex_unlock(&node_lock);
 
   pthread_mutex_lock(&lock);
-  node->file_valid = time(NULL) + cache.file_timeout;
+  node->file_valid = now + cache.file_timeout;
   if(node->file_valid > node->valid)
     node->valid = node->file_valid;
   cache_clean();
@@ -352,10 +349,14 @@ static int
 cache_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   int result;
+
+  // invalidate the directory before creating the file.
+  // this allows stormfs_create() to populate the new file attributes
+  cache_invalidate_dir(path);
+
   if((result = cache.next_oper->oper.create(path, mode, fi)) != 0)
     return result;
 
-  cache_invalidate_dir(path);
   cache_add_file(path, fi->fh, mode);
 
   return result;
@@ -672,11 +673,9 @@ cache_unlink(const char *path)
 static int
 cache_utimens(const char *path, const struct timespec ts[2])
 {
-  int result = cache.next_oper->oper.utimens(path, ts);
-  if(result == 0)
-    cache_invalidate(path);
-
-  return result;
+  // stormfs_truncate() will update the cache.
+  // don't attempt to invalidate here.
+  return cache.next_oper->oper.utimens(path, ts);
 }
 
 static int
