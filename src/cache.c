@@ -366,10 +366,26 @@ static int
 cache_chmod(const char *path, mode_t mode)
 {
   int result;
-  if((result = cache.next_oper->oper.chmod(path, mode)) != 0)
-    return result;
+  struct node *node;
 
-  cache_invalidate(path);
+  if((result = cache.next_oper->oper.chmod(path, mode)) != 0) {
+    cache_invalidate(path);
+    return result;
+  }
+
+  pthread_mutex_lock(&lock);
+  node = cache_lookup(path);
+  pthread_mutex_unlock(&lock);
+  if(node != NULL) {
+    time_t now = time(NULL);
+    if(node->stat_valid - now >= 0) {
+      node->stat.st_mode = mode;
+      node->stat_valid = now + cache.stat_timeout;
+      if(node->stat_valid > node->valid)
+        node->valid = node->stat_valid;
+    }
+  }
+
   return result;
 }
 
@@ -377,10 +393,27 @@ static int
 cache_chown(const char *path, uid_t uid, gid_t gid)
 {
   int result;
-  if((result = cache.next_oper->oper.chown(path, uid, gid)) != 0)
-    return result;
+  struct node *node;
 
-  cache_invalidate(path);
+  if((result = cache.next_oper->oper.chown(path, uid, gid)) != 0) {
+    cache_invalidate(path);
+    return result;
+  }
+
+  pthread_mutex_lock(&lock);
+  node = cache_lookup(path);
+  pthread_mutex_unlock(&lock);
+  if(node != NULL) {
+    time_t now = time(NULL);
+    if(node->stat_valid - now >= 0) {
+      node->stat.st_uid = uid;
+      node->stat.st_gid = gid;
+      node->stat_valid = now + cache.stat_timeout;
+      if(node->stat_valid > node->valid)
+        node->valid = node->stat_valid;
+    }
+  }
+
   return result;
 }
 
