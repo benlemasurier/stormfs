@@ -189,6 +189,33 @@ cache_purge_parent(const char *path)
 }
 
 static void
+remove_from_parent(const char *path)
+{
+  struct node *parent;
+  time_t now = time(NULL);
+  GList *head = NULL, *next = NULL;
+  char *to_remove = basename((char *) path);
+
+  if((parent = cache_lookup(dirname((char *) path))) == NULL)
+    return;
+
+  head = parent->dir;
+  while(head != NULL) {
+    next = head->next;
+    struct file *f = head->data;
+    if(strcmp(f->name, to_remove) == 0) {
+      parent->dir = g_list_remove(parent->dir, head->data);
+      free_file(f);
+    }
+    head = next;
+  }
+
+  parent->dir_valid = now + cache.dir_timeout;
+  if(parent->dir_valid > parent->valid)
+    parent->valid = parent->dir_valid;
+}
+
+static void
 cache_invalidate(const char *path)
 {
   if(!cache.on)
@@ -196,6 +223,8 @@ cache_invalidate(const char *path)
 
   pthread_mutex_lock(&lock);
   cache_purge(path);
+  remove_from_parent(path);
+  cache_clean();
   pthread_mutex_unlock(&lock);
 }
 
@@ -694,7 +723,7 @@ cache_unlink(const char *path)
 {
   int result = cache.next_oper->oper.unlink(path);
   if(result == 0)
-    cache_invalidate_dir(path);
+    cache_invalidate(path);
 
   return result;
 }
