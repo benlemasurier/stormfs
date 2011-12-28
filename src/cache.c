@@ -612,7 +612,6 @@ cache_release(const char *path, struct fuse_file_info *fi)
         result = stormfs_curl_upload(path, headers, fi->fh);
         free_headers(headers);
         pthread_mutex_unlock(&lock);
-        cache_invalidate_dir(path);
       } else {
         pthread_mutex_unlock(&lock);
       }
@@ -628,9 +627,6 @@ cache_release(const char *path, struct fuse_file_info *fi)
   pthread_mutex_unlock(&lock);
 
   result = cache.next_oper->oper.release(path, fi);
-  if(result == 0)
-    if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY))
-      cache_invalidate_dir(path);
 
   return result;
 }
@@ -706,9 +702,26 @@ cache_unlink(const char *path)
 static int
 cache_utimens(const char *path, const struct timespec ts[2])
 {
-  int result = cache.next_oper->oper.utimens(path, ts);
-  if(result == 0)
+  int result;
+  struct node *node;
+
+  if((result = cache.next_oper->oper.utimens(path, ts)) != 0) {
     cache_invalidate(path);
+    return result;
+  }
+
+  pthread_mutex_lock(&lock);
+  node = cache_lookup(path);
+  pthread_mutex_unlock(&lock);
+  if(node != NULL) {
+    time_t now = time(NULL);
+    if(node->stat_valid - now >= 0) {
+      node->stat.st_mtime = ts[1].tv_sec;
+      node->stat_valid = now + cache.stat_timeout;
+      if(node->stat_valid > node->valid)
+        node->valid = node->stat_valid;
+    }
+  }
 
   return result;
 }
