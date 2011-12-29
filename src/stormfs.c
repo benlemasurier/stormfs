@@ -167,6 +167,7 @@ free_file(struct file *f)
 {
   free(f->path);
   if(f->st != NULL) free(f->st);
+  if(f->dir != NULL) g_list_free(f->dir);
   g_list_free_full(f->headers, (GDestroyNotify) free_header);
   pthread_mutex_destroy(&f->lock);
   g_free(f);
@@ -904,6 +905,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
   int result;
+  struct file *dir;
   GList *files = NULL, *head = NULL, *next = NULL;
 
   DEBUG("readdir: %s\n", path);
@@ -911,14 +913,29 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   if((result = valid_path(path)) != 0)
     return result;
 
+  filler(buf, ".",  0, 0);
+  filler(buf, "..", 0, 0);
+
+  dir = cache_get(path);
+  if(cache_valid(dir) && dir->dir != NULL) {
+    pthread_mutex_lock(&dir->lock);
+    head = g_list_first(dir->dir);
+    while(head != NULL) {
+      next = head->next;
+      struct file *f = head->data;
+      filler(buf, (char *) f->name, f->st, 0);
+      head = next;
+    }
+    pthread_mutex_unlock(&dir->lock);
+    return 0;
+  }
+
   if((result = stormfs_list_bucket(path, &files)) != 0)
     return result;
 
   result = stormfs_getattr_multi(path, files);
 
-  filler(buf, ".",  0, 0);
-  filler(buf, "..", 0, 0);
-
+  pthread_mutex_lock(&dir->lock);
   head = g_list_first(files);
   while(head != NULL) {
     next = head->next;
@@ -940,9 +957,11 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     pthread_mutex_unlock(&f->lock);
 
     filler(buf, (char *) f->name, f->st, 0);
+    dir->dir = g_list_append(dir->dir, f);
 
     head = next;
   }
+  pthread_mutex_unlock(&dir->lock);
 
   g_list_free_full(files, (GDestroyNotify) free_file);
 

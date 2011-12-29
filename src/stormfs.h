@@ -14,6 +14,7 @@
 struct file {
   char *name;           /* file name */
   char *path;           /* file path */
+  GList *dir;           /* list of files in this directory */
   GList *headers;       /* http headers */
   struct stat *st;      /* stat(2) buffer */
   time_t valid;         /* entry timeout */
