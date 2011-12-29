@@ -207,7 +207,7 @@ validate_mountpoint(const char *path, struct stat *stbuf)
 
   DEBUG("validating mountpoint: %s\n", path);
 
-  if(stat(path, &(*stbuf)) == -1) {
+  if(stat(path, stbuf) == -1) {
     fprintf(stderr, "%s: unable to stat MOUNTPOINT %s: %s\n",
         stormfs.progname, path, strerror(errno));
     return -1;
@@ -1282,11 +1282,12 @@ static void
 stormfs_destroy(void *data)
 {
   stormfs_curl_destroy();
-  g_free(stormfs.access_key);
-  g_free(stormfs.secret_key);
-  g_free(stormfs.virtual_url);
-  g_free(stormfs.mountpoint);
-  g_free(stormfs.bucket);
+  free(stormfs.bucket);
+  free(stormfs.mountpoint);
+  free(stormfs.progname);
+  free(stormfs.access_key);
+  free(stormfs.secret_key);
+  free(stormfs.virtual_url);
   g_hash_table_destroy(stormfs.cache);
   g_hash_table_destroy(stormfs.mime_types);
 }
@@ -1362,7 +1363,7 @@ stormfs_opt_proc(void *data, const char *arg, int key,
 
     case FUSE_OPT_KEY_NONOPT:
       if(!stormfs.bucket) {
-        stormfs.bucket = g_strdup((char *) arg);
+        stormfs.bucket = strdup((char *) arg);
         return 0;
       }
 
@@ -1370,7 +1371,7 @@ stormfs_opt_proc(void *data, const char *arg, int key,
       if(validate_mountpoint(arg, &stbuf) == -1)
         exit(EXIT_FAILURE);
 
-      stormfs.mountpoint = g_strdup((char *) arg);
+      stormfs.mountpoint = strdup((char *) arg);
       stormfs.root_mode = stbuf.st_mode;
 
       return 1;
@@ -1414,7 +1415,7 @@ main(int argc, char *argv[])
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
   memset(&stormfs, 0, sizeof(struct stormfs));
-  stormfs.progname = argv[0];
+  stormfs.progname = strdup(argv[0]);
   set_defaults();
   cache_init();
 
@@ -1442,7 +1443,6 @@ main(int argc, char *argv[])
 
   g_thread_init(NULL);
   stormfs_fuse_main(&args);
-  g_thread_exit(NULL);
 
   fuse_opt_free_args(&args);
 
