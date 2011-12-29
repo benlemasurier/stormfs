@@ -28,7 +28,6 @@
 #include <fuse_lowlevel.h>
 #include <glib.h>
 #include "stormfs.h"
-#include "cache.h"
 #include "curl.h"
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
@@ -456,13 +455,9 @@ stormfs_truncate(const char *path, off_t size)
   if((f = tmpfile()) == NULL)
     return -errno;
 
-  /* If O_TRUNC was passed during open() on a newly
-     created file, the cache won't intercept the call to truncate().
-     This is sort of a hack to prevent multiple remote getattr() lookups */
-  if((result = cache_getattr(path, &st)) != 0)
+  if((result = stormfs_getattr(path, &st)) != 0)
     return -result;
 
-  /* FIXME: the same sort of hack from above should be applied here */
   if((result = stormfs_curl_get_file(path, f)) != 0) {
     fclose(f);
     return result;
@@ -502,7 +497,7 @@ stormfs_open(const char *path, struct fuse_file_info *fi)
     return result;
 
   if(fi->flags & O_TRUNC)
-    if((result = cache_truncate(path, 0)) != 0)
+    if((result = stormfs_truncate(path, 0)) != 0)
       return result;
 
   if((f = tmpfile()) == NULL)
@@ -554,7 +549,6 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   headers = add_optional_headers(headers);
 
   result = stormfs_curl_put_headers(path, headers);
-  cache_add_attr(path, &st);
 
   free_headers(headers);
 
@@ -807,6 +801,9 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   if((result = stormfs_list_bucket(path, &files)) != 0)
     return result;
 
+  // FIXME: need this.
+  // result = stormfs_getattr_multi(path, files);
+
   filler(buf, ".",  0, 0);
   filler(buf, "..", 0, 0);
 
@@ -951,7 +948,7 @@ stormfs_rename_directory(const char *from, const char *to)
     file_from = get_path(from, name);
     file_to   = get_path(to, name);
 
-    if((result = cache_getattr(file_from, &st)) != 0)
+    if((result = stormfs_getattr(file_from, &st)) != 0)
       return -result;
 
     if(S_ISDIR(st.st_mode)) {
@@ -988,7 +985,7 @@ stormfs_rename(const char *from, const char *to)
   if((result = valid_path(to)) != 0)
     return result;
 
-  if((result = cache_getattr(from, &st)) != 0)
+  if((result = stormfs_getattr(from, &st)) != 0)
     return -result;
 
   // TODO: handle multipart files
@@ -1309,15 +1306,10 @@ usage(const char *progname)
 "    -o no_verify_ssl        skip SSL certificate/host verification\n"
 "    -o use_rrs              use reduced redundancy storage\n"
 "    -o mime_path            path to mime.types (default: /etc/mime.types)\n"
-"    -o cache=BOOL           enable caching {yes,no} (default: yes)\n"
-"    -o cache_path=PATH      path to store cached files (default: /tmp/stormfs)\n"
-"    -o cache_timeout=N      sets timeout for caches in seconds (default: 300)\n"
-"    -o cache_X_timeout=N    sets timeout for {file,stat,dir,link} cache\n"
 "\n", progname);
 }
 
-static struct fuse_cache_operations stormfs_oper = {
-  .oper = {
+static struct fuse_operations stormfs_oper = {
     .create   = stormfs_create,
     .chmod    = stormfs_chmod,
     .chown    = stormfs_chown,
@@ -1340,14 +1332,12 @@ static struct fuse_cache_operations stormfs_oper = {
     .unlink   = stormfs_unlink,
     .utimens  = stormfs_utimens,
     .write    = stormfs_write,
-  },
-  .list_bucket = stormfs_list_bucket,
 };
 
 static int
 stormfs_fuse_main(struct fuse_args *args)
 {
-  return fuse_main(args->argc, args->argv, cache_init(&stormfs_oper), NULL);
+  return fuse_main(args->argc, args->argv, &stormfs_oper, NULL);
 }
 
 static int
@@ -1428,9 +1418,6 @@ main(int argc, char *argv[])
   stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
 
   show_debug_header();
-
-  if(cache_parse_options(&args) != 0)
-    exit(EXIT_FAILURE);
 
   if((result = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
     fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs.progname);
