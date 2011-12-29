@@ -486,7 +486,8 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   }
 
   pthread_mutex_lock(&f->lock);
-  f->st = g_new0(struct stat, 1);
+  if(f->st == NULL)
+    f->st = g_new0(struct stat, 1);
   f->st->st_nlink = 1;
 
   if((result = stormfs_curl_head(path, &headers)) != 0)
@@ -903,11 +904,12 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     struct file *f = cache_get(fullpath);
     free(fullpath);
     pthread_mutex_lock(&f->lock);
-    f->valid = time(NULL) + cache.timeout;
     if(f->st == NULL)
       f->st = g_new0(struct stat, 1);
 
     memcpy(f->st, file->st, sizeof(struct stat));
+    f->st->st_nlink = 1;
+    cache_touch(f);
     pthread_mutex_unlock(&f->lock);
     filler(buf, (char *) f->name, f->st, 0);
     head = next;
