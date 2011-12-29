@@ -32,6 +32,7 @@
 #include "curl.h"
 
 #define DEFAULT_CACHE_TIMEOUT 300
+#define CACHE_CLEAN_INTERVAL  60
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
 #define DEBUG(format, ...) \
@@ -63,6 +64,7 @@ struct stormfs {
 struct cache {
   bool on;
   int timeout;
+  time_t last_cleaned;
   GHashTable *files;
   pthread_mutex_t lock;
 } cache;
@@ -192,6 +194,7 @@ cache_init(void)
 {
   cache.on = (stormfs.cache) ? true : false;
   cache.timeout = DEFAULT_CACHE_TIMEOUT;
+  cache.last_cleaned = time(NULL);
   pthread_mutex_init(&cache.lock, NULL);
   cache.files = g_hash_table_new_full(g_str_hash, g_str_equal, 
       g_free, (GDestroyNotify) free_file);
@@ -212,6 +215,29 @@ static void
 cache_touch(struct file *f)
 {
   f->valid = time(NULL) + cache.timeout;
+}
+
+static int
+cache_clean_file(void *key_, struct file *f, time_t *now)
+{
+  (void) key_;
+  if(*now > f->valid)
+    return TRUE;
+
+  return FALSE;
+}
+
+static void
+cache_clean()
+{
+  time_t now = time(NULL);
+
+  if(now > (cache.last_cleaned + CACHE_CLEAN_INTERVAL)) {
+    g_hash_table_foreach_remove(cache.files, 
+        (GHRFunc) cache_clean_file, &now);
+
+    cache.last_cleaned = now;
+  }
 }
 
 static struct file *
@@ -237,6 +263,7 @@ cache_get(const char *path)
   struct file *f = NULL;
 
   pthread_mutex_lock(&cache.lock);
+  cache_clean();
   f = g_hash_table_lookup(cache.files, path);
   if(f == NULL)
     f = cache_insert(path);
