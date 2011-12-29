@@ -53,6 +53,7 @@ struct stormfs {
   char *storage_class;
   char *expires;
   mode_t root_mode;
+  GHashTable *cache;
   GHashTable *mime_types;
 } stormfs;
 
@@ -187,6 +188,16 @@ copy_file_list(GList *list)
   }
 
   return new;
+}
+
+static int
+cache_init(void)
+{
+  stormfs.cache = g_hash_table_new_full(g_str_hash, g_str_equal, 
+      g_free, (GDestroyNotify) free_file);
+
+
+  return 0;
 }
 
 static int
@@ -1276,6 +1287,7 @@ stormfs_destroy(void *data)
   g_free(stormfs.virtual_url);
   g_free(stormfs.mountpoint);
   g_free(stormfs.bucket);
+  g_hash_table_destroy(stormfs.cache);
   g_hash_table_destroy(stormfs.mime_types);
 }
 
@@ -1404,6 +1416,7 @@ main(int argc, char *argv[])
   memset(&stormfs, 0, sizeof(struct stormfs));
   stormfs.progname = argv[0];
   set_defaults();
+  cache_init();
 
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
     fprintf(stderr, "%s: error parsing command-line options\n", stormfs.progname);
