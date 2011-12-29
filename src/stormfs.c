@@ -208,6 +208,12 @@ cache_destroy(void)
   return 0;
 }
 
+static void
+cache_touch(struct file *f)
+{
+  f->valid = time(NULL) + cache.timeout;
+}
+
 static struct file *
 cache_insert(const char *path)
 {
@@ -217,8 +223,8 @@ cache_insert(const char *path)
   f->name = basename(f->path);
   f->headers = NULL;
   f->st = NULL;
-  f->valid = time(NULL) + cache.timeout;
   pthread_mutex_init(&f->lock, NULL);
+  cache_touch(f);
 
   g_hash_table_insert(cache.files, strdup(path), f);
 
@@ -472,13 +478,14 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   }
 
   f = cache_get(path);
-  pthread_mutex_lock(&f->lock);
   if(cache_valid(f) && f->st != NULL) {
+    pthread_mutex_lock(&f->lock);
     memcpy(stbuf, f->st, sizeof(struct stat));
     pthread_mutex_unlock(&f->lock);
     return 0;
   }
 
+  pthread_mutex_lock(&f->lock);
   f->st = g_new0(struct stat, 1);
   f->st->st_nlink = 1;
 
@@ -491,6 +498,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   if(S_ISREG(f->st->st_mode))
     f->st->st_blocks = get_blocks(f->st->st_size);
 
+  cache_touch(f);
   pthread_mutex_unlock(&f->lock);
 
   free_headers(headers);
