@@ -213,6 +213,31 @@ cache_destroy(void)
 }
 
 static void
+cache_invalidate(const char *path)
+{
+  pthread_mutex_lock(&cache.lock);
+  g_hash_table_remove(cache.files, path);
+  pthread_mutex_unlock(&cache.lock);
+}
+
+static void
+cache_invalidate_dir(const char *path)
+{
+  cache_invalidate(path);
+
+  const char *s = strrchr(path, '/');
+  if(s) {
+    if(s == path)
+      g_hash_table_remove(cache.files, "/");
+    else {
+      char *parent = strndup(path, s - path);
+      cache_invalidate(parent);
+      free(parent);
+    }
+  }
+}
+
+static void
 cache_touch(struct file *f)
 {
   f->valid = time(NULL) + cache.timeout;
@@ -507,9 +532,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
 
   f = cache_get(path);
   if(cache_valid(f) && f->st != NULL) {
-    pthread_mutex_lock(&f->lock);
     memcpy(stbuf, f->st, sizeof(struct stat));
-    pthread_mutex_unlock(&f->lock);
     return 0;
   }
 
@@ -546,6 +569,8 @@ stormfs_unlink(const char *path)
   if((result = valid_path(path)) != 0)
     return result;
 
+  cache_invalidate_dir(path);
+
   return stormfs_curl_delete(path);
 }
 
@@ -556,6 +581,7 @@ stormfs_truncate(const char *path, off_t size)
   int fd;
   int result;
   struct stat st;
+  struct file *cache_f;
   GList *headers = NULL;
 
   DEBUG("truncate: %s\n", path);
@@ -588,6 +614,14 @@ stormfs_truncate(const char *path, off_t size)
 
   result = stormfs_curl_upload(path, headers, fd);
   free_headers(headers);
+
+  cache_f = cache_get(path);
+  if(cache_valid(cache_f) && cache_f->st != NULL) {
+    pthread_mutex_lock(&cache_f->lock);
+    cache_f->st->st_size = get_blocks(size);
+    cache_touch(cache_f);
+    pthread_mutex_unlock(&cache_f->lock);
+  }
 
   if(close(fd) != 0)
     return -errno;
@@ -641,6 +675,8 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   if((result = valid_path(path)) != 0)
     return result;
 
+  cache_invalidate_dir(path);
+
   if((f = tmpfile()) == NULL)
     return -errno;
 
@@ -670,12 +706,21 @@ static int
 stormfs_chmod(const char *path, mode_t mode)
 {
   int result;
+  struct file *f;
   GList *headers = NULL;
 
   DEBUG("chmod: %s\n", path);
 
   if((result = valid_path(path)) != 0)
     return result;
+
+  f = cache_get(path);
+  if(cache_valid(f) && f->st != NULL) {
+    pthread_mutex_lock(&f->lock);
+    f->st->st_mode = mode;
+    cache_touch(f);
+    pthread_mutex_unlock(&f->lock);
+  }
 
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
@@ -696,6 +741,7 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   int result = 0;
   struct group *g;
   struct passwd *p;
+  struct file *f;
   GList *headers = NULL;
   errno = 0;
 
@@ -719,6 +765,15 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
 
   if(result != 0)
     return result;
+
+  f = cache_get(path);
+  if(cache_valid(f) && f->st != NULL) {
+    pthread_mutex_lock(&f->lock);
+    f->st->st_uid = (*p).pw_uid;
+    f->st->st_gid = (*g).gr_gid;
+    cache_touch(f);
+    pthread_mutex_unlock(&f->lock);
+  }
 
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
@@ -760,6 +815,8 @@ stormfs_mkdir(const char *path, mode_t mode)
   if((result = valid_path(path)) != 0)
     return result;
 
+  cache_invalidate_dir(path);
+
   if((f = tmpfile()) == NULL)
     return -errno;
 
@@ -798,6 +855,8 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
 
   if(!S_ISREG(mode))
     return -EPERM;
+
+  cache_invalidate_dir(path);
 
   headers = add_header(headers, gid_header(getgid()));
   headers = add_header(headers, uid_header(getuid()));
@@ -1145,6 +1204,10 @@ stormfs_rename(const char *from, const char *to)
   else
     result = stormfs_rename_file(from, to);
 
+  // FIXME: cache_rename
+  cache_invalidate_dir(from);
+  cache_invalidate_dir(to);
+
   return result;
 }
 
@@ -1158,6 +1221,8 @@ stormfs_rmdir(const char *path)
 
   if((result = valid_path(path)) != 0)
     return result;
+
+  cache_invalidate_dir(path);
 
   if((result = stormfs_curl_get(path, &data)) != 0) {
     free(data);
@@ -1201,6 +1266,8 @@ stormfs_symlink(const char *from, const char *to)
   if((result = valid_path(to)) != 0)
     return result;
 
+  cache_invalidate_dir(to);
+
   if((fd = fileno(tmpfile())) == -1)
     return -errno;
 
@@ -1224,6 +1291,7 @@ static int
 stormfs_utimens(const char *path, const struct timespec ts[2])
 {
   int result;
+  struct file *f;
   GList *headers = NULL;
 
   DEBUG("utimens: %s\n", path);
@@ -1233,6 +1301,14 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
 
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
+
+  f = cache_get(path);
+  if(cache_valid(f) && f->st != NULL) {
+    pthread_mutex_lock(&f->lock);
+    f->st->st_mtime = ts[1].tv_sec;
+    cache_touch(f);
+    pthread_mutex_unlock(&f->lock);
+  }
 
   headers = add_header(headers, mtime_header(ts[1].tv_sec));
   headers = add_header(headers, replace_header());
@@ -1249,7 +1325,16 @@ static int
 stormfs_write(const char *path, const char *buf,
     size_t size, off_t offset, struct fuse_file_info *fi)
 {
+  struct file *f;
   DEBUG("write: %s\n", path);
+
+  f = cache_get(path);
+  if(cache_valid(f) && f->st != NULL) {
+    pthread_mutex_lock(&f->lock);
+    f->st->st_size += get_blocks(size);
+    cache_touch(f);
+    pthread_mutex_unlock(&f->lock);
+  }
 
   return pwrite(fi->fh, buf, size, offset);
 }
