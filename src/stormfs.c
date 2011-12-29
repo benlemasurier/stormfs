@@ -911,7 +911,9 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     f->st->st_nlink = 1;
     cache_touch(f);
     pthread_mutex_unlock(&f->lock);
+
     filler(buf, (char *) f->name, f->st, 0);
+
     head = next;
   }
 
