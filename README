@@ -61,10 +61,7 @@ STORMFS options:
     -o no_verify_ssl        skip SSL certificate/host verification
     -o use_rrs              use reduced redundancy storage
     -o mime_path            path to mime.types (default: /etc/mime.types)
-    -o cache=BOOL           enable caching {yes,no} (default: yes)
-    -o cache_path=PATH      path to store cached files (default: /tmp/stormfs)
-    -o cache_timeout=N      sets timeout for caches in seconds (default: 300)
-    -o cache_X_timeout=N    sets timeout for {file,stat,dir,link} cache
+    -o nocache              disable the cache (cache is enabled by default)
 
 
 Supported APIs

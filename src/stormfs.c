@@ -26,9 +26,12 @@
 #include <libgen.h>
 #include <fuse.h>
 #include <fuse_lowlevel.h>
+#include <pthread.h>
 #include <glib.h>
 #include "stormfs.h"
 #include "curl.h"
+
+#define DEFAULT_CACHE_TIMEOUT 300
 
 #define STORMFS_OPT(t, p, v) { t, offsetof(struct stormfs, p), v }
 #define DEBUG(format, ...) \
@@ -37,13 +40,14 @@
 struct stormfs {
   bool ssl;
   bool rrs;
-  bool debug;
+  int cache;
   int foreground;
   int verify_ssl;
   char *acl;
   char *url;
   char *bucket;
   char *config;
+  char *debug;
   char *progname;
   char *virtual_url;
   char *access_key;
@@ -53,9 +57,15 @@ struct stormfs {
   char *storage_class;
   char *expires;
   mode_t root_mode;
-  GHashTable *cache;
   GHashTable *mime_types;
 } stormfs;
+
+struct cache {
+  bool on;
+  int timeout;
+  GHashTable *files;
+  pthread_mutex_t lock;
+} cache;
 
 enum {
   KEY_HELP,
@@ -71,6 +81,7 @@ static struct fuse_opt stormfs_opts[] = {
   STORMFS_OPT("use_ssl",       ssl,           true),
   STORMFS_OPT("no_verify_ssl", verify_ssl,    0),
   STORMFS_OPT("use_rrs",       rrs,           true),
+  STORMFS_OPT("nocache",       cache,         0),
   STORMFS_OPT("stormfs_debug", debug,         true),
   STORMFS_OPT("mime_path=%s",  mime_path,     0),
 
@@ -121,7 +132,8 @@ get_size(const char *s)
   return (off_t) strtoul(s, (char **) NULL, 10);
 }
 
-blkcnt_t get_blocks(off_t size)
+static blkcnt_t
+get_blocks(off_t size)
 {
   return size / 512 + 1;
 }
@@ -151,53 +163,92 @@ valid_path(const char *path)
 void
 free_file(struct file *f)
 {
-  g_free(f->name);
-  g_free(f->stbuf);
+  free(f->path);
+  if(f->st != NULL) free(f->st);
   g_list_free_full(f->headers, (GDestroyNotify) free_header);
+  pthread_mutex_destroy(&f->lock);
   g_free(f);
 }
 
 GList *
-add_file_to_list(GList *list, const char *name, struct stat *st)
+add_file_to_list(GList *list, const char *path, struct stat *st)
 {
   struct file *f = g_new0(struct file, 1);
   struct stat *stbuf = g_new0(struct stat, 1);
 
-  f->name = g_strdup(name);
+  f->path = strdup(path);
+  f->name = basename(f->path);
 
   if(st != NULL)
     memcpy(stbuf, st, sizeof(struct stat));
 
-  f->stbuf = stbuf;
+  f->st = stbuf;
 
   return g_list_append(list, f);
-}
-
-GList *
-copy_file_list(GList *list)
-{
-  GList *new = NULL;
-  GList *head = NULL, *next = NULL;
-
-  head = g_list_first(list);
-  while(head != NULL) {
-    next = head->next;
-    struct file *f = head->data;
-    new = add_file_to_list(new, f->name, f->stbuf);
-    head = next;
-  }
-
-  return new;
 }
 
 static int
 cache_init(void)
 {
-  stormfs.cache = g_hash_table_new_full(g_str_hash, g_str_equal, 
+  cache.on = (stormfs.cache) ? true : false;
+  cache.timeout = DEFAULT_CACHE_TIMEOUT;
+  pthread_mutex_init(&cache.lock, NULL);
+  cache.files = g_hash_table_new_full(g_str_hash, g_str_equal, 
       g_free, (GDestroyNotify) free_file);
 
+  return 0;
+}
+
+static int
+cache_destroy(void)
+{
+  g_hash_table_destroy(cache.files);
+  pthread_mutex_destroy(&cache.lock);
 
   return 0;
+}
+
+static struct file *
+cache_insert(const char *path)
+{
+  struct file *f = g_new0(struct file, 1);
+
+  f->path = strdup(path);
+  f->name = basename(f->path);
+  f->headers = NULL;
+  f->st = NULL;
+  f->valid = time(NULL) + cache.timeout;
+  pthread_mutex_init(&f->lock, NULL);
+
+  g_hash_table_insert(cache.files, strdup(path), f);
+
+  return f;
+}
+
+static struct file *
+cache_get(const char *path)
+{
+  struct file *f = NULL;
+
+  pthread_mutex_lock(&cache.lock);
+  f = g_hash_table_lookup(cache.files, path);
+  if(f == NULL)
+    f = cache_insert(path);
+  pthread_mutex_unlock(&cache.lock);
+
+  return f;
+}
+
+static bool
+cache_valid(struct file *f)
+{
+  if(!cache.on)
+    return false;
+
+  if(f->valid - time(NULL) >= 0)
+    return true;
+
+  return false;
 }
 
 static int
@@ -245,7 +296,7 @@ valid_acl(const char *acl)
 }
 
 static int
-cache_mime_types()
+cache_mime_types(void)
 {
   FILE *f;
   char *type, *ext, *cur;
@@ -408,30 +459,42 @@ stormfs_getattr(const char *path, struct stat *stbuf)
 {
   int result;
   GList *headers = NULL;
+  struct file *f = NULL;
 
   DEBUG("getattr: %s\n", path);
 
   if((result = valid_path(path)) != 0)
     return result;
 
-  memset(stbuf, 0, sizeof(struct stat));
-  stbuf->st_nlink = 1;
-
   if(strcmp(path, "/") == 0) {
     stbuf->st_mode = stormfs.root_mode | S_IFDIR;
     return 0;
   }
 
+  f = cache_get(path);
+  pthread_mutex_lock(&f->lock);
+  if(cache_valid(f) && f->st != NULL) {
+    memcpy(stbuf, f->st, sizeof(struct stat));
+    pthread_mutex_unlock(&f->lock);
+    return 0;
+  }
+
+  f->st = g_new0(struct stat, 1);
+  f->st->st_nlink = 1;
+
   if((result = stormfs_curl_head(path, &headers)) != 0)
     return result;
 
-  if((result = headers_to_stat(headers, stbuf)) != 0)
+  if((result = headers_to_stat(headers, f->st)) != 0)
     return result;
 
-  if(S_ISREG(stbuf->st_mode))
-    stbuf->st_blocks = get_blocks(stbuf->st_size);
+  if(S_ISREG(f->st->st_mode))
+    f->st->st_blocks = get_blocks(f->st->st_size);
+
+  pthread_mutex_unlock(&f->lock);
 
   free_headers(headers);
+  memcpy(stbuf, f->st, sizeof(struct stat));
 
   return 0;
 }
@@ -726,7 +789,7 @@ stormfs_getattr_multi(const char *path, GList *files)
 
     struct file *f = head->data;
     GList *headers = f->headers;
-    struct stat *stbuf = f->stbuf;
+    struct stat *stbuf = f->st;
     if((result = headers_to_stat(headers, stbuf)) != 0)
       return result;
 
@@ -782,11 +845,14 @@ stormfs_list_bucket(const char *path, GList **files)
 
   while(start_p != NULL) {
     char *name;
+    char *fullpath;
     char *end_p = strstr(start_p, "</Key>");
 
-    name = g_strndup(start_p, end_p - start_p);
-    *files = add_file_to_list(*files, basename(name), NULL);
+    name = strndup(start_p, end_p - start_p);
+    fullpath = get_path(path, name);
+    *files = add_file_to_list(*files, fullpath, NULL);
     free(name);
+    free(fullpath);
 
     if((start_p = strstr(end_p, "<Key>")) != NULL)
       start_p += strlen("<Key>");
@@ -812,8 +878,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   if((result = stormfs_list_bucket(path, &files)) != 0)
     return result;
 
-  // FIXME: need this.
-  // result = stormfs_getattr_multi(path, files);
+  result = stormfs_getattr_multi(path, files);
 
   filler(buf, ".",  0, 0);
   filler(buf, "..", 0, 0);
@@ -821,8 +886,22 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   head = g_list_first(files);
   while(head != NULL) {
     next = head->next;
+    // FIXME: list_bucket is using the same structure (file) as 
+    // the cache, which makes the code below confusing.
+    // Give list_bucket use it's own interface.
     struct file *file = head->data;
-    filler(buf, (char *) file->name, file->stbuf, 0);
+
+    char *fullpath = get_path(path, file->name);
+    struct file *f = cache_get(fullpath);
+    free(fullpath);
+    pthread_mutex_lock(&f->lock);
+    f->valid = time(NULL) + cache.timeout;
+    if(f->st == NULL)
+      f->st = g_new0(struct stat, 1);
+
+    memcpy(f->st, file->st, sizeof(struct stat));
+    pthread_mutex_unlock(&f->lock);
+    filler(buf, (char *) f->name, f->st, 0);
     head = next;
   }
 
@@ -1149,8 +1228,9 @@ stormfs_virtual_url(char *url, char *bucket)
 }
 
 static void
-set_defaults()
+set_defaults(void)
 {
+  stormfs.cache = 1;
   stormfs.verify_ssl = 2;
   stormfs.acl = "private";
   stormfs.url = "http://s3.amazonaws.com";
@@ -1160,7 +1240,7 @@ set_defaults()
 }
 
 static void
-validate_config()
+validate_config(void)
 {
   bool valid = true;
 
@@ -1281,14 +1361,13 @@ parse_config(const char *path)
 static void
 stormfs_destroy(void *data)
 {
+  cache_destroy();
   stormfs_curl_destroy();
   free(stormfs.bucket);
   free(stormfs.mountpoint);
-  free(stormfs.progname);
   free(stormfs.access_key);
   free(stormfs.secret_key);
   free(stormfs.virtual_url);
-  g_hash_table_destroy(stormfs.cache);
   g_hash_table_destroy(stormfs.mime_types);
 }
 
@@ -1319,6 +1398,7 @@ usage(const char *progname)
 "    -o no_verify_ssl        skip SSL certificate/host verification\n"
 "    -o use_rrs              use reduced redundancy storage\n"
 "    -o mime_path            path to mime.types (default: /etc/mime.types)\n"
+"    -o nocache              disable the cache (cache is enabled by default)\n"
 "\n", progname);
 }
 
@@ -1367,12 +1447,12 @@ stormfs_opt_proc(void *data, const char *arg, int key,
         return 0;
       }
 
-      struct stat stbuf;
-      if(validate_mountpoint(arg, &stbuf) == -1)
+      struct stat st;
+      if(validate_mountpoint(arg, &st) == -1)
         exit(EXIT_FAILURE);
 
       stormfs.mountpoint = strdup((char *) arg);
-      stormfs.root_mode = stbuf.st_mode;
+      stormfs.root_mode = st.st_mode;
 
       return 1;
 
@@ -1399,13 +1479,14 @@ stormfs_opt_proc(void *data, const char *arg, int key,
 }
 
 static void
-show_debug_header()
+show_debug_header(void)
 {
   DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
   DEBUG("STORMFS url:           %s\n", stormfs.url);
   DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
   DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
   DEBUG("STORMFS acl:           %s\n", stormfs.acl);
+  DEBUG("STORMFS cache:         %s\n", (stormfs.cache) ? "on" : "off");
 }
 
 int
@@ -1415,7 +1496,7 @@ main(int argc, char *argv[])
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
   memset(&stormfs, 0, sizeof(struct stormfs));
-  stormfs.progname = strdup(argv[0]);
+  stormfs.progname = argv[0];
   set_defaults();
   cache_init();
 
