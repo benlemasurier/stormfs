@@ -18,7 +18,7 @@ struct file {
   GList *headers;       /* http headers */
   struct stat *st;      /* stat(2) buffer */
   time_t valid;         /* entry timeout */
-  pthread_mutex_t lock; /* file-level thread lock */
+  pthread_mutex_t lock; /* file-level lock */
 };
 
 GList *add_optional_headers(GList *headers);

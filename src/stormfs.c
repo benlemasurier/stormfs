@@ -57,12 +57,14 @@ struct stormfs {
   char *mountpoint;
   char *storage_class;
   char *expires;
+  char *cache_path;
   mode_t root_mode;
   GHashTable *mime_types;
 } stormfs;
 
 struct cache {
   bool on;
+  char *path;
   int timeout;
   time_t last_cleaned;
   GHashTable *files;
@@ -86,6 +88,7 @@ static struct fuse_opt stormfs_opts[] = {
   STORMFS_OPT("nocache",       cache,         0),
   STORMFS_OPT("stormfs_debug", debug,         true),
   STORMFS_OPT("mime_path=%s",  mime_path,     0),
+  STORMFS_OPT("cache_path=%s", cache_path,    0),
 
   FUSE_OPT_KEY("-d",            KEY_FOREGROUND),
   FUSE_OPT_KEY("--debug",       KEY_FOREGROUND),
@@ -162,6 +165,78 @@ valid_path(const char *path)
   return 0;
 }
 
+static int
+validate_cache_path(const char *path)
+{
+  int result;
+  struct stat st;
+
+  errno = 0;
+  result = stat(path, &st);
+
+  // If the directory does not exist, create it.
+  if(errno == ENOENT) {
+    DEBUG("%s does not exist, creating.\n", path);
+    if((result = mkdir(path, S_IRWXU)) != 0) {
+      perror("mkdir");
+      return result;
+    } else {
+      result = stat(path, &st);
+    }
+  }
+
+  if(result != 0) {
+    perror("stat");
+    return result;
+  }
+
+  if(!S_ISDIR(st.st_mode)) {
+    DEBUG("error: %s is not a directory\n", path);
+    return -ENOTDIR;
+  }
+
+  return result;
+}
+
+static int
+cache_mkpath(const char *path)
+{
+  int result = 0;
+  struct stat st;
+  char *path_copy = strdup(path);
+  char *p = NULL, *dir = dirname(path_copy);
+  char *tmp = g_malloc0(sizeof(char) * strlen(cache.path) + strlen(dir) + 1);
+
+  tmp = strcpy(tmp, cache.path);
+  p = strtok(dir, "/");
+  while(p != NULL) {
+    tmp = strncat(tmp, "/", 1);
+    tmp = strncat(tmp, p, strlen(p));
+
+    if(stat(tmp, &st) == 0) {
+      if(S_ISDIR(st.st_mode)) {
+        p = strtok(NULL, "/");
+        continue;
+      }
+
+      result = -ENOTDIR;
+      break;
+    }
+
+    if(mkdir(tmp, S_IRWXU) == -1) {
+      result = -errno;
+      break;
+    }
+
+    p = strtok(NULL, "/");
+  }
+
+  free(tmp);
+  free(path_copy);
+
+  return result;
+}
+
 void
 free_file(struct file *f)
 {
@@ -200,12 +275,20 @@ cache_init(void)
   cache.files = g_hash_table_new_full(g_str_hash, g_str_equal, 
       g_free, (GDestroyNotify) free_file);
 
+  validate_cache_path(stormfs.cache_path);
+  cache.path = malloc(sizeof(char) * strlen(stormfs.cache_path)
+      + strlen(stormfs.bucket) + 2);
+  cache.path = strcpy(cache.path, stormfs.cache_path);
+  cache.path = strncat(cache.path, "/", 1);
+  cache.path = strncat(cache.path, stormfs.bucket, strlen(stormfs.bucket));
+
   return 0;
 }
 
 static int
 cache_destroy(void)
 {
+  free(cache.path);
   g_hash_table_destroy(cache.files);
   pthread_mutex_destroy(&cache.lock);
 
@@ -1366,6 +1449,7 @@ set_defaults(void)
   stormfs.storage_class = "STANDARD";
   stormfs.config = "/etc/stormfs.conf";
   stormfs.mime_path = "/etc/mime.types";
+  stormfs.cache_path = "/tmp/stormfs";
 }
 
 static void
@@ -1479,6 +1563,8 @@ parse_config(const char *path)
       stormfs.rrs = true;
     if(strstr(p, "mime_path") != NULL)
       stormfs.mime_path = get_config_value(strstr(p, "=") + 1);
+    if(strstr(p, "cache_path") != NULL)
+      stormfs.cache_path = get_config_value(strstr(p, "=") + 1);
 
     p = strtok(NULL, "\n");
   }
@@ -1519,7 +1605,10 @@ stormfs_init(struct fuse_conn_info *conn)
   stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
   stormfs_curl_verify_ssl(stormfs.verify_ssl);
 
-  cache_init();
+  if(cache_init() != 0) {
+    fprintf(stderr, "%s: unable to initialize cache\n", stormfs.progname);
+    exit(EXIT_FAILURE);
+  }
 
   return NULL;
 }
@@ -1564,6 +1653,7 @@ usage(const char *progname)
 "    -o no_verify_ssl        skip SSL certificate/host verification\n"
 "    -o use_rrs              use reduced redundancy storage\n"
 "    -o mime_path            path to mime.types (default: /etc/mime.types)\n"
+"    -o cache_path           path for cached file storage (default: /tmp/stormfs)\n"
 "    -o nocache              disable the cache (cache is enabled by default)\n"
 "\n", progname);
 }
