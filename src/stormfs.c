@@ -1317,7 +1317,7 @@ stormfs_write(const char *path, const char *buf,
   f = cache_get(path);
   if(cache_valid(f) && f->st != NULL) {
     pthread_mutex_lock(&f->lock);
-    f->st->st_size += get_blocks(size);
+    f->st->st_size += size;
     cache_touch(f);
     pthread_mutex_unlock(&f->lock);
   }
