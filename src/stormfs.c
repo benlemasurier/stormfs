@@ -205,9 +205,8 @@ cache_mkpath(const char *path)
   struct stat st;
   char *path_copy = strdup(path);
   char *p = NULL, *dir = dirname(path_copy);
-  char *tmp = g_malloc0(sizeof(char) * strlen(cache.path) + strlen(dir) + 1);
+  char *tmp = g_malloc0(sizeof(char) * strlen(stormfs.cache_path) + strlen(dir) + 1);
 
-  tmp = strcpy(tmp, cache.path);
   p = strtok(dir, "/");
   while(p != NULL) {
     tmp = strncat(tmp, "/", 1);
@@ -233,6 +232,40 @@ cache_mkpath(const char *path)
 
   free(tmp);
   free(path_copy);
+
+  return result;
+}
+
+static char *
+cache_path(struct file *f)
+{
+  char *fullpath;
+
+  fullpath = g_malloc0(sizeof(char) * strlen(cache.path)
+      + strlen(f->path) + 1);
+  fullpath = strcpy(fullpath, cache.path);
+  fullpath = strncat(fullpath, f->path, strlen(f->path));
+
+  return fullpath;
+}
+
+static int
+cache_create_file(struct file *f)
+{
+  int result;
+  char *cp;
+
+  cp = cache_path(f);
+  if((result = cache_mkpath(cp)) != 0)
+    return result;
+
+  unlink(cp);
+
+  result = open(cp, O_CREAT | O_TRUNC | O_RDWR);
+  if(result == -1)
+    perror("open");
+
+  free(cp);
 
   return result;
 }
@@ -391,6 +424,48 @@ cache_valid(struct file *f)
     return true;
 
   return false;
+}
+
+static bool
+cache_file_exists(struct file *f)
+{
+  int result;
+  struct stat st;
+  char *cp = cache_path(f);
+
+  result = stat(cp, &st);
+  free(cp);
+
+  if(result == 0)
+    return true;
+
+  return false;
+}
+
+static bool
+cache_file_valid(struct file *f)
+{
+  char *cp;
+  int result;
+  struct stat st;
+
+  if(!cache_valid(f))
+    return false;
+
+  if(!cache_file_exists(f))
+    return false;
+
+  cp = cache_path(f);
+  result = stat(cp, &st);
+  free(cp);
+
+  if(result != 0)
+    return false;
+
+  if(f->st->st_mtime > st.st_mtime)
+    return false;
+
+  return true;
 }
 
 static int
@@ -619,13 +694,13 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     return 0;
   }
 
+  if((result = stormfs_curl_head(path, &headers)) != 0)
+    return result;
+
   pthread_mutex_lock(&f->lock);
   if(f->st == NULL)
     f->st = g_new0(struct stat, 1);
   f->st->st_nlink = 1;
-
-  if((result = stormfs_curl_head(path, &headers)) != 0)
-    return result;
 
   if((result = headers_to_stat(headers, f->st)) != 0)
     return result;
@@ -660,64 +735,44 @@ stormfs_unlink(const char *path)
 static int
 stormfs_truncate(const char *path, off_t size)
 {
-  FILE *f;
   int fd;
   int result;
   struct stat st;
-  struct file *cache_f;
-  GList *headers = NULL;
+  struct file *f;
 
   DEBUG("truncate: %s\n", path);
 
   if((result = valid_path(path)) != 0)
     return result;
 
-  if((f = tmpfile()) == NULL)
-    return -errno;
-
   if((result = stormfs_getattr(path, &st)) != 0)
     return -result;
 
-  if((result = stormfs_curl_get_file(path, f)) != 0) {
-    fclose(f);
-    return result;
+  f = cache_get(path);
+  if(cache_file_valid(f)) {
+    char *cp = cache_path(f);
+    truncate(cp, size);
+    free(cp);
+  } else {
+    fd = cache_create_file(f);
+    close(fd);
   }
 
-  if((fd = fileno(f)) == -1)
-    return -errno;
+  pthread_mutex_lock(&f->lock);
+  f->st->st_size = get_blocks(size);
+  cache_touch(f);
+  pthread_mutex_unlock(&f->lock);
 
-  if(ftruncate(fd, size) != 0)
-    return -errno;
-
-  headers = add_header(headers, gid_header(getgid()));
-  headers = add_header(headers, uid_header(getuid()));
-  headers = add_header(headers, mode_header(st.st_mode));
-  headers = add_header(headers, mtime_header(time(NULL)));
-  headers = add_optional_headers(headers);
-
-  result = stormfs_curl_upload(path, headers, fd);
-  free_headers(headers);
-
-  cache_f = cache_get(path);
-  if(cache_valid(cache_f) && cache_f->st != NULL) {
-    pthread_mutex_lock(&cache_f->lock);
-    cache_f->st->st_size = get_blocks(size);
-    cache_touch(cache_f);
-    pthread_mutex_unlock(&cache_f->lock);
-  }
-
-  if(close(fd) != 0)
-    return -errno;
-
-  return result;
+  return 0;
 }
 
 static int
 stormfs_open(const char *path, struct fuse_file_info *fi)
 {
-  FILE *f;
+  FILE *fp;
   int fd;
   int result;
+  struct file *f;
 
   DEBUG("open: %s\n", path);
 
@@ -728,16 +783,33 @@ stormfs_open(const char *path, struct fuse_file_info *fi)
     if((result = stormfs_truncate(path, 0)) != 0)
       return result;
 
-  if((f = tmpfile()) == NULL)
-    return -errno;
+  f = cache_get(path);
+  if(cache_file_valid(f)) {
+    char *cp = cache_path(f);
 
-  if((result = stormfs_curl_get_file(path, f)) != 0) {
-    fclose(f);
-    return result;
+    fp = fopen(cp, "a+");
+    free(cp);
+
+    if(fp == NULL)
+      return -errno;
+    if((fd = fileno(fp)) == -1)
+      return -errno;
+
+    fi->fh = fd;
+
+    return 0;
   }
 
-  if((fd = fileno(f)) == -1)
+  // file not available in cache, download it.
+  if((fd = cache_create_file(f)) == -1)
+    return -1; // FIXME: need to return proper errors here.
+  if((fp = fdopen(fd, "a+")) == NULL)
     return -errno;
+
+  if((result = stormfs_curl_get_file(path, fp)) != 0) {
+    fclose(fp);
+    return result;
+  }
 
   fi->fh = fd;
 
@@ -749,8 +821,8 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   int result;
   int fd;
-  FILE *f;
   struct stat st;
+  struct file *f;
   GList *headers = NULL;
 
   DEBUG("create: %s\n", path);
@@ -760,11 +832,8 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
   cache_invalidate_dir(path);
 
-  if((f = tmpfile()) == NULL)
-    return -errno;
-
-  if((fd = fileno(f)) == -1)
-    return -errno;
+  f = cache_get(path);
+  fd = cache_create_file(f);
 
   fi->fh = fd;
 
@@ -864,25 +933,6 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   free_headers(headers);
 
   return result;
-}
-
-static int
-stormfs_flush(const char *path, struct fuse_file_info *fi)
-{
-  int result;
-
-  DEBUG("flush: %s\n", path);
-
-  if((result = valid_path(path)) != 0)
-    return result;
-
-  /* FIXME: verify that this is actually useful. The FUSE docs
-     are clear that flush != fsync. flush is called once for each
-     close() on an open file descriptor. */
-  if(fsync(fi->fh) != 0)
-    return -errno;
-
-  return 0;
 }
 
 static int
@@ -1155,13 +1205,20 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
   /* if the file was opened read-only, we can assume it didn't change
       and skip the upload process */
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
+    if(fsync(fi->fh) != 0)
+      return -errno;
+
+    struct stat st;
     GList *headers = NULL;
 
-    if((result = stormfs_curl_head(path, &headers)) != 0)
-      return result;
+    if((result = stormfs_getattr(path, &st)) != 0)
+      return -result;
 
+    headers = stat_to_headers(headers, st);
+    headers = add_header(headers, content_header(get_mime_type(path)));
     headers = add_header(headers, mtime_header(time(NULL)));
     headers = add_optional_headers(headers);
+
     result = stormfs_curl_upload(path, headers, fi->fh);
     free_headers(headers);
   }
@@ -1665,7 +1722,6 @@ static struct fuse_operations stormfs_oper = {
     .destroy  = stormfs_destroy,
     .getattr  = stormfs_getattr,
     .init     = stormfs_init,
-    .flush    = stormfs_flush,
     .mkdir    = stormfs_mkdir,
     .mknod    = stormfs_mknod,
     .open     = stormfs_open,
