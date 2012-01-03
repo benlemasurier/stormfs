@@ -898,20 +898,6 @@ stormfs_getattr_multi(const char *path, GList *files)
   return result;
 }
 
-static void *
-stormfs_init(struct fuse_conn_info *conn)
-{
-  if(conn->capable & FUSE_CAP_ATOMIC_O_TRUNC)
-    conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
-
-  if(conn->capable & FUSE_CAP_BIG_WRITES)
-    conn->want |= FUSE_CAP_BIG_WRITES;
-
-  cache_mime_types();
-
-  return NULL;
-}
-
 static int
 stormfs_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
@@ -1502,6 +1488,50 @@ parse_config(const char *path)
 }
 
 static void
+show_debug_header(void)
+{
+  DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
+  DEBUG("STORMFS url:           %s\n", stormfs.url);
+  DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
+  DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
+  DEBUG("STORMFS acl:           %s\n", stormfs.acl);
+  DEBUG("STORMFS cache:         %s\n", (stormfs.cache) ? "on" : "off");
+}
+
+static void *
+stormfs_init(struct fuse_conn_info *conn)
+{
+  if(conn->capable & FUSE_CAP_ATOMIC_O_TRUNC)
+    conn->want |= FUSE_CAP_ATOMIC_O_TRUNC;
+
+  if(conn->capable & FUSE_CAP_BIG_WRITES)
+    conn->want |= FUSE_CAP_BIG_WRITES;
+
+  parse_config(stormfs.config);
+  validate_config();
+  if(stormfs.rrs)
+    stormfs.storage_class = "REDUCED_REDUNDANCY";
+
+  stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
+
+  cache_mime_types();
+
+  show_debug_header();
+
+  if(stormfs_curl_init(stormfs.bucket, stormfs.virtual_url) != 0) {
+    fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs.progname);
+    exit(EXIT_FAILURE);
+  }
+
+  stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
+  stormfs_curl_verify_ssl(stormfs.verify_ssl);
+
+  cache_init();
+
+  return NULL;
+}
+
+static void
 stormfs_destroy(void *data)
 {
   cache_destroy();
@@ -1621,17 +1651,6 @@ stormfs_opt_proc(void *data, const char *arg, int key,
   }
 }
 
-static void
-show_debug_header(void)
-{
-  DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
-  DEBUG("STORMFS url:           %s\n", stormfs.url);
-  DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
-  DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
-  DEBUG("STORMFS acl:           %s\n", stormfs.acl);
-  DEBUG("STORMFS cache:         %s\n", (stormfs.cache) ? "on" : "off");
-}
-
 int
 main(int argc, char *argv[])
 {
@@ -1641,32 +1660,14 @@ main(int argc, char *argv[])
   memset(&stormfs, 0, sizeof(struct stormfs));
   stormfs.progname = argv[0];
   set_defaults();
-  cache_init();
 
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
     fprintf(stderr, "%s: error parsing command-line options\n", stormfs.progname);
     exit(EXIT_FAILURE);
   }
 
-  parse_config(stormfs.config);
-  validate_config();
-  if(stormfs.rrs)
-    stormfs.storage_class = "REDUCED_REDUNDANCY";
-
-  stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
-
-  show_debug_header();
-
-  if((result = stormfs_curl_init(stormfs.bucket, stormfs.virtual_url)) != 0) {
-    fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs.progname);
-    exit(EXIT_FAILURE);
-  }
-
-  stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
-  stormfs_curl_verify_ssl(stormfs.verify_ssl);
-
   g_thread_init(NULL);
-  stormfs_fuse_main(&args);
+  result = stormfs_fuse_main(&args);
 
   fuse_opt_free_args(&args);
 
