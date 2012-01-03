@@ -1507,13 +1507,6 @@ stormfs_init(struct fuse_conn_info *conn)
   if(conn->capable & FUSE_CAP_BIG_WRITES)
     conn->want |= FUSE_CAP_BIG_WRITES;
 
-  parse_config(stormfs.config);
-  validate_config();
-  if(stormfs.rrs)
-    stormfs.storage_class = "REDUCED_REDUNDANCY";
-
-  stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
-
   cache_mime_types();
 
   show_debug_header();
@@ -1665,6 +1658,13 @@ main(int argc, char *argv[])
     fprintf(stderr, "%s: error parsing command-line options\n", stormfs.progname);
     exit(EXIT_FAILURE);
   }
+
+  parse_config(stormfs.config);
+  validate_config();
+  if(stormfs.rrs)
+    stormfs.storage_class = "REDUCED_REDUNDANCY";
+
+  stormfs.virtual_url = stormfs_virtual_url(stormfs.url, stormfs.bucket);
 
   g_thread_init(NULL);
   result = stormfs_fuse_main(&args);
