@@ -1108,7 +1108,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
   }
 
-  if((result = stormfs_list_bucket(path, &files)) != 0)
+  if((result = stormfs_list_bucket(path, *files)) != 0)
     return result;
 
   result = stormfs_getattr_multi(path, files);
