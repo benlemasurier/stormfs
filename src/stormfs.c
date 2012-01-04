@@ -1040,7 +1040,7 @@ stormfs_read(const char *path, char *buf, size_t size, off_t offset,
   return pread(fi->fh, buf, size, offset);
 }
 
-int
+static int
 stormfs_list_bucket(const char *path, GList **files)
 {
   int result;
