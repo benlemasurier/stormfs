@@ -1040,20 +1040,14 @@ stormfs_read(const char *path, char *buf, size_t size, off_t offset,
   return pread(fi->fh, buf, size, offset);
 }
 
-static int
-stormfs_list_bucket(const char *path, GList **files)
+static GList *
+xml_to_files(const char *path, char *xml)
 {
-  int result;
-  char *xml = NULL, *start_p = NULL;
-
-  result = stormfs_curl_list_bucket(path, &xml);
-  if(result != 0) {
-    free(xml);
-    return -EIO;
-  }
+  char *start_p = NULL;
+  GList *files = NULL;
 
   if(strstr(xml, "xml") == NULL)
-    return 0;
+    return files;
 
   if((start_p = strstr(xml, "<Key>")) != NULL)
     start_p += strlen("<Key>");
@@ -1065,7 +1059,7 @@ stormfs_list_bucket(const char *path, GList **files)
 
     name = strndup(start_p, end_p - start_p);
     fullpath = get_path(path, name);
-    *files = add_file_to_list(*files, fullpath, NULL);
+    files = add_file_to_list(files, fullpath, NULL);
     free(name);
     free(fullpath);
 
@@ -1073,9 +1067,7 @@ stormfs_list_bucket(const char *path, GList **files)
       start_p += strlen("<Key>");
   }
 
-  free(xml);
-
-  return 0;
+  return files;
 }
 
 static int
@@ -1083,6 +1075,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
   int result;
+  char *xml = NULL;
   struct file *dir;
   GList *files = NULL, *head = NULL, *next = NULL;
 
@@ -1108,27 +1101,28 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
   }
 
-  if((result = stormfs_list_bucket(path, &files)) != 0)
-    return result;
+  if((result = stormfs_curl_list_bucket(path, &xml)) != 0) {
+    free(xml);
+    return -EIO;
+  }
 
+  files = xml_to_files(path, xml);
   result = stormfs_getattr_multi(path, files);
 
   pthread_mutex_lock(&dir->lock);
   head = g_list_first(files);
   while(head != NULL) {
     next = head->next;
-    // FIXME: list_bucket is using the same structure (file) as 
-    // the cache, which makes the code below confusing.
-    // Give list_bucket use it's own interface.
+    // FIXME: list_bucket is using the same structure (file) as
+    // the cache which makes the code below confusing.
     struct file *file = head->data;
-
     char *fullpath = get_path(path, file->name);
     struct file *f = cache_get(fullpath);
     free(fullpath);
+
     pthread_mutex_lock(&f->lock);
     if(f->st == NULL)
       f->st = g_new0(struct stat, 1);
-
     memcpy(f->st, file->st, sizeof(struct stat));
     f->st->st_nlink = 1;
     cache_touch(f);
