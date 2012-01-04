@@ -851,6 +851,11 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
   free_headers(headers);
 
+  if(f->st == NULL)
+    f->st = g_new0(struct stat, 1);
+  memcpy(f->st, &st, sizeof(struct stat));
+  cache_touch(f);
+
   return result;
 }
 
