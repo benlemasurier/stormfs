@@ -1478,6 +1478,7 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
 {
   int result;
   struct file *f;
+  struct stat st;
   GList *headers = NULL;
 
   DEBUG("utimens: %s\n", path);
@@ -1485,24 +1486,27 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   if((result = valid_path(path)) != 0)
     return result;
 
-  if((result = stormfs_curl_head(path, &headers)) != 0)
+  if((result = stormfs_getattr(path, &st)) != 0)
+    return result;
+
+  st.st_mtime = ts[1].tv_sec;
+  headers = stat_to_headers(headers, st);
+  headers = add_header(headers, replace_header());
+  headers = add_header(headers, copy_source_header(path));
+
+  result = stormfs_curl_put_headers(path, headers);
+
+  free_headers(headers);
+  if(result != 0)
     return result;
 
   f = cache_get(path);
   if(cache_valid(f) && f->st != NULL) {
     pthread_mutex_lock(&f->lock);
-    f->st->st_mtime = ts[1].tv_sec;
+    f->st->st_mtime = st.st_mtime;
     cache_touch(f);
     pthread_mutex_unlock(&f->lock);
   }
-
-  headers = add_header(headers, mtime_header(ts[1].tv_sec));
-  headers = add_header(headers, replace_header());
-  headers = add_header(headers, copy_source_header(path));
-  headers = add_optional_headers(headers);
-
-  result = stormfs_curl_put_headers(path, headers);
-  free_headers(headers);
 
   return result;
 }
