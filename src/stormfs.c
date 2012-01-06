@@ -211,7 +211,10 @@ cache_mkpath(const char *path)
   struct stat st;
   char *path_copy = strdup(path);
   char *p = NULL, *dir = dirname(path_copy);
-  char *tmp = g_malloc0(sizeof(char) * strlen(stormfs.cache_path) + strlen(dir) + 1);
+  char *tmp;
+
+  tmp = g_malloc0(sizeof(char) *
+      strlen(stormfs.cache_path) + strlen(dir) + 1);
 
   p = strtok(dir, "/");
   while(p != NULL) {
@@ -305,7 +308,7 @@ free_file(struct file *f)
   if(f->dir != NULL) g_list_free(f->dir);
   g_list_free_full(f->headers, (GDestroyNotify) free_header);
   pthread_mutex_destroy(&f->lock);
-  g_free(f);
+  free(f);
 }
 
 GList *
