@@ -874,7 +874,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   headers = add_header(headers, content_header(get_mime_type(path)));
   headers = add_optional_headers(headers);
 
-  result = stormfs_curl_put_headers(path, headers);
+  result = stormfs_curl_put(path, headers);
 
   free_headers(headers);
 
@@ -910,7 +910,7 @@ stormfs_chmod(const char *path, mode_t mode)
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
 
-  result = stormfs_curl_put_headers(path, headers);
+  result = stormfs_curl_put(path, headers);
 
   free_headers(headers);
   if(result != 0)
@@ -955,7 +955,7 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
 
-  result = stormfs_curl_put_headers(path, headers);
+  result = stormfs_curl_put(path, headers);
 
   free_headers(headers);
   if(result != 0)
@@ -1043,7 +1043,7 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
   headers = stat_to_headers(headers, st);
   headers = add_optional_headers(headers);
 
-  result = stormfs_curl_put_headers(path, headers);
+  result = stormfs_curl_put(path, headers);
 
   free_headers(headers);
 
@@ -1305,7 +1305,7 @@ stormfs_rename_file(const char *from, const char *to)
   headers = add_header(headers, copy_meta_header());
   headers = add_header(headers, copy_source_header(from));
 
-  result = stormfs_curl_put_headers(to, headers);
+  result = stormfs_curl_put(to, headers);
   free_headers(headers);
 
   return stormfs_unlink(from);
@@ -1494,7 +1494,7 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
 
-  result = stormfs_curl_put_headers(path, headers);
+  result = stormfs_curl_put(path, headers);
 
   free_headers(headers);
   if(result != 0)

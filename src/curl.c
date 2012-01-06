@@ -1263,7 +1263,7 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
 }
 
 int
-stormfs_curl_put_headers(const char *path, GList *headers)
+stormfs_curl_put(const char *path, GList *headers)
 {
   int result;
   HTTP_REQUEST *request = new_request(path);
