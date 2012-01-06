@@ -1149,9 +1149,10 @@ static int
 stormfs_readlink(const char *path, char *buf, size_t size)
 {
   int fd;
-  FILE *f;
+  FILE *fp = NULL;
   int result;
   struct stat st;
+  struct file *f;
 
   DEBUG("readlink: %s\n", path);
 
@@ -1163,16 +1164,29 @@ stormfs_readlink(const char *path, char *buf, size_t size)
 
   --size; // save the null byte
 
-  if((f = tmpfile()) == NULL)
-    return -errno;
+  f = cache_get(path);
+  if(cache_file_valid(f)) {
+    char *cp = cache_path(f);
 
-  if((result = stormfs_curl_get_file(path, f)) != 0) {
-    fclose(f);
-    return result;
+    fp = fopen(cp, "a+");
+    free(cp);
+
+    if(fp == NULL)
+      return -errno;
+    if((fd = fileno(fp)) == -1)
+      return -errno;
+  } else {
+    // file not available in cache, download it.
+    if((fd = cache_create_file(f)) == -1)
+      return -EIO;
+    if((fp = fdopen(fd, "a+")) == NULL)
+      return -errno;
+
+    if((result = stormfs_curl_get_file(path, fp)) != 0) {
+      fclose(fp);
+      return result;
+    }
   }
-
-  if((fd = fileno(f)) == -1)
-    return -errno;
 
   if(fstat(fd, &st) != 0) {
     close(fd);
