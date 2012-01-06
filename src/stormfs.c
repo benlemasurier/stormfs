@@ -466,10 +466,7 @@ cache_file_exists(struct file *f)
   result = stat(cp, &st);
   free(cp);
 
-  if(result == 0)
-    return true;
-
-  return false;
+  return (result == 0) ? true : false;
 }
 
 static bool
@@ -1262,6 +1259,8 @@ static int
 stormfs_release(const char *path, struct fuse_file_info *fi)
 {
   int result = 0;
+  struct stat st;
+  GList *headers = NULL;
 
   DEBUG("release: %s\n", path);
 
@@ -1270,9 +1269,6 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
     if(fsync(fi->fh) != 0)
       return -errno;
-
-    struct stat st;
-    GList *headers = NULL;
 
     if((result = stormfs_getattr(path, &st)) != 0)
       return -result;
@@ -1339,7 +1335,7 @@ stormfs_rename_directory(const char *from, const char *to)
     char *end_p = strstr(start_p, "</Key>");
     struct stat st;
 
-    tmp = g_strndup(start_p, end_p - start_p);
+    tmp = strndup(start_p, end_p - start_p);
     name = basename(tmp);
     file_from = get_path(from, name);
     file_to   = get_path(to, name);
@@ -1404,7 +1400,7 @@ static int
 stormfs_rmdir(const char *path)
 {
   int result = 0;
-  char *data;
+  char *data = NULL;
 
   DEBUG("rmdir: %s\n", path);
 
