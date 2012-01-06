@@ -42,8 +42,8 @@ general options:
     -o opt,[opt...]         mount options
     -h   --help             print help
     -V   --version          print version
-                            
-STORMFS options:            
+
+STORMFS options:
     -o config=CONFIG        path to configuration file
                               (default: /etc/stormfs.conf)
     -o url=URL              specify a custom service URL
@@ -61,6 +61,7 @@ STORMFS options:
     -o no_verify_ssl        skip SSL certificate/host verification
     -o use_rrs              use reduced redundancy storage
     -o mime_path            path to mime.types (default: /etc/mime.types)
+    -o cache_path           path for cached file storage (default: /tmp/stormfs)
     -o nocache              disable the cache (cache is enabled by default)
 
 
