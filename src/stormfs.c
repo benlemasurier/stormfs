@@ -131,6 +131,12 @@ get_mtime(const char *s)
   return (time_t) strtoul(s, (char **) NULL, 10);
 }
 
+static dev_t
+get_rdev(const char *s)
+{
+  return (dev_t) strtoul(s, (char **) NULL, 10);
+}
+
 static off_t
 get_size(const char *s)
 {
@@ -264,6 +270,27 @@ cache_create_file(struct file *f)
   result = open(cp, O_CREAT | O_TRUNC | O_RDWR);
   if(result == -1)
     perror("open");
+
+  free(cp);
+
+  return result;
+}
+
+static int
+cache_mknod(struct file *f, mode_t mode, dev_t rdev)
+{
+  int result;
+  char *cp;
+
+  cp = cache_path(f);
+  if((result = cache_mkpath(cp)) != 0)
+    return result;
+
+  unlink(cp);
+
+  result = mknod(cp, mode, rdev);
+  if(result == -1)
+    perror("mknod");
 
   free(cp);
 
@@ -628,6 +655,7 @@ stat_to_headers(GList *headers, struct stat st)
   headers = add_header(headers, mode_header(st.st_mode));
   headers = add_header(headers, ctime_header(st.st_ctime));
   headers = add_header(headers, mtime_header(st.st_mtime));
+  headers = add_header(headers, rdev_header(st.st_rdev));
 
   return headers;
 }
@@ -652,18 +680,17 @@ headers_to_stat(GList *headers, struct stat *stbuf)
       stbuf->st_ctime = get_ctime(header->value);
     else if(strcmp(header->key, "x-amz-meta-mtime") == 0)
       stbuf->st_mtime = get_mtime(header->value);
+    else if(strcmp(header->key, "x-amz-meta-rdev") == 0)
+      stbuf->st_rdev = get_rdev(header->value);
     else if(strcmp(header->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
       stbuf->st_mtime = get_mtime(header->value);
     else if(strcmp(header->key, "x-amz-meta-mode") == 0)
-      stbuf->st_mode |= get_mode(header->value);
+      stbuf->st_mode = get_mode(header->value);
     else if(strcmp(header->key, "Content-Length") == 0)
       stbuf->st_size = get_size(header->value);
-    else if(strcmp(header->key, "Content-Type") == 0) {
+    else if(strcmp(header->key, "Content-Type") == 0)
       if(strstr(header->value, "x-directory"))
         stbuf->st_mode |= S_IFDIR;
-      else
-        stbuf->st_mode |= S_IFREG;
-    }
 
     head = next;
   }
@@ -983,27 +1010,39 @@ static int
 stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
   int result;
+  int fd;
+  struct file *f;
+  struct stat st;
   GList *headers = NULL;
-  (void) rdev;
 
   DEBUG("mknod: %s\n", path);
 
   if((result = valid_path(path)) != 0)
     return result;
 
-  if(!S_ISREG(mode))
-    return -EPERM;
-
   cache_invalidate_dir(path);
 
-  headers = add_header(headers, gid_header(getgid()));
-  headers = add_header(headers, uid_header(getuid()));
-  headers = add_header(headers, mode_header(mode));
-  headers = add_header(headers, mtime_header(time(NULL)));
+  f = cache_get(path);
+  fd = cache_mknod(f, mode, rdev);
+
+  st.st_gid = getgid();
+  st.st_uid = getuid();
+  st.st_mode = mode;
+  st.st_rdev = rdev;
+  st.st_ctime = time(NULL);
+  st.st_mtime = time(NULL);
+
+  headers = stat_to_headers(headers, st);
   headers = add_optional_headers(headers);
 
   result = stormfs_curl_put_headers(path, headers);
+
   free_headers(headers);
+
+  if(f->st == NULL)
+    f->st = g_new0(struct stat, 1);
+  memcpy(f->st, &st, sizeof(struct stat));
+  cache_touch(f);
 
   return result;
 }

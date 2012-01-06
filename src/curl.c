@@ -82,6 +82,15 @@ gid_to_s(gid_t gid)
 }
 
 static char *
+rdev_to_s(dev_t rdev)
+{
+  char s[100];
+  snprintf(s, 100, "%lu", (unsigned long) rdev);
+
+  return strdup(s);
+}
+
+static char *
 uid_to_s(uid_t uid)
 {
   char s[100];
@@ -250,6 +259,18 @@ gid_header(gid_t gid)
   HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
 
   h->key   = strdup("x-amz-meta-gid");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+rdev_header(dev_t rdev)
+{
+  char *s = rdev_to_s(rdev);
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key   = strdup("x-amz-meta-rdev");
   h->value = s;
 
   return h;
@@ -752,13 +773,14 @@ static int
 extract_meta(char *headers, GList **meta)
 {
   char *p;
-  char *to_extract[9] = {
+  char *to_extract[10] = {
     "Content-Type",
     "Content-Length",
     "Last-Modified",
     "ETag",
     "x-amz-meta-gid",
     "x-amz-meta-uid",
+    "x-amz-meta-rdev",
     "x-amz-meta-mode",
     "x-amz-meta-ctime",
     "x-amz-meta-mtime"
@@ -768,7 +790,7 @@ extract_meta(char *headers, GList **meta)
   while(p != NULL) {
     int i;
 
-    for(i = 0; i < 9; i++) {
+    for(i = 0; i < 10; i++) {
       HTTP_HEADER *h;
       char *key = to_extract[i];
       char *value;

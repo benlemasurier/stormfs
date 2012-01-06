@@ -23,6 +23,7 @@ HTTP_HEADER *copy_meta_header();
 HTTP_HEADER *ctime_header(time_t t);
 HTTP_HEADER *expires_header(const char *expires);
 HTTP_HEADER *gid_header(gid_t gid);
+HTTP_HEADER *rdev_header(dev_t dev);
 HTTP_HEADER *uid_header(uid_t uid);
 HTTP_HEADER *mode_header(mode_t mode);
 HTTP_HEADER *mtime_header(time_t t);
