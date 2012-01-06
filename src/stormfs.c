@@ -891,6 +891,7 @@ stormfs_chmod(const char *path, mode_t mode)
 {
   int result;
   struct file *f;
+  struct stat st;
   GList *headers = NULL;
 
   DEBUG("chmod: %s\n", path);
@@ -898,23 +899,32 @@ stormfs_chmod(const char *path, mode_t mode)
   if((result = valid_path(path)) != 0)
     return result;
 
-  f = cache_get(path);
-  if(cache_valid(f) && f->st != NULL) {
-    pthread_mutex_lock(&f->lock);
-    f->st->st_mode = mode;
-    cache_touch(f);
-    pthread_mutex_unlock(&f->lock);
-  }
-
-  if((result = stormfs_curl_head(path, &headers)) != 0)
+  if((result = stormfs_getattr(path, &st)) != 0)
     return result;
 
-  headers = add_header(headers, mode_header(mode));
+  st.st_mode = mode;
+  st.st_ctime = time(NULL);
+  st.st_mtime = time(NULL);
+
+  headers = stat_to_headers(headers, st);
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
 
   result = stormfs_curl_put_headers(path, headers);
+
   free_headers(headers);
+  if(result != 0)
+    return result;
+
+  f = cache_get(path);
+  if(cache_valid(f) && f->st != NULL) {
+    pthread_mutex_lock(&f->lock);
+    f->st->st_mode = mode;
+    f->st->st_ctime = st.st_ctime;
+    f->st->st_mtime = st.st_mtime;
+    cache_touch(f);
+    pthread_mutex_unlock(&f->lock);
+  }
 
   return result;
 }
@@ -936,12 +946,12 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   if((result = stormfs_getattr(path, &st)) != 0)
     return result;
 
-  if((result = stormfs_getattr(path, &st)) != 0)
-    return -result;
+  st.st_uid = uid;
+  st.st_gid = gid;
+  st.st_ctime = time(NULL);
+  st.st_mtime = time(NULL);
 
   headers = stat_to_headers(headers, st);
-  headers = add_header(headers, uid_header(uid));
-  headers = add_header(headers, gid_header(gid));
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
 
@@ -956,6 +966,8 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
     pthread_mutex_lock(&f->lock);
     f->st->st_uid = uid;
     f->st->st_gid = gid;
+    f->st->st_ctime = st.st_ctime;
+    f->st->st_mtime = st.st_mtime;
     cache_touch(f);
     pthread_mutex_unlock(&f->lock);
   }
