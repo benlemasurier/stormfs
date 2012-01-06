@@ -923,9 +923,8 @@ static int
 stormfs_chown(const char *path, uid_t uid, gid_t gid)
 {
   int result = 0;
-  struct group *g;
-  struct passwd *p;
   struct file *f;
+  struct stat st;
   GList *headers = NULL;
   errno = 0;
 
@@ -934,35 +933,32 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   if((result = valid_path(path)) != 0)
     return result;
 
-  if((result = stormfs_curl_head(path, &headers)) != 0)
+  if((result = stormfs_getattr(path, &st)) != 0)
     return result;
 
-  if((p = getpwuid(uid)) != NULL)
-    headers = add_header(headers, uid_header((*p).pw_uid));
-  else
-    result = -errno;
+  if((result = stormfs_getattr(path, &st)) != 0)
+    return -result;
 
-  if((g = getgrgid(gid)) != NULL)
-    headers = add_header(headers, gid_header((*g).gr_gid));
-  else
-    result = -errno;
+  headers = stat_to_headers(headers, st);
+  headers = add_header(headers, uid_header(uid));
+  headers = add_header(headers, gid_header(gid));
+  headers = add_header(headers, replace_header());
+  headers = add_header(headers, copy_source_header(path));
 
+  result = stormfs_curl_put_headers(path, headers);
+
+  free_headers(headers);
   if(result != 0)
     return result;
 
   f = cache_get(path);
   if(cache_valid(f) && f->st != NULL) {
     pthread_mutex_lock(&f->lock);
-    f->st->st_uid = (*p).pw_uid;
-    f->st->st_gid = (*g).gr_gid;
+    f->st->st_uid = uid;
+    f->st->st_gid = gid;
     cache_touch(f);
     pthread_mutex_unlock(&f->lock);
   }
-
-  headers = add_header(headers, replace_header());
-  headers = add_header(headers, copy_source_header(path));
-  result = stormfs_curl_put_headers(path, headers);
-  free_headers(headers);
 
   return result;
 }
