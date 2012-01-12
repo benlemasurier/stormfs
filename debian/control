@@ -1,0 +1,21 @@
+Source: stormfs
+Section: utils
+Priority: optional
+Maintainer: Ben LeMasurier <ben.lemasurier@gmail.com>
+Build-Depends: debhelper (>= 7.0.50~),
+               autotools-dev
+               libfuse-dev,
+               fuse-utils,
+               libglib2.0-dev
+               libcurl4-gnutils-dev,
+
+Standards-Version: 3.9.1
+Homepage: https://github.com/benlemasurier/stormfs
+Vcs-Git: git://github.com/benlemasurier/stormfs.git
+Vcs-Browser: https://github.com/benlemasurier/stormfs
+
+Package: stormfs
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, fuse-utils, mime-support
+Description: A FUSE abstraction layer for cloud storage.
+ A FUSE abstraction layer for cloud storage (Amazon S3, Google Cloud Storage and more).

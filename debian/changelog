@@ -1,0 +1,5 @@
+stormfs (0.01-1) unstable; urgency=low
+
+  * Initial debian test release
+
+ -- Ben LeMasurier <ben.lemasurier@gmail.com>  Thu, 12 Jan 2012 14:42:44 -0700
