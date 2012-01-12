@@ -2,6 +2,7 @@
 *.swp
 *.swo
 *.dSYM
+*.tar.gz
 .DS_Store
 autom4te.cache
 aclocal.m4

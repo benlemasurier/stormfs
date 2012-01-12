@@ -270,7 +270,7 @@ cache_create_file(struct file *f)
 
   unlink(cp);
 
-  result = open(cp, O_CREAT | O_TRUNC | O_RDWR);
+  result = open(cp, O_CREAT | O_TRUNC | O_RDWR, S_IRUSR | S_IWUSR);
   if(result == -1)
     perror("open");
 
@@ -778,7 +778,8 @@ stormfs_truncate(const char *path, off_t size)
   f = cache_get(path);
   if(cache_file_valid(f)) {
     char *cp = cache_path(f);
-    truncate(cp, size);
+    if((result = truncate(cp, size)) != 0)
+      perror("truncate");
     free(cp);
   } else {
     fd = cache_create_file(f);

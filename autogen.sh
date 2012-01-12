@@ -1,6 +1,6 @@
 #!/bin/sh
 
-autoreconf --force --install
+autoreconf --force --install --verbose
 if [ -d /usr/local/share/aclocal ]
 then
   aclocal -I /usr/local/share/aclocal
