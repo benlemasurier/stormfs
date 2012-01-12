@@ -7,4 +7,4 @@ ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}
 dist_noinst_SCRIPTS = autogen.sh
 
 dist-hook:
-	rm -rf `find $(distdir)/doc -type d -name .svn`
+	rm -rf `find $(distdir) -type d -name .git`
