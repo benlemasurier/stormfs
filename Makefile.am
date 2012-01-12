@@ -1,4 +1,5 @@
 SUBDIRS = src
+EXTRA_DIST = debian
 
 # additional flags to be passed to aclocal when invoked at make time.
 ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}

@@ -1,18 +1,17 @@
 Source: stormfs
+Maintainer: Ben LeMasurier <ben.lemasurier@gmail.com>
 Section: utils
 Priority: optional
-Maintainer: Ben LeMasurier <ben.lemasurier@gmail.com>
-Build-Depends: debhelper (>= 7.0.50~),
-               autotools-dev
-               libfuse-dev,
-               fuse-utils,
-               libglib2.0-dev
-               libcurl4-gnutils-dev,
-
 Standards-Version: 3.9.1
-Homepage: https://github.com/benlemasurier/stormfs
 Vcs-Git: git://github.com/benlemasurier/stormfs.git
 Vcs-Browser: https://github.com/benlemasurier/stormfs
+Homepage: https://github.com/benlemasurier/stormfs
+Build-Depends: debhelper (>= 7.0.50~),
+               libfuse-dev,
+               fuse-utils,
+               autotools-dev,
+               libglib2.0-dev,
+               libcurl4-gnutls-dev
 
 Package: stormfs
 Architecture: any
