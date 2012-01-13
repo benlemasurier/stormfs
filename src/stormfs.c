@@ -626,7 +626,7 @@ char *
 get_path(const char *path, const char *name)
 {
   char *fullpath;
-  
+
   fullpath = g_malloc(sizeof(char) * strlen(path) + strlen(name) + 2);
   strcpy(fullpath, path);
   if(strcmp(path, "/") != 0)

@@ -36,6 +36,9 @@
 #define MAX_REQUESTS 100
 #define POOL_SIZE 100
 #define DEFAULT_MIME_TYPE "application/octet-stream"
+#define MULTIPART_MIN         20971520 /* Minimum size for multipart files */
+#define MULTIPART_CHUNK       10485760 /* 10MB */
+#define MAX_FILE_SIZE         104857600000 /* 97.65GB (10,000 * 10MB) */
 
 static pthread_mutex_t lock        = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t shared_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -52,6 +55,15 @@ struct stormfs_curl {
   CURLM *multi;
   CURLSH *share;
 } curl;
+
+typedef struct {
+  int fd;
+  int part_num;
+  char *id;
+  char *path;
+  char *upload_id;
+  off_t size;
+} FILE_PART;
 
 typedef struct {
   CURL *c;
@@ -129,6 +141,39 @@ static int
 cmpstringp(const void *p1, const void *p2)
 {
   return strcmp(*(char **) p1, *(char **) p2);
+}
+
+static FILE_PART *
+create_part(int part_num, char *upload_id)
+{
+  FILE_PART *fp = g_new0(FILE_PART, 1);
+
+  fp->part_num = part_num;
+  fp->upload_id = strdup(upload_id);
+  fp->path = strdup("/tmp/stormfs.XXXXXX");
+  if((fp->fd = mkstemp(fp->path)) == -1) {
+    perror("mkstemp");
+    free(fp->path);
+    free(fp);
+    return NULL;
+  }
+
+  return fp;
+}
+
+static void
+free_part(FILE_PART *fp)
+{
+  free(fp->id);
+  free(fp->path);
+  free(fp->upload_id);
+  free(fp);
+}
+
+void
+free_parts(GList *parts)
+{
+  g_list_free_full(parts, (GDestroyNotify) free_part);
 }
 
 void
@@ -360,6 +405,19 @@ add_header(GList *headers, HTTP_HEADER *h)
   headers = g_list_append(headers, h);
 
   return headers;
+}
+
+static char *
+get_upload_id(char *xml)
+{
+  char *start_marker = "UploadId>";
+  char *end_marker  = "</UploadId";
+  char *start_p, *end_p;
+
+  start_p = strstr(xml, start_marker) + strlen(start_marker);
+  end_p   = strstr(xml, end_marker);
+
+  return strndup(start_p, end_p - start_p);
 }
 
 static bool
@@ -653,6 +711,7 @@ sign_request(const char *method,
   to_sign = strcat(to_sign, amz_headers);
   to_sign = strcat(to_sign, resource);
 
+  printf("TO SIGN:\n%s\n", to_sign);
   signature = hmac_sha1(curl.secret_key, to_sign);
 
   authorization = g_malloc(sizeof(char) * strlen(curl.access_key) +
@@ -692,7 +751,7 @@ set_curl_defaults(CURL *c)
   curl_easy_setopt(c, CURLOPT_SHARE, curl.share);
 
   // curl_easy_setopt(c, CURLOPT_TCP_NODELAY, 1);
-  // curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
   // curl_easy_setopt(c, CURLOPT_FORBID_REUSE, 1);
 
   return 0;
@@ -712,6 +771,24 @@ get_url(const char *path)
   url = strncat(url, tmp, strlen(tmp));
   url = strncat(url, delimiter, strlen(delimiter));
   g_free(tmp);
+
+  return(url);
+}
+
+static char *
+get_multipart_url(const char *path)
+{
+  char *tmp = url_encode((char *) path);
+  char *uploads = "?uploads";
+  char *url = malloc(sizeof(char) *
+      strlen(curl.url) +
+      strlen(tmp) +
+      strlen(uploads) + 1);
+
+  url = strcpy(url, curl.url);
+  url = strncat(url, tmp, strlen(tmp));
+  url = strncat(url, uploads, strlen(uploads));
+  free(tmp);
 
   return(url);
 }
@@ -1215,6 +1292,204 @@ stormfs_curl_list_bucket(const char *path, char **xml)
   return result;
 }
 
+static int
+upload_part(const char *path, FILE_PART *fp)
+{
+  FILE *f;
+  int result;
+  struct stat st;
+  struct curl_slist *req_headers = NULL;
+  // FIXME: need uploadid/partid etc..
+  HTTP_REQUEST *request = new_request(path);
+
+  if(fstat(fp->fd, &st) != 0) {
+    perror("fstat");
+    return -errno;
+  }
+
+  if(lseek(fp->fd, 0, SEEK_SET) == -1) {
+    perror("lseek");
+    return -errno;
+  }
+
+  if((f = fdopen(fp->fd, "rb")) == NULL) {
+    perror("fdopen");
+    return -errno;
+  }
+
+  sign_request("PUT", &request->headers, request->path);
+  curl_easy_setopt(c, CURLOPT_INFILE, f);
+  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);
+  curl_easy_setopt(c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size);
+  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
+  curl_easy_setopt(request->c, CURLOPT_HEADERDATA, (void *) &request->response);
+  curl_easy_setopt(request->c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+  result = stormfs_curl_easy_perform(request->c);
+
+  fp->id = extract_etag(request->response.memory);
+  free_request(request);
+
+  return result;
+}
+
+static char *
+init_multipart(const char *path, off_t size, GList *headers)
+{
+  int result;
+  CURL *c;
+  char *url;
+  char *sign_path;
+  char *uploads = "?uploads";
+  char *upload_id = NULL;
+  HTTP_RESPONSE body;
+  struct curl_slist *req_headers = NULL;
+
+  body.memory = g_malloc(1);
+  body.size = 0;
+
+  sign_path = malloc(sizeof(char) *
+      strlen(path) + strlen(uploads) + 1);
+  sign_path = strcpy(sign_path, path);
+  sign_path = strncat(sign_path, uploads, strlen(uploads));
+
+  url = get_multipart_url(path);
+  c = get_pooled_handle(url);
+  req_headers = headers_to_curl_slist(headers);
+
+  sign_request("POST", &req_headers, sign_path);
+  curl_easy_setopt(c, CURLOPT_POST, true);
+  curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE, 0);
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
+  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
+
+  result = stormfs_curl_easy_perform(c);
+
+  free(url);
+  free(sign_path);
+  curl_slist_free_all(req_headers);
+  release_pooled_handle(c);
+  if(result != 0) {
+    free(upload_id);
+    free(body.memory);
+    return NULL;
+  }
+
+  upload_id = get_upload_id(body.memory);
+
+  free(body.memory);
+
+  return upload_id;
+}
+
+static GList *
+create_file_parts(const char *path, char *upload_id, int fd)
+{
+  FILE *f;
+  struct stat st;
+  off_t bytes_remaining;
+  GList *parts = NULL;
+
+  if(fstat(fd, &st) != 0) {
+    perror("fstat");
+    return NULL;
+  }
+
+  if((f = fdopen(fd, "rb")) == NULL) {
+    perror("fdopen");
+    return NULL;
+  }
+
+  int part_num = 1;
+  bytes_remaining = st.st_size;
+  while(bytes_remaining > 0) {
+    char *buf;
+    size_t nbytes;
+    FILE *tmp_f;
+    FILE_PART *fp = create_part(part_num, upload_id);
+
+    if(bytes_remaining > MULTIPART_CHUNK)
+      fp->size = MULTIPART_CHUNK;
+    else
+      fp->size = bytes_remaining;
+
+    if((buf = malloc(sizeof(char) * fp->size)) == NULL) {
+      perror("malloc");
+      return NULL;
+    }
+
+    if((tmp_f = fdopen(fp->fd, "wb")) == NULL) {
+      perror("fdopen");
+      return NULL;
+    }
+
+    if((nbytes = fread(buf, 1, fp->size, f)) != fp->size) {
+      free(buf);
+      return NULL;
+    }
+
+    nbytes = fwrite(buf, 1, fp->size, tmp_f);
+    free(buf);
+    if(nbytes != fp->size)
+      return NULL;
+
+    parts = g_list_append(parts, fp);
+    part_num++;
+    bytes_remaining = bytes_remaining - fp->size;
+  }
+
+  return parts;
+}
+
+static int
+upload_multipart(const char *path, GList *headers, int fd)
+{
+  int result;
+  struct stat st;
+  char *upload_id = NULL;
+  GList *parts = NULL, *head = NULL, *next = NULL;
+
+  if(fstat(fd, &st) != 0) {
+    perror("fstat");
+    return -errno;
+  }
+
+  if(lseek(fd, 0, SEEK_SET) == -1) {
+    perror("lseek");
+    return -errno;
+  }
+
+  if((upload_id = init_multipart(path, st.st_size, headers)) == NULL)
+    return -EIO;
+
+  printf("MULTIPART UPLOAD ID IS: %s\n", upload_id);
+
+  if((parts = create_file_parts(path, upload_id, fd)) == NULL) {
+    printf("AW DAG MHAN!\n");
+    return -EIO;
+  }
+
+  printf("FILE BROKEN INTO: %d parts\n", g_list_length(parts));
+
+  head = g_list_first(parts);
+  while(head != NULL) {
+    next = head->next;
+    FILE_PART *fp = head->data;
+    result = upload_part(path, fp);
+    close(fp->fd);
+    unlink(fp->path);
+    if(result != 0) {
+      printf("AW DAMMGIT :%d(\n", result);
+      break;
+    }
+
+    head = next;
+  }
+  free_parts(parts);
+
+  return result;
+}
+
 int
 stormfs_curl_upload(const char *path, GList *headers, int fd)
 {
@@ -1230,9 +1505,11 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
     return -errno;
   }
 
-  // TODO: support multipart uploads (>5GB files)
-  if(st.st_size >= FIVE_GB)
+  if(st.st_size >= MAX_FILE_SIZE)
     return -EFBIG;
+
+  if(st.st_size >= MULTIPART_MIN)
+    return upload_multipart(path, headers, fd);
 
   if(lseek(fd, 0, SEEK_SET) == -1) {
     perror("lseek");
