@@ -878,7 +878,11 @@ extract_meta(char *headers, GList **meta)
       h = g_malloc(sizeof(HTTP_HEADER));
       h->key = strdup(key);
       value = strstr(p, " ");
-      value++; // remove leading space
+      value++; /* remove leading space */
+      if(strstr(value, "\"")) {
+        value++;
+        value[strlen(value) - 1] = '\0';
+      }
       h->value = strdup(value);
 
       *meta = g_list_append(*meta, h);
