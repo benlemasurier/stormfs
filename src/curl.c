@@ -59,8 +59,8 @@ struct stormfs_curl {
 typedef struct {
   int fd;
   int part_num;
-  char *id;
   char *path;
+  char *etag;
   char *upload_id;
   off_t size;
 } FILE_PART;
@@ -164,8 +164,8 @@ create_part(int part_num, char *upload_id)
 static void
 free_part(FILE_PART *fp)
 {
-  free(fp->id);
   free(fp->path);
+  free(fp->etag);
   free(fp->upload_id);
   free(fp);
 }
@@ -1298,9 +1298,9 @@ upload_part(const char *path, FILE_PART *fp)
   FILE *f;
   int result;
   struct stat st;
-  struct curl_slist *req_headers = NULL;
   // FIXME: need uploadid/partid etc..
   HTTP_REQUEST *request = new_request(path);
+  GList *headers = NULL, *head = NULL, *next = NULL;
 
   if(fstat(fp->fd, &st) != 0) {
     perror("fstat");
@@ -1318,15 +1318,28 @@ upload_part(const char *path, FILE_PART *fp)
   }
 
   sign_request("PUT", &request->headers, request->path);
-  curl_easy_setopt(c, CURLOPT_INFILE, f);
-  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);
-  curl_easy_setopt(c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size);
+  curl_easy_setopt(request->c, CURLOPT_INFILE, f);
+  curl_easy_setopt(request->c, CURLOPT_UPLOAD, 1L);
+  curl_easy_setopt(request->c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size);
   curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
   curl_easy_setopt(request->c, CURLOPT_HEADERDATA, (void *) &request->response);
   curl_easy_setopt(request->c, CURLOPT_HEADERFUNCTION, write_memory_cb);
   result = stormfs_curl_easy_perform(request->c);
 
-  fp->id = extract_etag(request->response.memory);
+  extract_meta(request->response.memory, &headers);
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+    HTTP_HEADER *h = head->data;
+    if(strstr(h->key, "ETag") != NULL) {
+      printf("ETAG IS: %s\n", h->value);
+      fp->etag = strdup(h->value);
+      break;
+    }
+
+    head = next;
+  }
+  free_headers(headers);
   free_request(request);
 
   return result;
