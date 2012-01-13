@@ -1648,8 +1648,11 @@ parse_config(const char *path)
   validate_config_perms(st);
 
   if((fd = open(path, O_RDONLY)) == -1) {
+    free(st);
     perror("open");
-    g_free(st);
+    fprintf(stderr, "%s: unable to open configuration file %s\n",
+        stormfs.progname, path);
+    exit(EXIT_FAILURE);
     return;
   }
 
