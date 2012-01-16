@@ -711,7 +711,6 @@ sign_request(const char *method,
   to_sign = strcat(to_sign, amz_headers);
   to_sign = strcat(to_sign, resource);
 
-  printf("TO SIGN:\n%s\n", to_sign);
   signature = hmac_sha1(curl.secret_key, to_sign);
 
   authorization = g_malloc(sizeof(char) * strlen(curl.access_key) +
@@ -751,7 +750,7 @@ set_curl_defaults(CURL *c)
   curl_easy_setopt(c, CURLOPT_SHARE, curl.share);
 
   // curl_easy_setopt(c, CURLOPT_TCP_NODELAY, 1);
-  curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
+  // curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
   // curl_easy_setopt(c, CURLOPT_FORBID_REUSE, 1);
 
   return 0;
@@ -877,14 +876,18 @@ extract_meta(char *headers, GList **meta)
 
       h = g_malloc(sizeof(HTTP_HEADER));
       h->key = strdup(key);
+
+      /* remove leading space */
       value = strstr(p, " ");
-      value++; /* remove leading space */
+      value++;
+
+      /* strip quotes */
       if(strstr(value, "\"")) {
         value++;
         value[strlen(value) - 1] = '\0';
       }
-      h->value = strdup(value);
 
+      h->value = strdup(value);
       *meta = g_list_append(*meta, h);
       break;
     }
@@ -1336,7 +1339,6 @@ upload_part(const char *path, FILE_PART *fp)
     next = head->next;
     HTTP_HEADER *h = head->data;
     if(strstr(h->key, "ETag") != NULL) {
-      printf("ETAG IS: %s\n", h->value);
       fp->etag = strdup(h->value);
       break;
     }
@@ -1397,6 +1399,37 @@ init_multipart(const char *path, off_t size, GList *headers)
   free(body.memory);
 
   return upload_id;
+}
+
+static int
+complete_multipart(const char *path, char *upload_id, GList *parts)
+{
+  int result;
+  GList *head = NULL, *next = NULL;
+  char *xml = strdup("<CompleteMultipartUpload>");
+
+  xml = realloc(xml, sizeof(char) *
+      strlen(xml) + (g_list_length(parts) * 100));
+
+  head = g_list_first(parts);
+  while(head != NULL) {
+    next = head->next;
+    FILE_PART *fp = head->data;
+    char *part_xml = g_malloc0(sizeof(char) * 100);
+
+    asprintf(&part_xml, "<Part><PartNumber>%d</PartNumber><ETag>%s</ETag></Part>",
+        fp->part_num, fp->etag);
+    xml = strncat(xml, part_xml, strlen(part_xml));
+
+    free(part_xml);
+    head = next;
+  }
+
+  xml = g_realloc(xml, strlen(xml) + 27);
+  xml = strcat(xml, "</CompleteMultipartUpload>");
+  free(xml);
+
+  return 0;
 }
 
 static GList *
@@ -1481,10 +1514,8 @@ upload_multipart(const char *path, GList *headers, int fd)
 
   printf("MULTIPART UPLOAD ID IS: %s\n", upload_id);
 
-  if((parts = create_file_parts(path, upload_id, fd)) == NULL) {
-    printf("AW DAG MHAN!\n");
+  if((parts = create_file_parts(path, upload_id, fd)) == NULL)
     return -EIO;
-  }
 
   printf("FILE BROKEN INTO: %d parts\n", g_list_length(parts));
 
@@ -1493,15 +1524,16 @@ upload_multipart(const char *path, GList *headers, int fd)
     next = head->next;
     FILE_PART *fp = head->data;
     result = upload_part(path, fp);
+    printf("ETAG IS: %s\n", fp->etag);
     close(fp->fd);
     unlink(fp->path);
-    if(result != 0) {
-      printf("AW DAMMGIT :%d(\n", result);
+    if(result != 0)
       break;
-    }
 
     head = next;
   }
+
+  result = complete_multipart(path, upload_id, parts);
   free_parts(parts);
 
   return result;
