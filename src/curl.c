@@ -84,6 +84,14 @@ typedef struct {
   struct curl_slist *headers;
 } HTTP_REQUEST;
 
+/* clean this up.
+ * http://curl.haxx.se/libcurl/c/post-callback.html 
+ */
+struct WriteThis {
+  const char *readptr;
+  int sizeleft;
+};
+
 static char *
 gid_to_s(gid_t gid)
 {
@@ -486,6 +494,7 @@ headers_to_curl_slist(GList *headers)
     HTTP_HEADER *h = head->data;
 
     char *s = header_to_s(h);
+    printf("HEADER: %s\n", s);
     if(strstr(h->key, "x-amz-") != NULL || strstr(h->key, "Expires") != NULL)
       curl_headers = curl_slist_append(curl_headers, s);
     else if(strstr(h->key, "Content-Type") != NULL)
@@ -793,6 +802,31 @@ get_multipart_url(const char *path)
 }
 
 static char *
+get_complete_multipart_url(const char *path, char *upload_id)
+{
+  char *tmp, *id_str, *url;
+
+  tmp = url_encode((char *) path);
+  id_str = strdup("?uploadId=");
+  id_str = realloc(id_str, sizeof(char) *
+      strlen(id_str) +
+      strlen(upload_id) + 1);
+  id_str = strncat(id_str, upload_id, sizeof(char) * strlen(upload_id) + 1);
+  url = malloc(sizeof(char) *
+      strlen(curl.url) +
+      strlen(tmp) +
+      strlen(id_str) + 1);
+
+  url = strcpy(url, curl.url);
+  url = strncat(url, tmp, strlen(tmp));
+  url = strncat(url, id_str, strlen(id_str));
+  free(tmp);
+  free(id_str);
+
+  return(url);
+}
+
+static char *
 get_list_bucket_url(const char *path, const char *next_marker)
 {
   char *url, *tmp;
@@ -824,6 +858,24 @@ get_list_bucket_url(const char *path, const char *next_marker)
   g_free(tmp);
 
   return(url);
+}
+
+static size_t
+read_callback(void *ptr, size_t size, size_t nmemb, void *userp)
+{
+  struct WriteThis *pooh = (struct WriteThis *)userp;
+
+  if(size*nmemb < 1)
+    return 0;
+
+  if(pooh->sizeleft) {
+    *(char *)ptr = pooh->readptr[0]; /* copy one single byte */ 
+    pooh->readptr++;                 /* advance pointer */ 
+    pooh->sizeleft--;                /* less data left */ 
+    return 1;                        /* we return 1 byte at a time! */ 
+  }
+
+  return 0;                          /* no more data left to deliver */ 
 }
 
 static size_t
@@ -880,12 +932,6 @@ extract_meta(char *headers, GList **meta)
       /* remove leading space */
       value = strstr(p, " ");
       value++;
-
-      /* strip quotes */
-      if(strstr(value, "\"")) {
-        value++;
-        value[strlen(value) - 1] = '\0';
-      }
 
       h->value = strdup(value);
       *meta = g_list_append(*meta, h);
@@ -1333,6 +1379,7 @@ upload_part(const char *path, FILE_PART *fp)
   curl_easy_setopt(request->c, CURLOPT_HEADERFUNCTION, write_memory_cb);
   result = stormfs_curl_easy_perform(request->c);
 
+  printf("UPLOAD PART RESULT: %s\n", request->response.memory);
   extract_meta(request->response.memory, &headers);
   head = g_list_first(headers);
   while(head != NULL) {
@@ -1349,6 +1396,100 @@ upload_part(const char *path, FILE_PART *fp)
   free_request(request);
 
   return result;
+}
+
+static char *
+complete_multipart_xml(GList *parts)
+{
+  GList *head = NULL, *next = NULL;
+  char *xml = strdup("<CompleteMultipartUpload>\n");
+
+  xml = realloc(xml, sizeof(char) *
+      strlen(xml) + (g_list_length(parts) * 150));
+
+  head = g_list_first(parts);
+  while(head != NULL) {
+    next = head->next;
+    FILE_PART *fp = head->data;
+    char *part_xml = g_malloc0(sizeof(char) * 150);
+
+    asprintf(&part_xml, "  <Part>\n"
+                        "    <PartNumber>%d</PartNumber>\n"
+                        "    <ETag>%s</ETag>\n"
+                        "  </Part>\n",
+        fp->part_num, fp->etag);
+    xml = strncat(xml, part_xml, strlen(part_xml));
+
+    free(part_xml);
+    head = next;
+  }
+
+  xml = g_realloc(xml, strlen(xml) + 27);
+  xml = strcat(xml, "</CompleteMultipartUpload>\n");
+
+  return xml;
+}
+
+static int
+complete_multipart(const char *path, char *upload_id,
+    GList *headers, GList *parts)
+{
+  int result;
+  CURL *c;
+  char *url;
+  char *sign_path;
+  char *upload_id_req = "?uploadId=";
+  HTTP_RESPONSE body;
+  struct curl_slist *req_headers = NULL;
+  char *xml = complete_multipart_xml(parts);
+  printf("XML: %s\n", xml);
+  char *post = strdup(xml);
+  struct WriteThis pooh;
+  GList *stripped_headers = NULL;
+
+  body.memory = g_malloc(1);
+  body.size = 0;
+
+  pooh.readptr = post;
+  pooh.sizeleft = strlen(post);
+
+  sign_path = malloc(sizeof(char) *
+      strlen(path) + strlen(upload_id_req) + strlen(upload_id) + 1);
+  sign_path = strcpy(sign_path, path);
+  sign_path = strncat(sign_path, upload_id_req, strlen(upload_id_req));
+  sign_path = strncat(sign_path, upload_id, strlen(upload_id));
+
+  url = get_complete_multipart_url(path, upload_id);
+  c = get_pooled_handle(url);
+  headers = g_list_first(headers);
+  stripped_headers = g_list_copy(headers);
+  stripped_headers = strip_header(stripped_headers, "x-amz");
+  req_headers = headers_to_curl_slist(stripped_headers);
+
+  sign_request("POST", &req_headers, sign_path);
+  curl_easy_setopt(c, CURLOPT_POST, 1L);
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
+  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
+  curl_easy_setopt(c, CURLOPT_READDATA, &pooh);
+  curl_easy_setopt(c, CURLOPT_READFUNCTION, read_callback);
+  curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t) pooh.sizeleft);
+  curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
+
+  result = stormfs_curl_easy_perform(c);
+
+  free(url);
+  free(sign_path);
+  free(xml);
+  free(post);
+  printf("UNFFFFFFFFFFFFFFFFF\n");
+  printf("%s\n", body.memory);
+  printf("UNFFFFFFFFFFFFFFFFF\n");
+  free(body.memory);
+  curl_slist_free_all(req_headers);
+  release_pooled_handle(c);
+
+  return 0;
 }
 
 static char *
@@ -1373,6 +1514,7 @@ init_multipart(const char *path, off_t size, GList *headers)
 
   url = get_multipart_url(path);
   c = get_pooled_handle(url);
+  headers = g_list_first(headers);
   req_headers = headers_to_curl_slist(headers);
 
   sign_request("POST", &req_headers, sign_path);
@@ -1399,37 +1541,6 @@ init_multipart(const char *path, off_t size, GList *headers)
   free(body.memory);
 
   return upload_id;
-}
-
-static int
-complete_multipart(const char *path, char *upload_id, GList *parts)
-{
-  int result;
-  GList *head = NULL, *next = NULL;
-  char *xml = strdup("<CompleteMultipartUpload>");
-
-  xml = realloc(xml, sizeof(char) *
-      strlen(xml) + (g_list_length(parts) * 100));
-
-  head = g_list_first(parts);
-  while(head != NULL) {
-    next = head->next;
-    FILE_PART *fp = head->data;
-    char *part_xml = g_malloc0(sizeof(char) * 100);
-
-    asprintf(&part_xml, "<Part><PartNumber>%d</PartNumber><ETag>%s</ETag></Part>",
-        fp->part_num, fp->etag);
-    xml = strncat(xml, part_xml, strlen(part_xml));
-
-    free(part_xml);
-    head = next;
-  }
-
-  xml = g_realloc(xml, strlen(xml) + 27);
-  xml = strcat(xml, "</CompleteMultipartUpload>");
-  free(xml);
-
-  return 0;
 }
 
 static GList *
@@ -1533,7 +1644,7 @@ upload_multipart(const char *path, GList *headers, int fd)
     head = next;
   }
 
-  result = complete_multipart(path, upload_id, parts);
+  result = complete_multipart(path, upload_id, headers, parts);
   free_parts(parts);
 
   return result;

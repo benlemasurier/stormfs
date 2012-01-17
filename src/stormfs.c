@@ -1280,7 +1280,6 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     headers = add_optional_headers(headers);
 
     result = stormfs_curl_upload(path, headers, fi->fh);
-    printf("GOT HERE!\n");
     free_headers(headers);
   }
 
