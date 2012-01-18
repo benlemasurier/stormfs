@@ -36,9 +36,9 @@
 #define MAX_REQUESTS 100
 #define POOL_SIZE 100
 #define DEFAULT_MIME_TYPE "application/octet-stream"
-#define MULTIPART_MIN         20971520 /* Minimum size for multipart files */
-#define MULTIPART_CHUNK       10485760 /* 10MB */
-#define MAX_FILE_SIZE         104857600000 /* 97.65GB (10,000 * 10MB) */
+#define MULTIPART_MIN     20971520 /* Minimum size for multipart files */
+#define MULTIPART_CHUNK   10485760 /* 10MB */
+#define MAX_FILE_SIZE     104857600000 /* 97.65GB (10,000 * 10MB) */
 
 static pthread_mutex_t lock        = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t shared_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -1352,17 +1352,17 @@ stormfs_curl_list_bucket(const char *path, char **xml)
       *xml = append_list_bucket_xml(*xml, body.memory);
 
     if((truncated = is_truncated(body.memory)) == true) {
-      g_free(marker);
+      free(marker);
       marker = get_next_marker(body.memory);
     }
 
-    g_free(url);
-    g_free(body.memory);
+    free(url);
+    free(body.memory);
     release_pooled_handle(c);
     curl_slist_free_all(req_headers);
   }
 
-  g_free(marker);
+  free(marker);
 
   return result;
 }
