@@ -1674,6 +1674,11 @@ upload_multipart(const char *path, GList *headers, int fd)
     head = next;
   }
 
+  if(result != 0) {
+    free_parts(parts);
+    return result;
+  }
+
   result = complete_multipart(path, upload_id, headers, parts);
   free_parts(parts);
 
@@ -1685,10 +1690,8 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
 {
   FILE *f;
   int result;
-  char *url;
-  CURL *c;
   struct stat st;
-  struct curl_slist *req_headers = NULL;
+  HTTP_REQUEST *request;
 
   if(fstat(fd, &st) != 0) {
     perror("fstat");
@@ -1711,20 +1714,17 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
     return -errno;
   }
 
-  url = get_url(path);
-  c = get_pooled_handle(url);
-  req_headers = headers_to_curl_slist(headers);
+  request = new_request(path);
+  request->headers = headers_to_curl_slist(headers);
 
-  sign_request("PUT", &req_headers, path);
-  curl_easy_setopt(c, CURLOPT_INFILE, f);
-  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);
-  curl_easy_setopt(c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size);
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
-  result = stormfs_curl_easy_perform(c);
+  sign_request("PUT", &request->headers, request->path);
+  curl_easy_setopt(request->c, CURLOPT_INFILE, f);
+  curl_easy_setopt(request->c, CURLOPT_UPLOAD, 1L);
+  curl_easy_setopt(request->c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size);
+  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
+  result = stormfs_curl_easy_perform(request->c);
 
-  g_free(url);
-  release_pooled_handle(c);
-  curl_slist_free_all(req_headers);
+  free_request(request);
 
   return result;
 }
