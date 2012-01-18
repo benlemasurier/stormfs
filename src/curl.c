@@ -494,12 +494,11 @@ headers_to_curl_slist(GList *headers)
     HTTP_HEADER *h = head->data;
 
     char *s = header_to_s(h);
-    printf("HEADER: %s\n", s);
     if(strstr(h->key, "x-amz-") != NULL || strstr(h->key, "Expires") != NULL)
       curl_headers = curl_slist_append(curl_headers, s);
     else if(strstr(h->key, "Content-Type") != NULL)
       curl_headers = curl_slist_append(curl_headers, s);
-    g_free(s);
+    free(s);
 
     head = next;
   }
@@ -802,6 +801,29 @@ get_multipart_url(const char *path)
 }
 
 static char *
+get_upload_part_url(const char *path, FILE_PART *fp)
+{
+  char *url;
+  char *encoded_path = url_encode((char *) path);
+  char *parameters = malloc(sizeof(char) * 
+      strlen(fp->upload_id) + 10);
+
+  asprintf(&parameters, "?partNumber=%d&uploadId=%s",
+      fp->part_num, fp->upload_id);
+
+  url = malloc(sizeof(char) *
+      strlen(curl.url) + strlen(encoded_path) + strlen(parameters) + 1);
+  url = strcpy(url, curl.url);
+  url = strncat(url, encoded_path, strlen(encoded_path));
+  url = strncat(url, parameters, strlen(parameters));
+
+  free(parameters);
+  free(encoded_path);
+
+  return(url);
+}
+
+static char *
 get_complete_multipart_url(const char *path, char *upload_id)
 {
   char *tmp, *id_str, *url;
@@ -1073,7 +1095,7 @@ new_request(const char *path)
   HTTP_REQUEST *request = g_new0(HTTP_REQUEST, 1);
 
   request->done = false;
-  request->path = g_strdup(path);
+  request->path = strdup(path);
   request->url = get_url(path);
   request->c = get_pooled_handle(request->url);
   request->response.memory = g_malloc0(1);
@@ -1348,11 +1370,14 @@ stormfs_curl_list_bucket(const char *path, char **xml)
 static int
 upload_part(const char *path, FILE_PART *fp)
 {
-  FILE *f;
   int result;
+  FILE *f;
+  CURL *c;
+  char *url;
+  char *sign_path;
+  HTTP_RESPONSE response;
+  struct curl_slist *req_headers = NULL;
   struct stat st;
-  // FIXME: need uploadid/partid etc..
-  HTTP_REQUEST *request = new_request(path);
   GList *headers = NULL, *head = NULL, *next = NULL;
 
   if(fstat(fp->fd, &st) != 0) {
@@ -1370,17 +1395,27 @@ upload_part(const char *path, FILE_PART *fp)
     return -errno;
   }
 
-  sign_request("PUT", &request->headers, request->path);
-  curl_easy_setopt(request->c, CURLOPT_INFILE, f);
-  curl_easy_setopt(request->c, CURLOPT_UPLOAD, 1L);
-  curl_easy_setopt(request->c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size);
-  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
-  curl_easy_setopt(request->c, CURLOPT_HEADERDATA, (void *) &request->response);
-  curl_easy_setopt(request->c, CURLOPT_HEADERFUNCTION, write_memory_cb);
-  result = stormfs_curl_easy_perform(request->c);
+  response.memory = g_malloc(1);
+  response.size = 0;
+  url = get_upload_part_url(path, fp);
+  c = get_pooled_handle(url);
 
-  printf("UPLOAD PART RESULT: %s\n", request->response.memory);
-  extract_meta(request->response.memory, &headers);
+  sign_path = malloc(sizeof(char) * strlen(url));
+  asprintf(&sign_path, "%s?partNumber=%d&uploadId=%s",
+      path, fp->part_num, fp->upload_id);
+
+  sign_request("PUT", &req_headers, sign_path);
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  curl_easy_setopt(c, CURLOPT_INFILE, f);
+  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);
+  curl_easy_setopt(c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size);
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  curl_easy_setopt(c, CURLOPT_HEADERDATA, (void *) &response);
+  curl_easy_setopt(c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+  result = stormfs_curl_easy_perform(c);
+
+  extract_meta(response.memory, &headers);
+
   head = g_list_first(headers);
   while(head != NULL) {
     next = head->next;
@@ -1392,8 +1427,13 @@ upload_part(const char *path, FILE_PART *fp)
 
     head = next;
   }
+
+  free(url);
+  free(sign_path);
+  free(response.memory);
   free_headers(headers);
-  free_request(request);
+  curl_slist_free_all(req_headers);
+  release_pooled_handle(c);
 
   return result;
 }
@@ -1442,7 +1482,6 @@ complete_multipart(const char *path, char *upload_id,
   HTTP_RESPONSE body;
   struct curl_slist *req_headers = NULL;
   char *xml = complete_multipart_xml(parts);
-  printf("XML: %s\n", xml);
   char *post = strdup(xml);
   struct WriteThis pooh;
   GList *stripped_headers = NULL;
@@ -1474,7 +1513,6 @@ complete_multipart(const char *path, char *upload_id,
   curl_easy_setopt(c, CURLOPT_READDATA, &pooh);
   curl_easy_setopt(c, CURLOPT_READFUNCTION, read_callback);
   curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t) pooh.sizeleft);
-  curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
 
   result = stormfs_curl_easy_perform(c);
 
@@ -1482,9 +1520,6 @@ complete_multipart(const char *path, char *upload_id,
   free(sign_path);
   free(xml);
   free(post);
-  printf("UNFFFFFFFFFFFFFFFFF\n");
-  printf("%s\n", body.memory);
-  printf("UNFFFFFFFFFFFFFFFFF\n");
   free(body.memory);
   curl_slist_free_all(req_headers);
   release_pooled_handle(c);
