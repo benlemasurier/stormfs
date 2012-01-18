@@ -1658,19 +1658,14 @@ upload_multipart(const char *path, GList *headers, int fd)
   if((upload_id = init_multipart(path, st.st_size, headers)) == NULL)
     return -EIO;
 
-  printf("MULTIPART UPLOAD ID IS: %s\n", upload_id);
-
   if((parts = create_file_parts(path, upload_id, fd)) == NULL)
     return -EIO;
-
-  printf("FILE BROKEN INTO: %d parts\n", g_list_length(parts));
 
   head = g_list_first(parts);
   while(head != NULL) {
     next = head->next;
     FILE_PART *fp = head->data;
     result = upload_part(path, fp);
-    printf("ETAG IS: %s\n", fp->etag);
     close(fp->fd);
     unlink(fp->path);
     if(result != 0)
