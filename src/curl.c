@@ -1409,7 +1409,6 @@ complete_multipart(const char *path, char *upload_id,
   CURL *c;
   char *url;
   char *sign_path;
-  char *upload_id_req = "?uploadId=";
   HTTP_RESPONSE body;
   struct curl_slist *req_headers = NULL;
   char *xml = complete_multipart_xml(parts);
@@ -1423,11 +1422,7 @@ complete_multipart(const char *path, char *upload_id,
   pd.readptr = post;
   pd.remaining = strlen(post);
 
-  sign_path = malloc(sizeof(char) *
-      strlen(path) + strlen(upload_id_req) + strlen(upload_id) + 1);
-  sign_path = strcpy(sign_path, path);
-  sign_path = strncat(sign_path, upload_id_req, strlen(upload_id_req));
-  sign_path = strncat(sign_path, upload_id, strlen(upload_id));
+  asprintf(&sign_path, "%s?uploadId=%s", path, upload_id);
 
   url = get_complete_multipart_url(path, upload_id);
   c = get_pooled_handle(url);
