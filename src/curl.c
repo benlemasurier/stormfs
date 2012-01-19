@@ -1460,7 +1460,6 @@ init_multipart(const char *path, off_t size, GList *headers)
   CURL *c;
   char *url;
   char *sign_path;
-  char *uploads = "?uploads";
   char *upload_id = NULL;
   HTTP_RESPONSE body;
   struct curl_slist *req_headers = NULL;
@@ -1468,10 +1467,7 @@ init_multipart(const char *path, off_t size, GList *headers)
   body.memory = g_malloc(1);
   body.size = 0;
 
-  sign_path = malloc(sizeof(char) *
-      strlen(path) + strlen(uploads) + 1);
-  sign_path = strcpy(sign_path, path);
-  sign_path = strncat(sign_path, uploads, strlen(uploads));
+  asprintf(&sign_path, "%s?uploads", path);
 
   url = get_multipart_url(path);
   c = get_pooled_handle(url);
