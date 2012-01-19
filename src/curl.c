@@ -84,12 +84,9 @@ typedef struct {
   struct curl_slist *headers;
 } HTTP_REQUEST;
 
-/* clean this up.
- * http://curl.haxx.se/libcurl/c/post-callback.html 
- */
-struct WriteThis {
+struct post_data {
   const char *readptr;
-  int sizeleft;
+  int remaining;
 };
 
 static char *
@@ -885,19 +882,19 @@ get_list_bucket_url(const char *path, const char *next_marker)
 static size_t
 read_callback(void *ptr, size_t size, size_t nmemb, void *userp)
 {
-  struct WriteThis *pooh = (struct WriteThis *)userp;
+  struct post_data *pd = userp;
 
   if(size*nmemb < 1)
     return 0;
 
-  if(pooh->sizeleft) {
-    *(char *)ptr = pooh->readptr[0]; /* copy one single byte */ 
-    pooh->readptr++;                 /* advance pointer */ 
-    pooh->sizeleft--;                /* less data left */ 
-    return 1;                        /* we return 1 byte at a time! */ 
+  if(pd->remaining) {
+    *(char *)ptr = pd->readptr[0];
+    pd->readptr++;
+    pd->remaining--;
+    return 1;
   }
 
-  return 0;                          /* no more data left to deliver */ 
+  return 0;
 }
 
 static size_t
@@ -1059,7 +1056,7 @@ get_pooled_handle(const char *url)
 
   pthread_mutex_unlock(&lock);
 
-  // no handles available in the pool, just create a new one.
+  // no handles available in the pool, create a new one.
   return get_curl_handle(url);
 }
 
@@ -1102,7 +1099,7 @@ new_request(const char *path)
   request->response.size = 0;
 
   return request;
-} 
+}
 
 static int
 free_request(HTTP_REQUEST *request)
@@ -1483,14 +1480,14 @@ complete_multipart(const char *path, char *upload_id,
   struct curl_slist *req_headers = NULL;
   char *xml = complete_multipart_xml(parts);
   char *post = strdup(xml);
-  struct WriteThis pooh;
+  struct post_data pd;
   GList *stripped_headers = NULL;
 
   body.memory = g_malloc(1);
   body.size = 0;
 
-  pooh.readptr = post;
-  pooh.sizeleft = strlen(post);
+  pd.readptr = post;
+  pd.remaining = strlen(post);
 
   sign_path = malloc(sizeof(char) *
       strlen(path) + strlen(upload_id_req) + strlen(upload_id) + 1);
@@ -1510,9 +1507,9 @@ complete_multipart(const char *path, char *upload_id,
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
   curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &body);
   curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
-  curl_easy_setopt(c, CURLOPT_READDATA, &pooh);
+  curl_easy_setopt(c, CURLOPT_READDATA, &pd);
   curl_easy_setopt(c, CURLOPT_READFUNCTION, read_callback);
-  curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t) pooh.sizeleft);
+  curl_easy_setopt(c, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t) pd.remaining);
 
   result = stormfs_curl_easy_perform(c);
 
