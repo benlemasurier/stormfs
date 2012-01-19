@@ -770,7 +770,7 @@ get_url(const char *path)
   asprintf(&url, "%s%s?delimiter=/", curl.url, encoded_path);
   free(encoded_path);
 
-  return(url);
+  return url;
 }
 
 static char *
@@ -782,7 +782,7 @@ get_multipart_url(const char *path)
   asprintf(&url, "%s%s?uploads", curl.url, encoded_path);
   free(encoded_path);
 
-  return(url);
+  return url;
 }
 
 static char *
@@ -795,7 +795,7 @@ get_upload_part_url(const char *path, FILE_PART *fp)
       curl.url, encoded_path, fp->part_num, fp->upload_id);
   free(encoded_path);
 
-  return(url);
+  return url;
 }
 
 static char *
@@ -808,41 +808,25 @@ get_complete_multipart_url(const char *path, char *upload_id)
       curl.url, encoded_path, upload_id);
   free(encoded_path);
 
-  return(url);
+  return url;
 }
 
 static char *
 get_list_bucket_url(const char *path, const char *next_marker)
 {
-  char *url, *tmp;
-  const char *delimiter  = "?delimiter=/";
-  const char *prefix     = "&prefix=";
-  const char *marker     = "&marker=";
-  size_t url_len         = strlen(curl.url);
-  size_t delimiter_len   = strlen(delimiter);
-  size_t prefix_len      = strlen(prefix);
-  size_t path_len        = strlen(path);
-  size_t marker_len      = strlen(marker) + strlen(next_marker);
+  char *url;
+  char *encoded_path = url_encode((char *) path);
 
-  tmp = g_malloc(sizeof(char) * (url_len + delimiter_len +
-      marker_len + prefix_len + 1));
+  if(strlen(path) > 1)
+    asprintf(&url, "%s?delimiter=/&marker=%s&prefix=%s/", 
+        curl.url, next_marker, encoded_path + 1);
+  else
+    asprintf(&url, "%s?delimiter=/&marker=%s&prefix=", 
+        curl.url, next_marker);
 
-  tmp = strcpy(tmp, curl.url);
-  tmp = strncat(tmp, delimiter, delimiter_len);
-  tmp = strncat(tmp, marker, strlen(marker));
-  tmp = strncat(tmp, next_marker, strlen(next_marker));
-  tmp = strncat(tmp, prefix, prefix_len);
+  free(encoded_path);
 
-  if(path_len > 1) {
-    tmp = g_realloc(tmp, sizeof(char) * (strlen(tmp) + path_len + 1));
-    tmp = strncat(tmp, path + 1, path_len - 1);
-    tmp = strncat(tmp, "/", 1);
-  }
-
-  url = g_strdup(tmp);
-  g_free(tmp);
-
-  return(url);
+  return url;
 }
 
 static size_t
