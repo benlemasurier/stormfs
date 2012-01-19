@@ -1395,7 +1395,7 @@ upload_part(const char *path, FILE_PART *fp)
     return -errno;
   }
 
-  response.memory = g_malloc(1);
+  response.memory = malloc(1);
   response.size = 0;
   url = get_upload_part_url(path, fp);
   c = get_pooled_handle(url);
@@ -1566,7 +1566,6 @@ init_multipart(const char *path, off_t size, GList *headers)
   curl_slist_free_all(req_headers);
   release_pooled_handle(c);
   if(result != 0) {
-    free(upload_id);
     free(body.memory);
     return NULL;
   }
