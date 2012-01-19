@@ -765,10 +765,10 @@ static char *
 get_url(const char *path)
 {
   char *url;
-  char *encoded = url_encode((char *) path);
+  char *encoded_path = url_encode((char *) path);
 
-  asprintf(&url, "%s%s?delimiter=/", curl.url, encoded);
-  free(encoded);
+  asprintf(&url, "%s%s?delimiter=/", curl.url, encoded_path);
+  free(encoded_path);
 
   return(url);
 }
@@ -776,17 +776,11 @@ get_url(const char *path)
 static char *
 get_multipart_url(const char *path)
 {
-  char *tmp = url_encode((char *) path);
-  char *uploads = "?uploads";
-  char *url = malloc(sizeof(char) *
-      strlen(curl.url) +
-      strlen(tmp) +
-      strlen(uploads) + 1);
+  char *url;
+  char *encoded_path = url_encode((char *) path);
 
-  url = strcpy(url, curl.url);
-  url = strncat(url, tmp, strlen(tmp));
-  url = strncat(url, uploads, strlen(uploads));
-  free(tmp);
+  asprintf(&url, "%s%s?uploads", curl.url, encoded_path);
+  free(encoded_path);
 
   return(url);
 }
@@ -796,19 +790,9 @@ get_upload_part_url(const char *path, FILE_PART *fp)
 {
   char *url;
   char *encoded_path = url_encode((char *) path);
-  char *parameters = malloc(sizeof(char) * 
-      strlen(fp->upload_id) + 10);
 
-  asprintf(&parameters, "?partNumber=%d&uploadId=%s",
-      fp->part_num, fp->upload_id);
-
-  url = malloc(sizeof(char) *
-      strlen(curl.url) + strlen(encoded_path) + strlen(parameters) + 1);
-  url = strcpy(url, curl.url);
-  url = strncat(url, encoded_path, strlen(encoded_path));
-  url = strncat(url, parameters, strlen(parameters));
-
-  free(parameters);
+  asprintf(&url, "%s%s?partNumber=%d&uploadId=%s",
+      curl.url, encoded_path, fp->part_num, fp->upload_id);
   free(encoded_path);
 
   return(url);
