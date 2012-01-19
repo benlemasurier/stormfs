@@ -453,7 +453,7 @@ append_list_bucket_xml(char *xml, char *xml_to_append)
   char *append_pos, *to_append;
 
   // TODO: should be able to use a little less memory here.
-  xml = g_realloc(xml, sizeof(char) *
+  xml = realloc(xml, sizeof(char) *
       strlen(xml) + strlen(xml_to_append) + 1);
 
   append_pos = strstr(xml, "</ListBucket");
@@ -690,13 +690,13 @@ sign_request(const char *method,
     next = header->next;
 
     if(strstr(header->data, "x-amz") != NULL) {
-      amz_headers = g_realloc(amz_headers, sizeof(char) * strlen(amz_headers) +
+      amz_headers = realloc(amz_headers, sizeof(char) * strlen(amz_headers) +
                         strlen(header->data) + 2);
       amz_headers = strncat(amz_headers, header->data, strlen(header->data));
       amz_headers = strncat(amz_headers, "\n", 1);
     } else if(strstr(header->data, "Content-Type") != NULL) {
       char *tmp = strstr(header->data, ":") + 1;
-      content_type = g_realloc(content_type, sizeof(char) * strlen(content_type) +
+      content_type = realloc(content_type, sizeof(char) * strlen(content_type) +
                         strlen(content_type) + strlen(tmp) + 2);
       content_type = strncat(content_type, tmp, strlen(tmp));
     }
@@ -704,41 +704,26 @@ sign_request(const char *method,
     header = next;
   }
 
-  content_type = strncat(content_type, "\n", 1);
-  to_sign = g_malloc(sizeof(char) * strlen(method) +
-                strlen(content_type) + strlen(date) +
-                strlen(amz_headers) + strlen(resource) + 4);
-  to_sign = strcpy(to_sign, method);
-  to_sign = strcat(to_sign, "\n\n");
-  to_sign = strcat(to_sign, content_type);
-  to_sign = strcat(to_sign, date);
-  to_sign = strcat(to_sign, "\n");
-  to_sign = strcat(to_sign, amz_headers);
-  to_sign = strcat(to_sign, resource);
+  asprintf(&to_sign, "%s\n\n%s\n%s\n%s%s", 
+      method, content_type, date, amz_headers, resource);
 
   signature = hmac_sha1(curl.secret_key, to_sign);
 
-  authorization = g_malloc(sizeof(char) * strlen(curl.access_key) +
-                                          strlen(signature) + 22);
-  authorization = strcpy(authorization, "Authorization: AWS ");
-  authorization = strcat(authorization, curl.access_key);
-  authorization = strcat(authorization, ":");
-  authorization = strcat(authorization, signature);
+  asprintf(&authorization, "Authorization: AWS %s:%s",
+      curl.access_key, signature);
 
-  date_header = g_malloc(sizeof(char) * strlen(date) + 7);
-  date_header = strcpy(date_header, "Date: ");
-  date_header = strcat(date_header, date);
+  asprintf(&date_header, "Date: %s", date);
   *headers = curl_slist_append(*headers, date_header);
   *headers = curl_slist_append(*headers, authorization);
 
-  g_free(date);
-  g_free(resource);
-  g_free(signature);
-  g_free(to_sign);
-  g_free(amz_headers);
-  g_free(date_header);
-  g_free(content_type);
-  g_free(authorization);
+  free(date);
+  free(resource);
+  free(signature);
+  free(to_sign);
+  free(amz_headers);
+  free(date_header);
+  free(content_type);
+  free(authorization);
 
   return 0;
 }
