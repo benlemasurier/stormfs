@@ -801,24 +801,12 @@ get_upload_part_url(const char *path, FILE_PART *fp)
 static char *
 get_complete_multipart_url(const char *path, char *upload_id)
 {
-  char *tmp, *id_str, *url;
+  char *url;
+  char *encoded_path = url_encode((char *) path);
 
-  tmp = url_encode((char *) path);
-  id_str = strdup("?uploadId=");
-  id_str = realloc(id_str, sizeof(char) *
-      strlen(id_str) +
-      strlen(upload_id) + 1);
-  id_str = strncat(id_str, upload_id, sizeof(char) * strlen(upload_id) + 1);
-  url = malloc(sizeof(char) *
-      strlen(curl.url) +
-      strlen(tmp) +
-      strlen(id_str) + 1);
-
-  url = strcpy(url, curl.url);
-  url = strncat(url, tmp, strlen(tmp));
-  url = strncat(url, id_str, strlen(id_str));
-  free(tmp);
-  free(id_str);
+  asprintf(&url, "%s%s?uploadId=%s",
+      curl.url, encoded_path, upload_id);
+  free(encoded_path);
 
   return(url);
 }
