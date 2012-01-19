@@ -764,17 +764,11 @@ set_curl_defaults(CURL *c)
 static char *
 get_url(const char *path)
 {
-  char *tmp = url_encode((char *) path);
-  char *delimiter = "?delimiter=/";
-  char *url = g_malloc(sizeof(char) *
-      strlen(curl.url) +
-      strlen(tmp) +
-      strlen(delimiter) + 1);
+  char *url;
+  char *encoded = url_encode((char *) path);
 
-  url = strcpy(url, curl.url);
-  url = strncat(url, tmp, strlen(tmp));
-  url = strncat(url, delimiter, strlen(delimiter));
-  g_free(tmp);
+  asprintf(&url, "%s%s?delimiter=/", curl.url, encoded);
+  free(encoded);
 
   return(url);
 }
