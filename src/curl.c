@@ -818,10 +818,10 @@ get_list_bucket_url(const char *path, const char *next_marker)
   char *encoded_path = url_encode((char *) path);
 
   if(strlen(path) > 1)
-    asprintf(&url, "%s?delimiter=/&marker=%s&prefix=%s/", 
+    asprintf(&url, "%s?delimiter=/&marker=%s&prefix=%s/",
         curl.url, next_marker, encoded_path + 1);
   else
-    asprintf(&url, "%s?delimiter=/&marker=%s&prefix=", 
+    asprintf(&url, "%s?delimiter=/&marker=%s&prefix=",
         curl.url, next_marker);
 
   free(encoded_path);
@@ -1347,7 +1347,6 @@ upload_part(const char *path, FILE_PART *fp)
   url = get_upload_part_url(path, fp);
   c = get_pooled_handle(url);
 
-  sign_path = malloc(sizeof(char) * strlen(url));
   asprintf(&sign_path, "%s?partNumber=%d&uploadId=%s",
       path, fp->part_num, fp->upload_id);
 
@@ -1398,7 +1397,7 @@ complete_multipart_xml(GList *parts)
   while(head != NULL) {
     next = head->next;
     FILE_PART *fp = head->data;
-    char *part_xml = g_malloc0(sizeof(char) * 150);
+    char *part_xml;
 
     asprintf(&part_xml, "  <Part>\n"
                         "    <PartNumber>%d</PartNumber>\n"
