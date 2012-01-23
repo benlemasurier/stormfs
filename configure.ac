@@ -10,7 +10,5 @@ CFLAGS="$CFLAGS -Wall -W -Wno-unused-parameter -std=c99 -pedantic"
 export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
 PKG_CHECK_MODULES(STORMFS, [fuse >= 2.8.4 glib-2.0 >= 2.3.0  gthread-2.0 libcurl >= 7.16.0])
 
-LIBS="$LIBS $STORMFS_LIBS"
-
 AC_CONFIG_FILES([Makefile src/Makefile])
 AC_OUTPUT
