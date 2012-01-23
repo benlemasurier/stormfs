@@ -931,7 +931,7 @@ static int
 destroy_pooled_handle(CURL_HANDLE *ch)
 {
   destroy_curl_handle(ch->c);
-  g_free(ch);
+  free(ch);
 
   return 0;
 }

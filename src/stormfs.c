@@ -303,6 +303,7 @@ cache_mknod(struct file *f, mode_t mode, dev_t rdev)
 void
 free_file(struct file *f)
 {
+  free(f->name);
   free(f->path);
   if(f->st != NULL) free(f->st);
   if(f->dir != NULL) g_list_free(f->dir);
@@ -318,7 +319,7 @@ add_file_to_list(GList *list, const char *path, struct stat *st)
   struct stat *stbuf = g_new0(struct stat, 1);
 
   f->path = strdup(path);
-  f->name = basename(f->path);
+  f->name = strdup(basename(f->path));
 
   if(st != NULL)
     memcpy(stbuf, st, sizeof(struct stat));
@@ -414,7 +415,7 @@ cache_insert(const char *path)
   struct file *f = g_new0(struct file, 1);
 
   f->path = strdup(path);
-  f->name = basename(f->path);
+  f->name = strdup(basename(f->path));
   f->headers = NULL;
   f->st = NULL;
   pthread_mutex_init(&f->lock, NULL);
@@ -1185,6 +1186,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   pthread_mutex_unlock(&dir->lock);
 
   g_list_free_full(files, (GDestroyNotify) free_file);
+  free(xml);
 
   return result;
 }
