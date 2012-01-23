@@ -335,15 +335,11 @@ cache_init(void)
   cache.timeout = DEFAULT_CACHE_TIMEOUT;
   cache.last_cleaned = time(NULL);
   pthread_mutex_init(&cache.lock, NULL);
-  cache.files = g_hash_table_new_full(g_str_hash, g_str_equal, 
+  cache.files = g_hash_table_new_full(g_str_hash, g_str_equal,
       g_free, (GDestroyNotify) free_file);
 
   validate_cache_path(stormfs.cache_path);
-  cache.path = malloc(sizeof(char) * strlen(stormfs.cache_path)
-      + strlen(stormfs.bucket) + 2);
-  cache.path = strcpy(cache.path, stormfs.cache_path);
-  cache.path = strncat(cache.path, "/", 1);
-  cache.path = strncat(cache.path, stormfs.bucket, strlen(stormfs.bucket));
+  asprintf(&cache.path, "%s/%s", stormfs.cache_path, stormfs.bucket)l;
 
   return 0;
 }

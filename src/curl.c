@@ -184,9 +184,9 @@ free_parts(GList *parts)
 void
 free_header(HTTP_HEADER *h)
 {
-  g_free(h->key);
-  g_free(h->value);
-  g_free(h);
+  free(h->key);
+  free(h->value);
+  free(h);
 }
 
 void
@@ -704,7 +704,7 @@ sign_request(const char *method,
     header = next;
   }
 
-  asprintf(&to_sign, "%s\n\n%s\n%s\n%s%s", 
+  asprintf(&to_sign, "%s\n\n%s\n%s\n%s%s",
       method, content_type, date, amz_headers, resource);
 
   signature = hmac_sha1(curl.secret_key, to_sign);
