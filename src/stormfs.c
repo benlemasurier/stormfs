@@ -339,7 +339,7 @@ cache_init(void)
       g_free, (GDestroyNotify) free_file);
 
   validate_cache_path(stormfs.cache_path);
-  asprintf(&cache.path, "%s/%s", stormfs.cache_path, stormfs.bucket)l;
+  asprintf(&cache.path, "%s/%s", stormfs.cache_path, stormfs.bucket);
 
   return 0;
 }
