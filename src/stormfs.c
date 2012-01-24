@@ -307,9 +307,16 @@ free_file(struct file *f)
   free(f->path);
   if(f->st != NULL) free(f->st);
   if(f->dir != NULL) g_list_free(f->dir);
-  g_list_free_full(f->headers, (GDestroyNotify) free_header);
+  free_headers(f->headers);
   pthread_mutex_destroy(&f->lock);
   free(f);
+}
+
+void
+free_files(GList *files)
+{
+  g_list_foreach(files, (GFunc) free_file, NULL);
+  g_list_free(files);
 }
 
 GList *
@@ -1189,7 +1196,7 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   }
   pthread_mutex_unlock(&dir->lock);
 
-  g_list_free_full(files, (GDestroyNotify) free_file);
+  free_files(files);
   free(xml);
 
   return result;

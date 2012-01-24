@@ -8,7 +8,7 @@ AM_PROG_CC_C_O
 CFLAGS="$CFLAGS -Wall -W -Wno-unused-parameter -std=c99 -pedantic"
 
 PKG_CHECK_MODULES([FUSE], [fuse >= 2.8.4])
-PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.3.0])
+PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.24])
 PKG_CHECK_MODULES([GTHREAD], [gthread-2.0])
 PKG_CHECK_MODULES([CURL], [libcurl >= 7.16.0])
 

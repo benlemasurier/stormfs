@@ -178,7 +178,8 @@ free_part(FILE_PART *fp)
 void
 free_parts(GList *parts)
 {
-  g_list_free_full(parts, (GDestroyNotify) free_part);
+  g_list_foreach(parts, (GFunc) free_part, NULL);
+  g_list_free(parts);
 }
 
 void
@@ -192,7 +193,8 @@ free_header(HTTP_HEADER *h)
 void
 free_headers(GList *headers)
 {
-  g_list_free_full(headers, (GDestroyNotify) free_header);
+  g_list_foreach(headers, (GFunc) free_header, NULL);
+  g_list_free(headers);
 }
 
 char *
@@ -966,7 +968,8 @@ destroy_pooled_handle(CURL_HANDLE *ch)
 static int
 destroy_pool(void)
 {
-  g_list_free_full(curl.pool, (GDestroyNotify) destroy_pooled_handle);
+  g_list_foreach(curl.pool, (GFunc) destroy_pooled_handle, NULL);
+  g_list_free(curl.pool);
 
   return 0;
 }
