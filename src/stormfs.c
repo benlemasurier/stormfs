@@ -340,7 +340,11 @@ cache_init(void)
       g_free, (GDestroyNotify) free_file);
 
   validate_cache_path(stormfs.cache_path);
-  asprintf(&cache.path, "%s/%s", stormfs.cache_path, stormfs.bucket);
+  if(asprintf(&cache.path, "%s/%s",
+      stormfs.cache_path, stormfs.bucket) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
 
   return 0;
 }

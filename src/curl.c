@@ -704,15 +704,24 @@ sign_request(const char *method,
     header = next;
   }
 
-  asprintf(&to_sign, "%s\n\n%s\n%s\n%s%s",
-      method, content_type, date, amz_headers, resource);
+  if(asprintf(&to_sign, "%s\n\n%s\n%s\n%s%s",
+      method, content_type, date, amz_headers, resource) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
 
   signature = hmac_sha1(curl.secret_key, to_sign);
 
-  asprintf(&authorization, "Authorization: AWS %s:%s",
-      curl.access_key, signature);
+  if(asprintf(&authorization, "Authorization: AWS %s:%s",
+      curl.access_key, signature) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
 
-  asprintf(&date_header, "Date: %s", date);
+  if(asprintf(&date_header, "Date: %s", date) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
   *headers = curl_slist_append(*headers, date_header);
   *headers = curl_slist_append(*headers, authorization);
 
@@ -752,7 +761,10 @@ get_url(const char *path)
   char *url;
   char *encoded_path = url_encode((char *) path);
 
-  asprintf(&url, "%s%s?delimiter=/", curl.url, encoded_path);
+  if(asprintf(&url, "%s%s?delimiter=/", curl.url, encoded_path) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
   free(encoded_path);
 
   return url;
@@ -764,7 +776,10 @@ get_multipart_url(const char *path)
   char *url;
   char *encoded_path = url_encode((char *) path);
 
-  asprintf(&url, "%s%s?uploads", curl.url, encoded_path);
+  if(asprintf(&url, "%s%s?uploads", curl.url, encoded_path) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
   free(encoded_path);
 
   return url;
@@ -776,8 +791,11 @@ get_upload_part_url(const char *path, FILE_PART *fp)
   char *url;
   char *encoded_path = url_encode((char *) path);
 
-  asprintf(&url, "%s%s?partNumber=%d&uploadId=%s",
-      curl.url, encoded_path, fp->part_num, fp->upload_id);
+  if(asprintf(&url, "%s%s?partNumber=%d&uploadId=%s",
+      curl.url, encoded_path, fp->part_num, fp->upload_id) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
   free(encoded_path);
 
   return url;
@@ -789,8 +807,11 @@ get_complete_multipart_url(const char *path, char *upload_id)
   char *url;
   char *encoded_path = url_encode((char *) path);
 
-  asprintf(&url, "%s%s?uploadId=%s",
-      curl.url, encoded_path, upload_id);
+  if(asprintf(&url, "%s%s?uploadId=%s",
+      curl.url, encoded_path, upload_id) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
   free(encoded_path);
 
   return url;
@@ -799,15 +820,21 @@ get_complete_multipart_url(const char *path, char *upload_id)
 static char *
 get_list_bucket_url(const char *path, const char *next_marker)
 {
+  int result;
   char *url;
   char *encoded_path = url_encode((char *) path);
 
   if(strlen(path) > 1)
-    asprintf(&url, "%s?delimiter=/&marker=%s&prefix=%s/",
+    result = asprintf(&url, "%s?delimiter=/&marker=%s&prefix=%s/",
         curl.url, next_marker, encoded_path + 1);
   else
-    asprintf(&url, "%s?delimiter=/&marker=%s&prefix=",
+    result = asprintf(&url, "%s?delimiter=/&marker=%s&prefix=",
         curl.url, next_marker);
+
+  if(result == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
 
   free(encoded_path);
 
@@ -1332,8 +1359,11 @@ upload_part(const char *path, FILE_PART *fp)
   url = get_upload_part_url(path, fp);
   c = get_pooled_handle(url);
 
-  asprintf(&sign_path, "%s?partNumber=%d&uploadId=%s",
-      path, fp->part_num, fp->upload_id);
+  if(asprintf(&sign_path, "%s?partNumber=%d&uploadId=%s",
+      path, fp->part_num, fp->upload_id) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
 
   sign_request("PUT", &req_headers, sign_path);
   curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
@@ -1372,6 +1402,7 @@ upload_part(const char *path, FILE_PART *fp)
 static char *
 complete_multipart_xml(GList *parts)
 {
+  int result;
   GList *head = NULL, *next = NULL;
   char *xml = strdup("<CompleteMultipartUpload>\n");
 
@@ -1384,11 +1415,15 @@ complete_multipart_xml(GList *parts)
     FILE_PART *fp = head->data;
     char *part_xml;
 
-    asprintf(&part_xml, "  <Part>\n"
-                        "    <PartNumber>%d</PartNumber>\n"
-                        "    <ETag>%s</ETag>\n"
-                        "  </Part>\n",
+    result = asprintf(&part_xml, "  <Part>\n"
+                                 "    <PartNumber>%d</PartNumber>\n"
+                                 "    <ETag>%s</ETag>\n"
+                                 "  </Part>\n",
         fp->part_num, fp->etag);
+    if(result == -1) {
+      fprintf(stderr, "unable to allocate memory\n");
+      exit(EXIT_FAILURE);
+    }
     xml = strncat(xml, part_xml, strlen(part_xml));
 
     free(part_xml);
@@ -1422,7 +1457,10 @@ complete_multipart(const char *path, char *upload_id,
   pd.readptr = post;
   pd.remaining = strlen(post);
 
-  asprintf(&sign_path, "%s?uploadId=%s", path, upload_id);
+  if(asprintf(&sign_path, "%s?uploadId=%s", path, upload_id) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
 
   url = get_complete_multipart_url(path, upload_id);
   c = get_pooled_handle(url);
@@ -1467,7 +1505,10 @@ init_multipart(const char *path, off_t size, GList *headers)
   body.memory = g_malloc(1);
   body.size = 0;
 
-  asprintf(&sign_path, "%s?uploads", path);
+  if(asprintf(&sign_path, "%s?uploads", path) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
 
   url = get_multipart_url(path);
   c = get_pooled_handle(url);
