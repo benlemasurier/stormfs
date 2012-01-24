@@ -62,7 +62,7 @@ typedef struct {
   char *path;
   char *etag;
   char *upload_id;
-  off_t size;
+  size_t size;
 } FILE_PART;
 
 typedef struct {
@@ -1504,7 +1504,7 @@ create_file_parts(const char *path, char *upload_id, int fd)
 {
   FILE *f;
   struct stat st;
-  off_t bytes_remaining;
+  size_t bytes_remaining;
   GList *parts = NULL;
 
   if(fstat(fd, &st) != 0) {
