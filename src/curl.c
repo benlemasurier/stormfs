@@ -308,6 +308,17 @@ ctime_header(time_t t)
 }
 
 HTTP_HEADER *
+encryption_header(void)
+{
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key = strdup("x-amz-server-side-encryption");
+  h->value = strdup("AES256");
+
+  return h;
+}
+
+HTTP_HEADER *
 expires_header(const char *expires)
 {
   HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);

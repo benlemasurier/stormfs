@@ -41,6 +41,7 @@
 struct stormfs {
   bool ssl;
   bool rrs;
+  int encryption;
   int cache;
   int foreground;
   int verify_ssl;
@@ -81,6 +82,7 @@ static struct fuse_opt stormfs_opts[] = {
   STORMFS_OPT("acl=%s",        acl,           0),
   STORMFS_OPT("config=%s",     config,        0),
   STORMFS_OPT("url=%s",        url,           0),
+  STORMFS_OPT("encryption",    encryption,    1),
   STORMFS_OPT("expires=%s",    expires,       0),
   STORMFS_OPT("use_ssl",       ssl,           true),
   STORMFS_OPT("no_verify_ssl", verify_ssl,    0),
@@ -649,6 +651,8 @@ add_optional_headers(GList *headers)
 {
   headers = add_header(headers, storage_header(stormfs.storage_class));
   headers = add_header(headers, acl_header(stormfs.acl));
+  if(stormfs.encryption)
+    headers = add_header(headers, encryption_header());
   if(stormfs.expires != NULL)
     headers = add_header(headers, expires_header(stormfs.expires));
 
@@ -1701,6 +1705,8 @@ parse_config(const char *path)
       stormfs.verify_ssl = 0;
     if(strstr(p, "use_rrs") != NULL)
       stormfs.rrs = true;
+    if(strstr(p, "encryption") != NULL)
+      stormfs.encryption = true;
     if(strstr(p, "mime_path") != NULL)
       stormfs.mime_path = get_config_value(strstr(p, "=") + 1);
     if(strstr(p, "cache_path") != NULL)
@@ -1722,6 +1728,7 @@ show_debug_header(void)
   DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
   DEBUG("STORMFS acl:           %s\n", stormfs.acl);
   DEBUG("STORMFS cache:         %s\n", (stormfs.cache) ? "on" : "off");
+  DEBUG("STORMFS encryption:    %s\n", (stormfs.encryption) ? "on" : "off");
 }
 
 static void *
@@ -1792,6 +1799,7 @@ usage(const char *progname)
 "    -o use_ssl              force the use of SSL\n"
 "    -o no_verify_ssl        skip SSL certificate/host verification\n"
 "    -o use_rrs              use reduced redundancy storage\n"
+"    -o encryption           enable server-side encryption\n"
 "    -o mime_path            path to mime.types (default: /etc/mime.types)\n"
 "    -o cache_path           path for cached file storage (default: /tmp/stormfs)\n"
 "    -o nocache              disable the cache (cache is enabled by default)\n"

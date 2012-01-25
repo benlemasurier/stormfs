@@ -23,6 +23,7 @@ HTTP_HEADER *copy_source_range_header(off_t first, off_t last);
 HTTP_HEADER *copy_meta_header();
 HTTP_HEADER *ctime_header(time_t t);
 HTTP_HEADER *expires_header(const char *expires);
+HTTP_HEADER *encryption_header(void);
 HTTP_HEADER *gid_header(gid_t gid);
 HTTP_HEADER *rdev_header(dev_t dev);
 HTTP_HEADER *uid_header(uid_t uid);
