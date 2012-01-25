@@ -1304,6 +1304,7 @@ static int
 stormfs_rename_file(const char *from, const char *to)
 {
   int result;
+  struct stat st;
   GList *headers = NULL;
 
   DEBUG("rename file: %s -> %s\n", from, to);
@@ -1311,10 +1312,20 @@ stormfs_rename_file(const char *from, const char *to)
   if((result = stormfs_curl_head(from, &headers)) != 0)
     return result;
 
-  headers = add_header(headers, copy_meta_header());
-  headers = add_header(headers, copy_source_header(from));
+  if((result = headers_to_stat(headers, &st)) != 0)
+    return result;
 
-  result = stormfs_curl_put(to, headers);
+  /* files >= 5GB must be renamed via the multipart interface */
+  if(st.st_size < FIVE_GB) {
+    headers = add_header(headers, copy_meta_header());
+    headers = add_header(headers, copy_source_header(from));
+
+    result = stormfs_curl_put(to, headers);
+  } else {
+    headers = add_header(headers, content_header(get_mime_type(from)));
+    result = copy_multipart(from, to, headers, st.st_size);
+  }
+
   free_headers(headers);
 
   return stormfs_unlink(from);
@@ -1389,10 +1400,6 @@ stormfs_rename(const char *from, const char *to)
 
   if((result = stormfs_getattr(from, &st)) != 0)
     return -result;
-
-  // TODO: handle multipart files
-  if(st.st_size >= FIVE_GB)
-    return -ENOTSUP;
 
   if(S_ISDIR(st.st_mode))
     result = stormfs_rename_directory(from, to);

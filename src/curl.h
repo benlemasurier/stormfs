@@ -19,6 +19,7 @@ typedef struct {
 HTTP_HEADER *acl_header(const char *acl);
 HTTP_HEADER *content_header(const char *type);
 HTTP_HEADER *copy_source_header(const char *path);
+HTTP_HEADER *copy_source_range_header(off_t first, off_t last);
 HTTP_HEADER *copy_meta_header();
 HTTP_HEADER *ctime_header(time_t t);
 HTTP_HEADER *expires_header(const char *expires);
@@ -46,6 +47,7 @@ int stormfs_curl_rename(const char *from, const char *to);
 int stormfs_curl_set_auth(const char *access_key, const char *secret_key);
 int stormfs_curl_upload(const char *path, GList *headers, int fd);
 int stormfs_curl_verify_ssl(int verify);
+int copy_multipart(const char *from, const char *to, GList *headers, off_t size);
 
 #endif // stormfs_curl_H
 

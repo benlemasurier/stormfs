@@ -35,10 +35,11 @@
 #define SHA1_LENGTH 20
 #define MAX_REQUESTS 100
 #define POOL_SIZE 100
-#define DEFAULT_MIME_TYPE "application/octet-stream"
-#define MULTIPART_MIN     20971520 /* Minimum size for multipart files */
-#define MULTIPART_CHUNK   10485760 /* 10MB */
-#define MAX_FILE_SIZE     104857600000 /* 97.65GB (10,000 * 10MB) */
+#define DEFAULT_MIME_TYPE   "application/octet-stream"
+#define MULTIPART_MIN       20971520  /* Minimum size for multipart files */
+#define MULTIPART_CHUNK     10485760  /* 10MB */
+#define MULTIPART_COPY_SIZE 524288000 /* 500MB */
+#define MAX_FILE_SIZE       104857600000 /* 97.65GB (10,000 * 10MB) */
 
 static pthread_mutex_t lock        = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t shared_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -282,6 +283,19 @@ copy_source_header(const char *path)
 }
 
 HTTP_HEADER *
+copy_source_range_header(off_t first, off_t last)
+{
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key = strdup("x-amz-copy-source-range");
+  if(asprintf(&h->value, "bytes=%jd-%jd", 
+        (intmax_t) first, (intmax_t) last) == -1)
+    fprintf(stderr, "unable to allocate memory\n");
+
+  return h;
+}
+
+HTTP_HEADER *
 ctime_header(time_t t)
 {
   char *s = time_to_s(t);
@@ -425,6 +439,27 @@ get_upload_id(char *xml)
   end_p   = strstr(xml, end_marker);
 
   return strndup(start_p, end_p - start_p);
+}
+
+static char *
+get_etag_from_xml(char *xml)
+{
+  char *tmp, *etag;
+  char *start_marker = "ETag>&quot;";
+  char *end_marker  = "&quot;</ETag";
+  char *start_p, *end_p;
+
+  start_p = strstr(xml, start_marker) + strlen(start_marker);
+  end_p   = strstr(xml, end_marker);
+
+  tmp = strndup(start_p, end_p - start_p);
+  if(asprintf(&etag, "\"%s\"", tmp) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
+
+  free(tmp);
+  return etag;
 }
 
 static bool
@@ -1369,7 +1404,6 @@ upload_part(const char *path, FILE_PART *fp)
   }
 
   sign_request("PUT", &req_headers, sign_path);
-  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
   curl_easy_setopt(c, CURLOPT_INFILE, f);
   curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);
   curl_easy_setopt(c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size);
@@ -1396,6 +1430,53 @@ upload_part(const char *path, FILE_PART *fp)
   free(sign_path);
   free(response.memory);
   free_headers(headers);
+  curl_slist_free_all(req_headers);
+  release_pooled_handle(c);
+
+  return result;
+}
+
+static int
+copy_part(const char *from, const char *to, GList *headers, FILE_PART *fp)
+{
+  int result;
+  CURL *c;
+  char *url;
+  char *sign_path;
+  HTTP_RESPONSE response;
+  struct curl_slist *req_headers = NULL;
+  GList *response_headers = NULL, *stripped_headers = NULL;
+
+  response.memory = malloc(1);
+  response.size = 0;
+  url = get_upload_part_url(to, fp);
+  c = get_pooled_handle(url);
+
+  if(asprintf(&sign_path, "%s?partNumber=%d&uploadId=%s",
+      to, fp->part_num, fp->upload_id) == -1) {
+    fprintf(stderr, "unable to allocate memory\n");
+    exit(EXIT_FAILURE);
+  }
+
+  headers = g_list_first(headers);
+  stripped_headers = g_list_copy(headers);
+  stripped_headers = strip_header(stripped_headers, "x-amz-meta");
+  req_headers = headers_to_curl_slist(stripped_headers);
+
+  sign_request("PUT", &req_headers, sign_path);
+  curl_easy_setopt(c, CURLOPT_UPLOAD, 1L);
+  curl_easy_setopt(c, CURLOPT_INFILESIZE, 0);
+  curl_easy_setopt(c, CURLOPT_HTTPHEADER, req_headers);
+  curl_easy_setopt(c, CURLOPT_WRITEDATA, (void *) &response);
+  curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, write_memory_cb);
+  result = stormfs_curl_easy_perform(c);
+
+  fp->etag = get_etag_from_xml(response.memory);
+
+  free(url);
+  free(sign_path);
+  free(response.memory);
+  free_headers(response_headers);
   curl_slist_free_all(req_headers);
   release_pooled_handle(c);
 
@@ -1544,6 +1625,31 @@ init_multipart(const char *path, off_t size, GList *headers)
 }
 
 static GList *
+create_copy_parts(const char *path, char *upload_id, off_t size)
+{
+  int part_num = 1;
+  off_t bytes_remaining;
+  GList *parts = NULL;
+
+  bytes_remaining = size;
+  while(bytes_remaining > 0) {
+    FILE_PART *fp = create_part(part_num, upload_id);
+
+    fp->path = strdup(path);
+    if(bytes_remaining > MULTIPART_COPY_SIZE)
+      fp->size = MULTIPART_COPY_SIZE;
+    else
+      fp->size = bytes_remaining;
+
+    parts = g_list_append(parts, fp);
+    part_num++;
+    bytes_remaining = bytes_remaining - fp->size;
+  }
+
+  return parts;
+}
+
+static GList *
 create_file_parts(const char *path, char *upload_id, int fd)
 {
   FILE *f;
@@ -1600,6 +1706,43 @@ create_file_parts(const char *path, char *upload_id, int fd)
   }
 
   return parts;
+}
+
+int
+copy_multipart(const char *from, const char *to, GList *headers, off_t size)
+{
+  int result;
+  char *upload_id = NULL;
+  GList *parts = NULL, *head = NULL, *next = NULL;
+
+  if((upload_id = init_multipart(to, size, headers)) == NULL)
+    return -EIO;
+
+  if((parts = create_copy_parts(to, upload_id, size)) == NULL)
+    return -EIO;
+
+  off_t bytes_written = 0;
+  head = g_list_first(parts);
+  while(head != NULL) {
+    next = head->next;
+    FILE_PART *fp = head->data;
+    off_t first = bytes_written;
+    off_t last = bytes_written + (fp->size - 1);
+    headers = add_header(headers, copy_meta_header());
+    headers = add_header(headers, copy_source_header(from));
+    headers = add_header(headers, copy_source_range_header(first, last));
+
+    if((result = copy_part(from, to, headers, fp)) != 0)
+      break;
+
+    bytes_written = last + 1;
+    head = next;
+  }
+
+  result = complete_multipart(to, upload_id, headers, parts);
+  free_parts(parts);
+
+  return result;
 }
 
 static int
