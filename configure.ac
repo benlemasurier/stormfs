@@ -12,5 +12,5 @@ PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.22.5])
 PKG_CHECK_MODULES([GTHREAD], [gthread-2.0])
 PKG_CHECK_MODULES([CURL], [libcurl >= 7.16.0])
 
-AC_CONFIG_FILES([Makefile src/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile doc/Makefile])
 AC_OUTPUT

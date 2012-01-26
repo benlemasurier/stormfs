@@ -41,6 +41,7 @@
 struct stormfs {
   bool ssl;
   bool rrs;
+  int encryption;
   int cache;
   int foreground;
   int verify_ssl;
@@ -58,6 +59,7 @@ struct stormfs {
   char *storage_class;
   char *expires;
   char *cache_path;
+  unsigned cache_timeout;
   mode_t root_mode;
   GHashTable *mime_types;
 } stormfs;
@@ -78,17 +80,19 @@ enum {
 };
 
 static struct fuse_opt stormfs_opts[] = {
-  STORMFS_OPT("acl=%s",        acl,           0),
-  STORMFS_OPT("config=%s",     config,        0),
-  STORMFS_OPT("url=%s",        url,           0),
-  STORMFS_OPT("expires=%s",    expires,       0),
-  STORMFS_OPT("use_ssl",       ssl,           true),
-  STORMFS_OPT("no_verify_ssl", verify_ssl,    0),
-  STORMFS_OPT("use_rrs",       rrs,           true),
-  STORMFS_OPT("nocache",       cache,         0),
-  STORMFS_OPT("stormfs_debug", debug,         true),
-  STORMFS_OPT("mime_path=%s",  mime_path,     0),
-  STORMFS_OPT("cache_path=%s", cache_path,    0),
+  STORMFS_OPT("acl=%s",           acl,           0),
+  STORMFS_OPT("config=%s",        config,        0),
+  STORMFS_OPT("url=%s",           url,           0),
+  STORMFS_OPT("encryption",       encryption,    1),
+  STORMFS_OPT("expires=%s",       expires,       0),
+  STORMFS_OPT("use_ssl",          ssl,           true),
+  STORMFS_OPT("no_verify_ssl",    verify_ssl,    0),
+  STORMFS_OPT("use_rrs",          rrs,           true),
+  STORMFS_OPT("nocache",          cache,         0),
+  STORMFS_OPT("stormfs_debug",    debug,         true),
+  STORMFS_OPT("mime_path=%s",     mime_path,     0),
+  STORMFS_OPT("cache_path=%s",    cache_path,    0),
+  STORMFS_OPT("cache_timeout=%u", cache_timeout, 0),
 
   FUSE_OPT_KEY("-d",            KEY_FOREGROUND),
   FUSE_OPT_KEY("--debug",       KEY_FOREGROUND),
@@ -340,7 +344,7 @@ static int
 cache_init(void)
 {
   cache.on = (stormfs.cache) ? true : false;
-  cache.timeout = DEFAULT_CACHE_TIMEOUT;
+  cache.timeout = stormfs.cache_timeout;
   cache.last_cleaned = time(NULL);
   pthread_mutex_init(&cache.lock, NULL);
   cache.files = g_hash_table_new_full(g_str_hash, g_str_equal,
@@ -649,6 +653,8 @@ add_optional_headers(GList *headers)
 {
   headers = add_header(headers, storage_header(stormfs.storage_class));
   headers = add_header(headers, acl_header(stormfs.acl));
+  if(stormfs.encryption)
+    headers = add_header(headers, encryption_header());
   if(stormfs.expires != NULL)
     headers = add_header(headers, expires_header(stormfs.expires));
 
@@ -1274,8 +1280,8 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
 
   DEBUG("release: %s\n", path);
 
-  /* if the file was opened read-only, we can assume it didn't change
-      and skip the upload process */
+  /* if the file was opened read-only, we can assume it didn't
+     change and skip the upload process */
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
     if(fsync(fi->fh) != 0)
       return -errno;
@@ -1304,6 +1310,7 @@ static int
 stormfs_rename_file(const char *from, const char *to)
 {
   int result;
+  struct stat st;
   GList *headers = NULL;
 
   DEBUG("rename file: %s -> %s\n", from, to);
@@ -1311,10 +1318,20 @@ stormfs_rename_file(const char *from, const char *to)
   if((result = stormfs_curl_head(from, &headers)) != 0)
     return result;
 
-  headers = add_header(headers, copy_meta_header());
-  headers = add_header(headers, copy_source_header(from));
+  if((result = headers_to_stat(headers, &st)) != 0)
+    return result;
 
-  result = stormfs_curl_put(to, headers);
+  /* files >= 5GB must be renamed via the multipart interface */
+  if(st.st_size < FIVE_GB) {
+    headers = add_header(headers, copy_meta_header());
+    headers = add_header(headers, copy_source_header(from));
+
+    result = stormfs_curl_put(to, headers);
+  } else {
+    headers = add_header(headers, content_header(get_mime_type(from)));
+    result = copy_multipart(from, to, headers, st.st_size);
+  }
+
   free_headers(headers);
 
   return stormfs_unlink(from);
@@ -1330,7 +1347,7 @@ stormfs_rename_directory(const char *from, const char *to)
 
   result = stormfs_curl_list_bucket(from, &xml);
   if(result != 0) {
-    g_free(xml);
+    free(xml);
     return -EIO;
   }
 
@@ -1389,10 +1406,6 @@ stormfs_rename(const char *from, const char *to)
 
   if((result = stormfs_getattr(from, &st)) != 0)
     return -result;
-
-  // TODO: handle multipart files
-  if(st.st_size >= FIVE_GB)
-    return -ENOTSUP;
 
   if(S_ISDIR(st.st_mode))
     result = stormfs_rename_directory(from, to);
@@ -1580,6 +1593,7 @@ set_defaults(void)
   stormfs.config = "/etc/stormfs.conf";
   stormfs.mime_path = "/etc/mime.types";
   stormfs.cache_path = "/tmp/stormfs";
+  stormfs.cache_timeout = DEFAULT_CACHE_TIMEOUT;
 }
 
 static void
@@ -1694,6 +1708,8 @@ parse_config(const char *path)
       stormfs.verify_ssl = 0;
     if(strstr(p, "use_rrs") != NULL)
       stormfs.rrs = true;
+    if(strstr(p, "encryption") != NULL)
+      stormfs.encryption = true;
     if(strstr(p, "mime_path") != NULL)
       stormfs.mime_path = get_config_value(strstr(p, "=") + 1);
     if(strstr(p, "cache_path") != NULL)
@@ -1715,6 +1731,7 @@ show_debug_header(void)
   DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
   DEBUG("STORMFS acl:           %s\n", stormfs.acl);
   DEBUG("STORMFS cache:         %s\n", (stormfs.cache) ? "on" : "off");
+  DEBUG("STORMFS encryption:    %s\n", (stormfs.encryption) ? "on" : "off");
 }
 
 static void *
@@ -1727,7 +1744,6 @@ stormfs_init(struct fuse_conn_info *conn)
     conn->want |= FUSE_CAP_BIG_WRITES;
 
   cache_mime_types();
-
   show_debug_header();
 
   if(stormfs_curl_init(stormfs.bucket, stormfs.virtual_url) != 0) {
@@ -1785,8 +1801,10 @@ usage(const char *progname)
 "    -o use_ssl              force the use of SSL\n"
 "    -o no_verify_ssl        skip SSL certificate/host verification\n"
 "    -o use_rrs              use reduced redundancy storage\n"
-"    -o mime_path            path to mime.types (default: /etc/mime.types)\n"
-"    -o cache_path           path for cached file storage (default: /tmp/stormfs)\n"
+"    -o encryption           enable server-side encryption\n"
+"    -o mime_path=PATH       path to mime.types (default: /etc/mime.types)\n"
+"    -o cache_path=PATH      path for cached file storage (default: /tmp/stormfs)\n"
+"    -o cache_timeout=N      sets the cache timeout in seconds (default: 300)
 "    -o nocache              disable the cache (cache is enabled by default)\n"
 "\n", progname);
 }

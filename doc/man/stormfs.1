@@ -1,0 +1,178 @@
+.TH STORMFS "1" "January 2012" "STORMFS version 0.1" "User Commands"
+
+.SH NAME
+STORMFS \- A FUSE abstraction layer for cloud storage.
+
+..SH SYNOPSIS
+.SS mouting
+.TP
+ \fBstormfs \fBbucket \fBmountpoint\fP [\fIoptions\fP]
+.SS unmouting
+.TP
+ \fBumount \fBmountpoint
+.SH DESCRIPTION
+STORMFS is a file system for Linux (and other operating systems with a FUSE implementation, such as Mac OS X or FreeBSD) capable of operating on remote cloud storage systems such as Amazon Simple Storage Service (S3). The local computer utilizes the FUSE (Filesystem in Userspace) kernel interface to mount remote storage as if it were a local filesystem. 
+..SH OPTIONS
+.SS "general options:"
+.TP
+\fB\-o\fR opt,[opt...]
+mount options
+.TP
+\fB\-h\fR   \fB\-\-help\fR
+print help
+.TP
+\fB\-V\fR   \fB\-\-version\fR
+print version
+.SS "STORMFS options:"
+.TP
+\fB\-o\fR config=CONFIG
+path to configuration file (default: /etc/stormfs.conf)
+.TP
+\fB\-o\fR url=URL
+specifiy a custom service URL
+.TP
+\fB\-o\fR acl=ACL
+canned acl applied to objects
+valid options: private, public-read, public-read-write, authenticated-read, bucket-owner-read, bucket-owner-full-control
+.br
+(default: private)
+.TP
+\fB\-o\fR expires=RFC1123DATE
+expires HTTP header applied to objects e.g.: Thu\\\\,\\ 08\\ Apr\\ 2012\\ 20:00:00\\ GMT
+.br
+(default: disabled)
+.TP
+\fB\-o\fR use_ssl
+force the use of SSL
+.TP
+\fB\-o\fR no_verify_ssl
+skip SSL certificate/host verification
+.TP
+\fB\-o\fR use_rrs
+use reduced redundancy storage
+.TP
+\fB\-o\fR encryption
+enable server-side encryption
+.TP
+\fB\-o\fR mime_path=PATH
+path to mime.types (default: /etc/mime.types)
+.TP
+\fB\-o\fR cache_path=PATH
+path for cached file storage (default: /tmp/stormfs)
+.TP
+\fB\-o\fR cache_timeout=N
+sets the cache timeout in seconds (default: 300)
+.SS "FUSE options:"
+.TP
+\fB\-d\fR   \fB\-o\fR debug
+enable debug output (implies \fB\-f\fR)
+.TP
+\fB\-f\fR
+foreground operation
+.TP
+\fB\-s\fR
+disable multi\-threaded operation
+.TP
+\fB\-o\fR allow_other
+allow access to other users
+.TP
+\fB\-o\fR allow_root
+allow access to root
+.TP
+\fB\-o\fR nonempty
+allow mounts over non\-empty file/dir
+.HP
+\fB\-o\fR default_permissions·
+enable permission checking by kernel
+.TP
+\fB\-o\fR fsname=NAME
+set filesystem name
+.TP
+\fB\-o\fR subtype=NAME
+set filesystem type
+.TP
+\fB\-o\fR large_read
+issue large read requests (2.4 only)
+.TP
+\fB\-o\fR max_read=N
+set maximum size of read requests
+.TP
+\fB\-o\fR hard_remove
+immediate removal (don't hide files)
+.TP
+\fB\-o\fR use_ino
+let filesystem set inode numbers
+.TP
+\fB\-o\fR readdir_ino
+try to fill in d_ino in readdir
+.TP
+\fB\-o\fR direct_io
+use direct I/O
+.TP
+\fB\-o\fR kernel_cache
+cache files in kernel
+.TP
+\fB\-o\fR [no]auto_cache
+enable caching based on modification times
+.TP
+\fB\-o\fR umask=M
+set file permissions (octal)
+.TP
+\fB\-o\fR uid=N
+set file owner
+.TP
+\fB\-o\fR gid=N
+set file group
+.TP
+\fB\-o\fR entry_timeout=T
+cache timeout for names (1.0s)
+.TP
+\fB\-o\fR negative_timeout=T
+cache timeout for deleted names (0.0s)
+.TP
+\fB\-o\fR attr_timeout=T
+cache timeout for attributes (1.0s)
+.TP
+\fB\-o\fR ac_attr_timeout=T
+auto cache timeout for attributes (attr_timeout)
+.TP
+\fB\-o\fR intr
+allow requests to be interrupted
+.TP
+\fB\-o\fR intr_signal=NUM
+signal to send on interrupt (10)
+.TP
+\fB\-o\fR modules=M1[:M2...]
+names of modules to push onto filesystem stack
+.TP
+\fB\-o\fR max_write=N
+set maximum size of write requests
+.TP
+\fB\-o\fR max_readahead=N
+set maximum readahead
+.TP
+\fB\-o\fR async_read
+perform reads asynchronously (default)
+.TP
+\fB\-o\fR sync_read
+perform reads synchronously
+.SH NOTES
+.TP
+Maximum file size: 97.65GB
+.SH "SUPPORTED APIs"
+.LP
+Amazon Simple Storage Service (Amazon S3)
+.br
+Eucalyptus (Walrus S3)
+.br
+Google Cloud Storage[1]
+.br
+.LP
+[1] You must enable "Interoperable Access" and use the provided "Legacy Storage Access Keys"
+
+.PD
+.SH AUTHORS
+.LP
+STORMFS has been written by Ben LeMasurier <ben.lemasurier@gmail.com>.
+.SH "SEE ALSO"
+https://github.com/benlemasurier/stormfs
