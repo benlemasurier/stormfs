@@ -1278,8 +1278,8 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
 
   DEBUG("release: %s\n", path);
 
-  /* if the file was opened read-only, we can assume it didn't change
-      and skip the upload process */
+  /* if the file was opened read-only, we can assume it didn't
+     change and skip the upload process */
   if((fi->flags & O_RDWR) || (fi->flags & O_WRONLY)) {
     if(fsync(fi->fh) != 0)
       return -errno;
@@ -1345,7 +1345,7 @@ stormfs_rename_directory(const char *from, const char *to)
 
   result = stormfs_curl_list_bucket(from, &xml);
   if(result != 0) {
-    g_free(xml);
+    free(xml);
     return -EIO;
   }
 
@@ -1741,7 +1741,6 @@ stormfs_init(struct fuse_conn_info *conn)
     conn->want |= FUSE_CAP_BIG_WRITES;
 
   cache_mime_types();
-
   show_debug_header();
 
   if(stormfs_curl_init(stormfs.bucket, stormfs.virtual_url) != 0) {
