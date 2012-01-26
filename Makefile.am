@@ -1,5 +1,5 @@
-SUBDIRS = src
-EXTRA_DIST = debian
+SUBDIRS = src doc
+EXTRA_DIST = debian doc
 
 # additional flags to be passed to aclocal when invoked at make time.
 ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}

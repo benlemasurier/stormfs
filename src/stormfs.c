@@ -1799,8 +1799,8 @@ usage(const char *progname)
 "    -o no_verify_ssl        skip SSL certificate/host verification\n"
 "    -o use_rrs              use reduced redundancy storage\n"
 "    -o encryption           enable server-side encryption\n"
-"    -o mime_path            path to mime.types (default: /etc/mime.types)\n"
-"    -o cache_path           path for cached file storage (default: /tmp/stormfs)\n"
+"    -o mime_path=PATH       path to mime.types (default: /etc/mime.types)\n"
+"    -o cache_path=PATH      path for cached file storage (default: /tmp/stormfs)\n"
 "    -o nocache              disable the cache (cache is enabled by default)\n"
 "\n", progname);
 }

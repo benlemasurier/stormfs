@@ -8,7 +8,7 @@
 
 
 A FUSE abstraction layer for cloud storage.
-  
+
 
 Installation Requirements:
 =============================================================================
@@ -61,8 +61,8 @@ STORMFS options:
     -o no_verify_ssl        skip SSL certificate/host verification
     -o use_rrs              use reduced redundancy storage
     -o encryption           enable server-side encryption
-    -o mime_path            path to mime.types (default: /etc/mime.types)
-    -o cache_path           path for cached file storage (default: /tmp/stormfs)
+    -o mime_path=PATH       path to mime.types (default: /etc/mime.types)
+    -o cache_path=PATH      path for cached file storage (default: /tmp/stormfs)
     -o nocache              disable the cache (cache is enabled by default)
 
 
