@@ -1804,7 +1804,7 @@ usage(const char *progname)
 "    -o encryption           enable server-side encryption\n"
 "    -o mime_path=PATH       path to mime.types (default: /etc/mime.types)\n"
 "    -o cache_path=PATH      path for cached file storage (default: /tmp/stormfs)\n"
-"    -o cache_timeout=N      sets the cache timeout in seconds (default: 300)
+"    -o cache_timeout=N      sets the cache timeout in seconds (default: 300)\n"
 "    -o nocache              disable the cache (cache is enabled by default)\n"
 "\n", progname);
 }
