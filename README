@@ -63,6 +63,7 @@ STORMFS options:
     -o encryption           enable server-side encryption
     -o mime_path=PATH       path to mime.types (default: /etc/mime.types)
     -o cache_path=PATH      path for cached file storage (default: /tmp/stormfs)
+    -o cache_timeout=N      sets the cache timeout in seconds (default: 300)
     -o nocache              disable the cache (cache is enabled by default)
 
 

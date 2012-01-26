@@ -59,6 +59,7 @@ struct stormfs {
   char *storage_class;
   char *expires;
   char *cache_path;
+  unsigned cache_timeout;
   mode_t root_mode;
   GHashTable *mime_types;
 } stormfs;
@@ -79,18 +80,19 @@ enum {
 };
 
 static struct fuse_opt stormfs_opts[] = {
-  STORMFS_OPT("acl=%s",        acl,           0),
-  STORMFS_OPT("config=%s",     config,        0),
-  STORMFS_OPT("url=%s",        url,           0),
-  STORMFS_OPT("encryption",    encryption,    1),
-  STORMFS_OPT("expires=%s",    expires,       0),
-  STORMFS_OPT("use_ssl",       ssl,           true),
-  STORMFS_OPT("no_verify_ssl", verify_ssl,    0),
-  STORMFS_OPT("use_rrs",       rrs,           true),
-  STORMFS_OPT("nocache",       cache,         0),
-  STORMFS_OPT("stormfs_debug", debug,         true),
-  STORMFS_OPT("mime_path=%s",  mime_path,     0),
-  STORMFS_OPT("cache_path=%s", cache_path,    0),
+  STORMFS_OPT("acl=%s",           acl,           0),
+  STORMFS_OPT("config=%s",        config,        0),
+  STORMFS_OPT("url=%s",           url,           0),
+  STORMFS_OPT("encryption",       encryption,    1),
+  STORMFS_OPT("expires=%s",       expires,       0),
+  STORMFS_OPT("use_ssl",          ssl,           true),
+  STORMFS_OPT("no_verify_ssl",    verify_ssl,    0),
+  STORMFS_OPT("use_rrs",          rrs,           true),
+  STORMFS_OPT("nocache",          cache,         0),
+  STORMFS_OPT("stormfs_debug",    debug,         true),
+  STORMFS_OPT("mime_path=%s",     mime_path,     0),
+  STORMFS_OPT("cache_path=%s",    cache_path,    0),
+  STORMFS_OPT("cache_timeout=%u", cache_timeout, 0),
 
   FUSE_OPT_KEY("-d",            KEY_FOREGROUND),
   FUSE_OPT_KEY("--debug",       KEY_FOREGROUND),
@@ -342,7 +344,7 @@ static int
 cache_init(void)
 {
   cache.on = (stormfs.cache) ? true : false;
-  cache.timeout = DEFAULT_CACHE_TIMEOUT;
+  cache.timeout = stormfs.cache_timeout;
   cache.last_cleaned = time(NULL);
   pthread_mutex_init(&cache.lock, NULL);
   cache.files = g_hash_table_new_full(g_str_hash, g_str_equal,
@@ -1591,6 +1593,7 @@ set_defaults(void)
   stormfs.config = "/etc/stormfs.conf";
   stormfs.mime_path = "/etc/mime.types";
   stormfs.cache_path = "/tmp/stormfs";
+  stormfs.cache_timeout = DEFAULT_CACHE_TIMEOUT;
 }
 
 static void
@@ -1801,6 +1804,7 @@ usage(const char *progname)
 "    -o encryption           enable server-side encryption\n"
 "    -o mime_path=PATH       path to mime.types (default: /etc/mime.types)\n"
 "    -o cache_path=PATH      path for cached file storage (default: /tmp/stormfs)\n"
+"    -o cache_timeout=N      sets the cache timeout in seconds (default: 300)
 "    -o nocache              disable the cache (cache is enabled by default)\n"
 "\n", progname);
 }
