@@ -1,0 +1,46 @@
+* { margin: 0; }
+
+html, body {
+  height: 100%;
+  color: white;
+  font-family: Monaco, monospace;
+}
+
+#content {
+  min-height: 500px;
+  height: auto !important;
+  margin: 50px auto 0;
+
+  -webkit-box-shadow: 0 2px 6px #2e2e2e;
+  -moz-box-shadow:    0 2px 6px #2e2e2e;
+  box-shadow:         0 2px 6px #2e2e2e;
+  background-color: black;
+  padding: 100px 20px 100px;
+  width: 600px;
+}
+
+section {
+  margin-top: 20px;
+}
+
+.shell {
+  background-color: #333;
+  border: solid 1px #666;
+  padding: 2px;
+  font-size: 12px;
+  margin-top: 5px;
+}
+
+a {
+  color: #4183C4;
+  text-decoration: none;
+}
+
+a:visited {
+  color: #4183C4;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}

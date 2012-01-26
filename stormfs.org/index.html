@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>stormfs</title>
+    <link href="/css/screen.css" media="screen" rel="stylesheet" type="text/css" />
+  </head>
+  <body>
+    <div id="content">
+      <header>
+        <img src="/images/logo.png" />
+      </header>
+      <p id="description">
+      </p>
+      <p>
+        mount amazon s3 as a local filesystem: <a href="https://github.com/benlemasurier/stormfs/blob/master/README">README</a>
+      </p>
+      <section id="download">
+        <header>
+        <a href="https://github.com/downloads/benlemasurier/stormfs/stormfs-0.01.tar.gz"><img src="/images/download.png" /></a>
+        </header>
+        <p>
+          <div class="shell">
+            $ wget https://github.com/downloads/benlemasurier/stormfs/stormfs-0.01.tar.gz
+          </div>
+        </p>
+      </section>
+      <section id="build">
+        <header>
+          <img src="/images/build.png" />
+        </header>
+        <p>
+          <div class="shell">
+            $ tar -xzvf stormfs-0.01.tar.gz
+            <br />
+            $ cd stormfs-0.01
+            <br />
+            $ ./configure
+            <br />
+            $ make
+            <br />
+            $ sudo make install
+          </div>
+        </p>
+      </section>
+      <section id="configure">
+        <header>
+          <img src="/images/configure.png" />
+        </header>
+        <p>
+          <div class="shell">
+            $ sudo cp stormfs.conf.example /etc/stormfs.conf
+            <br />
+            $ vim /etc/stormfs.conf # setup API access keys
+          </div>
+        </p>
+      </section>
+      <section id="mount">
+        <header>
+          <img src="/images/mount.png" />
+        </header>
+        <p>
+          <div class="shell">
+            $ mkdir ~/s3
+            <br />
+            $ sudo mount <s3-bucket> ~/s3 -o allow_other
+            <br />
+            $ cd ~/s3 && ls # yay
+          </div>
+        </p>
+      </section>
+      <section id="contribute">
+        <header>
+          <img src="/images/contribute.png" />
+        </header>
+        <p>
+          CODE: <a href="https://github.com/benlemasurier/stormfs">github.com/benlemasurier/stormfs</a>
+          <br />
+          BUGS: <a href="https://github.com/benlemasurier/stormfs/issues">github.com/benlemasurier/stormfs/issues</a>
+        </p>
+      </section>
+    </div>
+  </body>
+</html>
+
