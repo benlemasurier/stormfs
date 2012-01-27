@@ -1590,7 +1590,7 @@ set_defaults(void)
   stormfs.acl = "private";
   stormfs.url = "http://s3.amazonaws.com";
   stormfs.storage_class = "STANDARD";
-  stormfs.config = "/etc/stormfs.conf";
+  stormfs.config = CONFIGFILE;
   stormfs.mime_path = "/etc/mime.types";
   stormfs.cache_path = "/tmp/stormfs";
   stormfs.cache_timeout = DEFAULT_CACHE_TIMEOUT;
@@ -1729,6 +1729,7 @@ static void
 show_debug_header(void)
 {
   DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
+  DEBUG("STORMFS config:        %s\n", stormfs.config);
   DEBUG("STORMFS url:           %s\n", stormfs.url);
   DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
   DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);

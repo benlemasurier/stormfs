@@ -1,11 +1,12 @@
 SUBDIRS = src doc
-EXTRA_DIST = debian doc
+EXTRA_DIST = debian doc conf
 
-install-data-local:
-	test -e $(DESTDIR)/etc/stormfs.conf || \
-		$(INSTALL) -m 640 $(srcdir)/stormfs.conf.example $(DESTDIR)/etc/stormfs.conf
+dist_sysconf_DATA = conf/stormfs.conf
 
 dist_noinst_SCRIPTS = autogen.sh
+
+install-data-hook:
+	chmod 640 $(sysconfdir)/stormfs.conf
 
 dist-hook:
 	rm -rf `find $(distdir) -type d -name .git`

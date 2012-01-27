@@ -7,6 +7,12 @@ AC_PROG_CC
 AM_PROG_CC_C_O
 CFLAGS="$CFLAGS -Wall -W -Wno-unused-parameter -std=c99 -pedantic"
 
+dnl Fix "sysconfdir" variable not specified
+if test "${sysconfdir}" = "\${prefix}/etc"; then
+  sysconfdir="/etc"
+fi
+AC_DEFINE_UNQUOTED([CONFIGFILE], "${sysconfdir}/stormfs.conf", [config location])
+
 PKG_CHECK_MODULES([FUSE], [fuse >= 2.8.3])
 PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.22.5])
 PKG_CHECK_MODULES([GTHREAD], [gthread-2.0])
