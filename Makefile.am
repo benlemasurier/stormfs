@@ -1,10 +1,12 @@
 SUBDIRS = src doc
-EXTRA_DIST = debian doc
+EXTRA_DIST = debian doc conf
 
-# additional flags to be passed to aclocal when invoked at make time.
-ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}
+dist_sysconf_DATA = conf/stormfs.conf
 
 dist_noinst_SCRIPTS = autogen.sh
+
+install-data-hook:
+	chmod 640 $(sysconfdir)/stormfs.conf
 
 dist-hook:
 	rm -rf `find $(distdir) -type d -name .git`

@@ -31,6 +31,7 @@
 #include "stormfs.h"
 #include "curl.h"
 
+#define CONFIG SYSCONFDIR "/stormfs.conf"
 #define DEFAULT_CACHE_TIMEOUT 300
 #define CACHE_CLEAN_INTERVAL  60
 
@@ -1590,7 +1591,7 @@ set_defaults(void)
   stormfs.acl = "private";
   stormfs.url = "http://s3.amazonaws.com";
   stormfs.storage_class = "STANDARD";
-  stormfs.config = "/etc/stormfs.conf";
+  stormfs.config = CONFIG;
   stormfs.mime_path = "/etc/mime.types";
   stormfs.cache_path = "/tmp/stormfs";
   stormfs.cache_timeout = DEFAULT_CACHE_TIMEOUT;
@@ -1643,6 +1644,9 @@ validate_config_perms(struct stat *st)
 char *
 get_config_value(char *s)
 {
+  if(*s == 0)
+    return NULL;
+
   while(*s == ' ') s++;
 
   char *end = s + strlen(s);
@@ -1726,6 +1730,7 @@ static void
 show_debug_header(void)
 {
   DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
+  DEBUG("STORMFS config:        %s\n", stormfs.config);
   DEBUG("STORMFS url:           %s\n", stormfs.url);
   DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
   DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);

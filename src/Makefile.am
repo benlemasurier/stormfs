@@ -4,6 +4,7 @@ stormfs_SOURCES = curl.h curl.c stormfs.h stormfs.c
 stormfs_CFLAGS = -D_REENTRANT \
                  -DFUSE_USE_VERSION=26 \
                  -D_FILE_OFFSET_BITS=64 \
+                 -DSYSCONFDIR=\"${sysconfdir}\" \
                  ${FUSE_CFLAGS} \
                  ${CURL_CFLAGS} \
                  ${GLIB_CFLAGS} \
