@@ -31,6 +31,7 @@
 #include "stormfs.h"
 #include "curl.h"
 
+#define CONFIG SYSCONFDIR "/stormfs.conf"
 #define DEFAULT_CACHE_TIMEOUT 300
 #define CACHE_CLEAN_INTERVAL  60
 
@@ -1590,7 +1591,7 @@ set_defaults(void)
   stormfs.acl = "private";
   stormfs.url = "http://s3.amazonaws.com";
   stormfs.storage_class = "STANDARD";
-  stormfs.config = CONFIGFILE;
+  stormfs.config = CONFIG;
   stormfs.mime_path = "/etc/mime.types";
   stormfs.cache_path = "/tmp/stormfs";
   stormfs.cache_timeout = DEFAULT_CACHE_TIMEOUT;
