@@ -449,7 +449,7 @@ get_upload_id(char *xml)
   start_p = strstr(xml, start_marker) + strlen(start_marker);
   end_p   = strstr(xml, end_marker);
 
-  return strndup(start_p, end_p - start_p);
+  return g_strndup(start_p, end_p - start_p);
 }
 
 static char *
@@ -463,7 +463,7 @@ get_etag_from_xml(char *xml)
   start_p = strstr(xml, start_marker) + strlen(start_marker);
   end_p   = strstr(xml, end_marker);
 
-  tmp = strndup(start_p, end_p - start_p);
+  tmp = g_strndup(start_p, end_p - start_p);
   if(asprintf(&etag, "\"%s\"", tmp) == -1) {
     fprintf(stderr, "unable to allocate memory\n");
     exit(EXIT_FAILURE);

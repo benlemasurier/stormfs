@@ -389,7 +389,7 @@ cache_invalidate_dir(const char *path)
     if(s == path)
       g_hash_table_remove(cache.files, "/");
     else {
-      char *parent = strndup(path, s - path);
+      char *parent = g_strndup(path, s - path);
       cache_invalidate(parent);
       free(parent);
     }
@@ -1125,7 +1125,7 @@ xml_to_files(const char *path, char *xml)
     char *fullpath;
     char *end_p = strstr(start_p, "</Key>");
 
-    name = strndup(start_p, end_p - start_p);
+    name = g_strndup(start_p, end_p - start_p);
     fullpath = get_path(path, name);
     files = add_file_to_list(files, fullpath, NULL);
     free(name);
@@ -1363,7 +1363,7 @@ stormfs_rename_directory(const char *from, const char *to)
     char *end_p = strstr(start_p, "</Key>");
     struct stat st;
 
-    tmp = strndup(start_p, end_p - start_p);
+    tmp = g_strndup(start_p, end_p - start_p);
     name = basename(tmp);
     file_from = get_path(from, name);
     file_to   = get_path(to, name);
