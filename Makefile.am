@@ -1,8 +1,9 @@
 SUBDIRS = src doc
 EXTRA_DIST = debian doc
 
-# additional flags to be passed to aclocal when invoked at make time.
-ACLOCAL_AMFLAGS = ${ACLOCAL_FLAGS}
+install-data-local:
+	test -e $(DESTDIR)/etc/stormfs.conf || \
+		$(INSTALL) -m 640 $(srcdir)/stormfs.conf.example $(DESTDIR)/etc/stormfs.conf
 
 dist_noinst_SCRIPTS = autogen.sh
 

@@ -83,7 +83,7 @@ Support is planned for the following services:
 
 Testing
 =============================================================================
-StormFS strives to be fully POSIX compliant, the folks at Tuxera have created
+STORMfs strives to be fully POSIX compliant, the folks at Tuxera have created
 an extensive test suit available at:
     http://www.tuxera.com/community/posix-test-suite/
 

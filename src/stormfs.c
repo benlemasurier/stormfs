@@ -1643,6 +1643,9 @@ validate_config_perms(struct stat *st)
 char *
 get_config_value(char *s)
 {
+  if(*s == 0)
+    return NULL;
+
   while(*s == ' ') s++;
 
   char *end = s + strlen(s);

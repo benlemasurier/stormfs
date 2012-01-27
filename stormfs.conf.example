@@ -1,9 +1,10 @@
-# StormFS example configuration file 
-# Public access key
-access_key = AKZRKEXZAMPLEFSLLSJJ
+# STORMfs example configuration file
 
-# Secret access key
-secret_key = jEfooveeUnfDerpasAmLkEisNotVAlideK/yA0cb
+# Public API access key (required)
+access_key =
+
+# Secret API access key (required)
+secret_key =
 
 # Custom URL
 #url = http://commondatastorage.googleapis.com
