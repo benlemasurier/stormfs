@@ -5,7 +5,7 @@ dist_sysconf_DATA = conf/stormfs.conf
 
 dist_noinst_SCRIPTS = autogen.sh
 
-install-data-hook:
+install-exec-hook:
 	chmod 640 $(sysconfdir)/stormfs.conf
 
 dist-hook:
