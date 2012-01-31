@@ -2,8 +2,8 @@
 <html>
   <head>
     <title>stormfs</title>
-    <link href="/css/jquery-ui-custom.css" media="screen" rel="stylesheet" type="text/css" />
-    <link href="/css/screen.css" media="screen" rel="stylesheet" type="text/css" />
+    <link href="//assets.stormfs.org/css/jquery-ui-custom.css" media="screen" rel="stylesheet" type="text/css" />
+    <link href="//assets.stormfs.org/css/screen.css" media="screen" rel="stylesheet" type="text/css" />
     <script src="https://www.google.com/jsapi?key=ABQIAAAA_onvhjqpyioa7b6HFg0ATRQKQERO1oREoaEwg8akHdLVqTlC7hRhX5yUBFhX6fb1SPUciAebDwXniA" type="text/javascript"></script>
     <script>
       google.load("jquery", "1.7.1");
@@ -13,7 +13,7 @@
   <body>
     <div id="content">
       <header>
-        <img src="/images/logo.png" />
+        <img src="//images.stormfs.org/images/logo.png" />
       </header>
       <p id="description">
       </p>
@@ -23,90 +23,39 @@
       <div id="tabs">
 
         <ul>
-          <li><a href="#tabs-1">Linux</a></li>
-          <li><a href="#tabs-2">Mac</a></li>
+          <li><a href="#tabs-1">Source</a></li>
+          <li><a href="#tabs-2">Ubuntu</a></li>
+          <li><a href="#tabs-3">Mac</a></li>
         </ul>
 
-        <div id="tabs-1">
-          <section id="download">
-            <header>
-            <a href="https://github.com/downloads/benlemasurier/stormfs/stormfs-0.01.tar.gz"><img src="/images/download.png" /></a>
-            </header>
-            <p>
-              <div class="shell">
-                $ wget https://github.com/downloads/benlemasurier/stormfs/stormfs-0.01.tar.gz
-              </div>
-            </p>
-          </section>
-          <section id="build">
-            <header>
-              <img src="/images/build.png" />
-            </header>
-            <p>
-              <div class="shell">
-                $ tar -xzvf stormfs-0.01.tar.gz
-                <br />
-                $ cd stormfs-0.01
-                <br />
-                $ ./configure
-                <br />
-                $ make
-                <br />
-                $ sudo make install
-              </div>
-            </p>
-          </section>
-          <section id="configure">
-            <header>
-              <img src="/images/configure.png" />
-            </header>
-            <p>
-              <div class="shell">
-                $ sudo cp stormfs.conf.example /etc/stormfs.conf
-                <br />
-                $ vim /etc/stormfs.conf # setup API access keys
-              </div>
-            </p>
-          </section>
-          <section id="mount">
-            <header>
-              <img src="/images/mount.png" />
-            </header>
-            <p>
-              <div class="shell">
-                $ mkdir ~/s3
-                <br />
-                $ sudo mount <s3-bucket> ~/s3 -o allow_other
-                <br />
-                $ cd ~/s3 && ls # yay
-              </div>
-            </p>
-          </section>
-        </div>
         <div id="tabs-2">
           <section id="install">
             <header>
-              <img src="/images/install.png" />
+              <img src="//images.stormfs.org/images/install.png" />
             </header>
             <p>
               <div class="shell">
-                $ brew install stormfs
+                $ sudo add-apt-repository ppa:ben-lemasurier/ppa
+                <br />
+                $ sudo apt-get install stormfs
               </div>
             </p>
           </section>
           <section id="configure">
             <header>
-              <img src="/images/configure.png" />
+              <img src="//images.stormfs.org/images/configure.png" />
             </header>
             <p>
               <div class="shell">
-                $ vim /usr/local/Cellar/stormfs/0.01/etc/stormfs.conf # setup API access keys
+                $ sudo vim /etc/stormfs.conf       # setup API access keys
+                <br />
+                $ sudo chmod 640 /etc/stormfs.conf # secure access to keys
               </div>
             </p>
           </section>
           <section id="mount">
             <header>
-              <img src="/images/mount.png" />
+              <img src="//images.stormfs.org/images/mount.png" />
             </header>
             <p>
               <div class="shell">
@@ -119,10 +68,100 @@
             </p>
           </section>
         </div>
+        <div id="tabs-3">
+          <section id="install">
+            <header>
+              <img src="//images.stormfs.org/images/install.png" />
+            </header>
+            <p>
+              <div class="shell">
+                $ brew install stormfs
+              </div>
+            </p>
+          </section>
+          <section id="configure">
+            <header>
+              <img src="//images.stormfs.org/images/configure.png" />
+            </header>
+            <p>
+              <div class="shell">
+                $ vim /usr/local/Cellar/stormfs/0.01/etc/stormfs.conf # setup API access keys
+              </div>
+            </p>
+          </section>
+          <section id="mount">
+            <header>
+              <img src="//images.stormfs.org/images/mount.png" />
+            </header>
+            <p>
+              <div class="shell">
+                $ mkdir ~/s3
+                <br />
+                $ mount <s3-bucket> ~/s3 -o allow_other
+                <br />
+                $ cd ~/s3 && ls # yay
+              </div>
+            </p>
+          </section>
+        </div>
+        <div id="tabs-1">
+          <section id="download">
+            <header>
+            <a href="https://github.com/downloads/benlemasurier/stormfs/stormfs-0.02.tar.gz"><img src="//images.stormfs.org/images/download.png" /></a>
+            </header>
+            <p>
+              <div class="shell">
+                $ wget https://github.com/downloads/benlemasurier/stormfs/stormfs-0.02.tar.gz
+              </div>
+            </p>
+          </section>
+          <section id="build">
+            <header>
+              <img src="//images.stormfs.org/images/build.png" />
+            </header>
+            <p>
+              <div class="shell">
+                $ tar -xzvf stormfs-0.02.tar.gz
+                <br />
+                $ cd stormfs-0.02
+                <br />
+                $ ./configure
+                <br />
+                $ make
+                <br />
+                $ sudo make install
+              </div>
+            </p>
+          </section>
+          <section id="configure">
+            <header>
+              <img src="//images.stormfs.org/images/configure.png" />
+            </header>
+            <p>
+              <div class="shell">
+                $ vim /usr/local/etc/stormfs.conf # setup API access keys
+              </div>
+            </p>
+          </section>
+          <section id="mount">
+            <header>
+              <img src="//images.stormfs.org/images/mount.png" />
+            </header>
+            <p>
+              <div class="shell">
+                $ mkdir ~/s3
+                <br />
+                $ sudo mount <s3-bucket> ~/s3 -o allow_other
+                <br />
+                $ cd ~/s3 && ls # yay
+              </div>
+            </p>
+          </section>
+        </div>
       </div>
       <section id="contribute">
         <header>
-          <img src="/images/contribute.png" />
+          <img src="//images.stormfs.org/images/contribute.png" />
         </header>
         <p>
           CODE: <a href="https://github.com/benlemasurier/stormfs">github.com/benlemasurier/stormfs</a>
@@ -136,13 +175,14 @@
         $("#tabs").tabs();
 
         if(navigator.userAgent.indexOf("Mac OS X") != -1)
-          $('#tabs').tabs('select', 1);
+          $('#tabs').tabs('select', 2);
       });
     </script>
     <script type="text/javascript">
       var _gaq = _gaq || [];
       _gaq.push(['_setAccount', 'UA-28667316-1']);
       _gaq.push(['_trackPageview']);
+      _gaq.push(['_trackPageLoadTime']);
       (function() {
        var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
        ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
