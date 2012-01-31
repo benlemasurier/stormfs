@@ -1,4 +1,10 @@
-stormfs (0.01-1) unstable; urgency=low
+stormfs (0.02-1) oneiric; urgency=low
+
+  * Fixed a bug in install-exec-hook, debian/README.x
+
+ -- Ben LeMasurier <ben.lemasurier@gmail.com>  Thu, 30 Jan 2012 18:12:31 -0700
+
+stormfs (0.01-1) oneiric; urgency=low
 
   * Initial debian test release
 
