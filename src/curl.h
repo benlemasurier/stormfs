@@ -16,6 +16,15 @@ typedef struct {
   char *value;
 } HTTP_HEADER;
 
+uid_t get_uid(const char *s);
+gid_t get_gid(const char *s);
+mode_t get_mode(const char *s);
+time_t get_ctime(const char *s);
+time_t get_mtime(const char *s);
+dev_t get_rdev(const char *s);
+off_t get_size(const char *s);
+blkcnt_t get_blocks(off_t size);
+
 HTTP_HEADER *acl_header(const char *acl);
 HTTP_HEADER *content_header(const char *type);
 HTTP_HEADER *copy_source_header(const char *path);
@@ -34,6 +43,8 @@ HTTP_HEADER *storage_header(const char *class);
 GList *add_header(GList *headers, HTTP_HEADER *h);
 void free_header(HTTP_HEADER *h);
 void free_headers(GList *headers);
+GList *stat_to_headers(GList *headers, struct stat st);
+int headers_to_stat(GList *headers, struct stat *stbuf);
 
 int stormfs_curl_delete(const char *path);
 void stormfs_curl_destroy();

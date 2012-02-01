@@ -90,6 +90,54 @@ struct post_data {
   int remaining;
 };
 
+uid_t
+get_uid(const char *s)
+{
+  return (uid_t) strtoul(s, (char **) NULL, 10);
+}
+
+gid_t
+get_gid(const char *s)
+{
+  return (gid_t) strtoul(s, (char **) NULL, 10);
+}
+
+mode_t
+get_mode(const char *s)
+{
+  return (mode_t) strtoul(s, (char **) NULL, 10);
+}
+
+time_t
+get_ctime(const char *s)
+{
+  return (time_t) strtoul(s, (char **) NULL, 10);
+}
+
+time_t
+get_mtime(const char *s)
+{
+  return (time_t) strtoul(s, (char **) NULL, 10);
+}
+
+dev_t
+get_rdev(const char *s)
+{
+  return (dev_t) strtoul(s, (char **) NULL, 10);
+}
+
+off_t
+get_size(const char *s)
+{
+  return (off_t) strtoul(s, (char **) NULL, 10);
+}
+
+blkcnt_t
+get_blocks(off_t size)
+{
+  return size / 512 + 1;
+}
+
 static char *
 gid_to_s(gid_t gid)
 {
@@ -133,6 +181,57 @@ time_to_s(time_t t)
   snprintf(s, 100, "%ld", (long) t);
 
   return strdup(s);
+}
+
+GList *
+stat_to_headers(GList *headers, struct stat st)
+{
+  headers = add_header(headers, gid_header(st.st_gid));
+  headers = add_header(headers, uid_header(st.st_uid));
+  headers = add_header(headers, mode_header(st.st_mode));
+  headers = add_header(headers, ctime_header(st.st_ctime));
+  headers = add_header(headers, mtime_header(st.st_mtime));
+  headers = add_header(headers, rdev_header(st.st_rdev));
+
+  return headers;
+}
+
+int
+headers_to_stat(GList *headers, struct stat *stbuf)
+{
+  GList *head = NULL,
+        *next = NULL;
+
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+    HTTP_HEADER *header = head->data;
+
+    // TODO: clean this up.
+    if(strcmp(header->key, "x-amz-meta-uid") == 0)
+      stbuf->st_uid = get_uid(header->value);
+    else if(strcmp(header->key, "x-amz-meta-gid") == 0)
+      stbuf->st_gid = get_gid(header->value);
+    else if(strcmp(header->key, "x-amz-meta-ctime") == 0)
+      stbuf->st_ctime = get_ctime(header->value);
+    else if(strcmp(header->key, "x-amz-meta-mtime") == 0)
+      stbuf->st_mtime = get_mtime(header->value);
+    else if(strcmp(header->key, "x-amz-meta-rdev") == 0)
+      stbuf->st_rdev = get_rdev(header->value);
+    else if(strcmp(header->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
+      stbuf->st_mtime = get_mtime(header->value);
+    else if(strcmp(header->key, "x-amz-meta-mode") == 0)
+      stbuf->st_mode = get_mode(header->value);
+    else if(strcmp(header->key, "Content-Length") == 0)
+      stbuf->st_size = get_size(header->value);
+    else if(strcmp(header->key, "Content-Type") == 0)
+      if(strstr(header->value, "x-directory"))
+        stbuf->st_mode |= S_IFDIR;
+
+    head = next;
+  }
+
+  return 0;
 }
 
 char

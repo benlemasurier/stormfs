@@ -1,6 +1,6 @@
 bin_PROGRAMS = stormfs
 
-stormfs_SOURCES = curl.h curl.c stormfs.h stormfs.c
+stormfs_SOURCES = s3.h s3.c curl.h curl.c stormfs.h stormfs.c
 stormfs_CFLAGS = -D_REENTRANT \
                  -DFUSE_USE_VERSION=26 \
                  -D_FILE_OFFSET_BITS=64 \

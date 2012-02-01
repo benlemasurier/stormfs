@@ -29,6 +29,7 @@
 #include <pthread.h>
 #include <glib.h>
 #include "stormfs.h"
+#include "s3.h"
 #include "curl.h"
 
 #define CONFIG SYSCONFDIR "/stormfs.conf"
@@ -105,54 +106,6 @@ static struct fuse_opt stormfs_opts[] = {
   FUSE_OPT_KEY("--version",     KEY_VERSION),
   FUSE_OPT_END
 };
-
-static uid_t
-get_uid(const char *s)
-{
-  return (uid_t) strtoul(s, (char **) NULL, 10);
-}
-
-static gid_t
-get_gid(const char *s)
-{
-  return (gid_t) strtoul(s, (char **) NULL, 10);
-}
-
-static mode_t
-get_mode(const char *s)
-{
-  return (mode_t) strtoul(s, (char **) NULL, 10);
-}
-
-static time_t
-get_ctime(const char *s)
-{
-  return (time_t) strtoul(s, (char **) NULL, 10);
-}
-
-static time_t
-get_mtime(const char *s)
-{
-  return (time_t) strtoul(s, (char **) NULL, 10);
-}
-
-static dev_t
-get_rdev(const char *s)
-{
-  return (dev_t) strtoul(s, (char **) NULL, 10);
-}
-
-static off_t
-get_size(const char *s)
-{
-  return (off_t) strtoul(s, (char **) NULL, 10);
-}
-
-static blkcnt_t
-get_blocks(off_t size)
-{
-  return size / 512 + 1;
-}
 
 static int
 valid_path(const char *path)
@@ -662,62 +615,10 @@ add_optional_headers(GList *headers)
   return headers;
 }
 
-GList *
-stat_to_headers(GList *headers, struct stat st)
-{
-  headers = add_header(headers, gid_header(st.st_gid));
-  headers = add_header(headers, uid_header(st.st_uid));
-  headers = add_header(headers, mode_header(st.st_mode));
-  headers = add_header(headers, ctime_header(st.st_ctime));
-  headers = add_header(headers, mtime_header(st.st_mtime));
-  headers = add_header(headers, rdev_header(st.st_rdev));
-
-  return headers;
-}
-
-static int
-headers_to_stat(GList *headers, struct stat *stbuf)
-{
-  GList *head = NULL,
-        *next = NULL;
-
-  head = g_list_first(headers);
-  while(head != NULL) {
-    next = head->next;
-    HTTP_HEADER *header = head->data;
-
-    // TODO: clean this up.
-    if(strcmp(header->key, "x-amz-meta-uid") == 0)
-      stbuf->st_uid = get_uid(header->value);
-    else if(strcmp(header->key, "x-amz-meta-gid") == 0)
-      stbuf->st_gid = get_gid(header->value);
-    else if(strcmp(header->key, "x-amz-meta-ctime") == 0)
-      stbuf->st_ctime = get_ctime(header->value);
-    else if(strcmp(header->key, "x-amz-meta-mtime") == 0)
-      stbuf->st_mtime = get_mtime(header->value);
-    else if(strcmp(header->key, "x-amz-meta-rdev") == 0)
-      stbuf->st_rdev = get_rdev(header->value);
-    else if(strcmp(header->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
-      stbuf->st_mtime = get_mtime(header->value);
-    else if(strcmp(header->key, "x-amz-meta-mode") == 0)
-      stbuf->st_mode = get_mode(header->value);
-    else if(strcmp(header->key, "Content-Length") == 0)
-      stbuf->st_size = get_size(header->value);
-    else if(strcmp(header->key, "Content-Type") == 0)
-      if(strstr(header->value, "x-directory"))
-        stbuf->st_mode |= S_IFDIR;
-
-    head = next;
-  }
-
-  return 0;
-}
-
 static int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
   int result;
-  GList *headers = NULL;
   struct file *f = NULL;
 
   DEBUG("getattr: %s\n", path);
@@ -736,25 +637,19 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     return 0;
   }
 
-  if((result = stormfs_curl_head(path, &headers)) != 0)
+  if((result = s3_getattr(path, stbuf)) != 0)
     return result;
+
+  stbuf->st_nlink = 1;
+  if(S_ISREG(stbuf->st_mode))
+    stbuf->st_blocks = get_blocks(stbuf->st_size);
 
   pthread_mutex_lock(&f->lock);
   if(f->st == NULL)
     f->st = g_new0(struct stat, 1);
-  f->st->st_nlink = 1;
-
-  if((result = headers_to_stat(headers, f->st)) != 0)
-    return result;
-
-  if(S_ISREG(f->st->st_mode))
-    f->st->st_blocks = get_blocks(f->st->st_size);
-
+  memcpy(f->st, stbuf, sizeof(struct stat));
   cache_touch(f);
   pthread_mutex_unlock(&f->lock);
-
-  free_headers(headers);
-  memcpy(stbuf, f->st, sizeof(struct stat));
 
   return 0;
 }
@@ -908,7 +803,6 @@ stormfs_chmod(const char *path, mode_t mode)
   int result;
   struct file *f;
   struct stat st;
-  GList *headers = NULL;
 
   DEBUG("chmod: %s\n", path);
 
@@ -922,14 +816,7 @@ stormfs_chmod(const char *path, mode_t mode)
   st.st_ctime = time(NULL);
   st.st_mtime = time(NULL);
 
-  headers = stat_to_headers(headers, st);
-  headers = add_header(headers, replace_header());
-  headers = add_header(headers, copy_source_header(path));
-
-  result = stormfs_curl_put(path, headers);
-
-  free_headers(headers);
-  if(result != 0)
+  if((result = s3_chmod(path, &st)) != 0)
     return result;
 
   f = cache_get(path);
@@ -951,8 +838,6 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   int result = 0;
   struct file *f;
   struct stat st;
-  GList *headers = NULL;
-  errno = 0;
 
   DEBUG("chown: %s\n", path);
 
@@ -967,14 +852,7 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   st.st_ctime = time(NULL);
   st.st_mtime = time(NULL);
 
-  headers = stat_to_headers(headers, st);
-  headers = add_header(headers, replace_header());
-  headers = add_header(headers, copy_source_header(path));
-
-  result = stormfs_curl_put(path, headers);
-
-  free_headers(headers);
-  if(result != 0)
+  if((result = s3_chown(path, &st)) != 0)
     return result;
 
   f = cache_get(path);
