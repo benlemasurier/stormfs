@@ -40,31 +40,7 @@
 #define DEBUG(format, ...) \
         do { if (stormfs.debug) fprintf(stderr, format, __VA_ARGS__); } while(0)
 
-struct stormfs {
-  bool ssl;
-  bool rrs;
-  int encryption;
-  int cache;
-  int foreground;
-  int verify_ssl;
-  char *acl;
-  char *url;
-  char *bucket;
-  char *config;
-  char *debug;
-  char *progname;
-  char *virtual_url;
-  char *access_key;
-  char *secret_key;
-  char *mime_path;
-  char *mountpoint;
-  char *storage_class;
-  char *expires;
-  char *cache_path;
-  unsigned cache_timeout;
-  mode_t root_mode;
-  GHashTable *mime_types;
-} stormfs;
+struct stormfs stormfs;
 
 struct cache {
   bool on;
@@ -868,10 +844,8 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
 static int
 stormfs_mkdir(const char *path, mode_t mode)
 {
-  FILE *f;
-  int fd;
   int result;
-  GList *headers = NULL;
+  struct stat st;
 
   DEBUG("mkdir: %s\n", path);
 
@@ -880,28 +854,13 @@ stormfs_mkdir(const char *path, mode_t mode)
 
   cache_invalidate_dir(path);
 
-  if((f = tmpfile()) == NULL)
-    return -errno;
+  st.st_mode = mode;
+  st.st_uid = getuid();
+  st.st_gid = getgid();
+  st.st_ctime = time(NULL);
+  st.st_mtime = time(NULL);
 
-  if((fd = fileno(f)) == -1)
-    return -errno;
-
-  headers = add_header(headers, acl_header(stormfs.acl));
-  headers = add_header(headers, gid_header(getgid()));
-  headers = add_header(headers, uid_header(getuid()));
-  headers = add_header(headers, mode_header(mode));
-  headers = add_header(headers, ctime_header(time(NULL)));
-  headers = add_header(headers, mtime_header(time(NULL)));
-  headers = add_header(headers, content_header("application/x-directory"));
-  headers = add_optional_headers(headers);
-
-  result = stormfs_curl_upload(path, headers, fd);
-  free_headers(headers);
-
-  if(close(fd) != 0)
-    return -errno;
-
-  return result;
+  return s3_mkdir(path, &st);
 }
 
 static int
@@ -1624,6 +1583,11 @@ stormfs_init(struct fuse_conn_info *conn)
 
   cache_mime_types();
   show_debug_header();
+
+  if(s3_init(&stormfs) != 0) {
+    fprintf(stderr, "%s: unable to initialize s3\n", stormfs.progname);
+    exit(EXIT_FAILURE);
+  }
 
   if(stormfs_curl_init(stormfs.bucket, stormfs.virtual_url) != 0) {
     fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs.progname);

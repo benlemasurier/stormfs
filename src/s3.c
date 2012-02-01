@@ -16,10 +16,15 @@
 #include <errno.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <glib.h>
 #include "stormfs.h"
 #include "curl.h"
 #include "s3.h"
+
+struct s3 {
+  struct stormfs *stormfs;
+} s3;
 
 int
 s3_getattr(const char *path, struct stat *st)
@@ -83,6 +88,41 @@ s3_create(const char *path, struct stat *st)
   result = stormfs_curl_put(path, headers);
 
   free_headers(headers);
+
+  return result;
+}
+
+int
+s3_init(struct stormfs *stormfs)
+{
+  s3.stormfs = stormfs;
+
+  return 0;
+}
+
+int
+s3_mkdir(const char *path, struct stat *st)
+{
+  int result, fd;
+  FILE *f;
+  GList *headers = NULL;
+
+  if((f = tmpfile()) == NULL)
+    return -errno;
+
+  if((fd = fileno(f)) == -1)
+    return -errno;
+
+  headers = stat_to_headers(headers, *st);
+  headers = add_header(headers, acl_header(s3.stormfs->acl));
+  headers = add_header(headers, content_header("application/x-directory"));
+  headers = add_optional_headers(headers);
+
+  result = stormfs_curl_upload(path, headers, fd);
+  free_headers(headers);
+
+  if(close(fd) != 0)
+    return -errno;
 
   return result;
 }

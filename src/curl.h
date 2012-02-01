@@ -41,6 +41,7 @@ HTTP_HEADER *mtime_header(time_t t);
 HTTP_HEADER *replace_header();
 HTTP_HEADER *storage_header(const char *class);
 GList *add_header(GList *headers, HTTP_HEADER *h);
+GList *strip_header(GList *headers, const char *key);
 void free_header(HTTP_HEADER *h);
 void free_headers(GList *headers);
 GList *stat_to_headers(GList *headers, struct stat st);

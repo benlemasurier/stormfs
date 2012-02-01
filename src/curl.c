@@ -184,6 +184,15 @@ time_to_s(time_t t)
 }
 
 GList *
+add_header(GList *headers, HTTP_HEADER *h)
+{
+  headers = strip_header(headers, h->key);
+  headers = g_list_append(headers, h);
+
+  return headers;
+}
+
+GList *
 stat_to_headers(GList *headers, struct stat st)
 {
   headers = add_header(headers, gid_header(st.st_gid));
@@ -525,15 +534,6 @@ strip_header(GList *headers, const char *key)
 
     head = next;
   }
-
-  return headers;
-}
-
-GList *
-add_header(GList *headers, HTTP_HEADER *h)
-{
-  headers = strip_header(headers, h->key);
-  headers = g_list_append(headers, h);
 
   return headers;
 }

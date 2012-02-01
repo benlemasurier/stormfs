@@ -11,6 +11,32 @@
 
 #define FIVE_GB 5368709120LL
 
+struct stormfs {
+  bool ssl;
+  bool rrs;
+  int encryption;
+  int cache;
+  int foreground;
+  int verify_ssl;
+  char *acl;
+  char *url;
+  char *bucket;
+  char *config;
+  char *debug;
+  char *progname;
+  char *virtual_url;
+  char *access_key;
+  char *secret_key;
+  char *mime_path;
+  char *mountpoint;
+  char *storage_class;
+  char *expires;
+  char *cache_path;
+  unsigned cache_timeout;
+  mode_t root_mode;
+  GHashTable *mime_types;
+};
+
 struct file {
   char *name;           /* file name */
   char *path;           /* file path */
