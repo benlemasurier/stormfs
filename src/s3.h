@@ -12,5 +12,7 @@
 int s3_getattr(const char *path, struct stat *st);
 int s3_chmod(const char *path, struct stat *st);
 int s3_chown(const char *path, struct stat *st);
+int s3_create(const char *path, struct stat *st);
+int s3_unlink(const char *path);
 
 #endif // s3_H

@@ -666,7 +666,7 @@ stormfs_unlink(const char *path)
 
   cache_invalidate_dir(path);
 
-  return stormfs_curl_delete(path);
+  return s3_unlink(path);
 }
 
 static int
@@ -761,7 +761,6 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   int fd;
   struct stat st;
   struct file *f;
-  GList *headers = NULL;
 
   DEBUG("create: %s\n", path);
 
@@ -781,18 +780,15 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   st.st_ctime = time(NULL);
   st.st_mtime = time(NULL);
 
-  headers = stat_to_headers(headers, st);
-  headers = add_header(headers, content_header(get_mime_type(path)));
-  headers = add_optional_headers(headers);
+  if((result = s3_create(path, &st)) != 0)
+    return result;
 
-  result = stormfs_curl_put(path, headers);
-
-  free_headers(headers);
-
+  pthread_mutex_lock(&f->lock);
   if(f->st == NULL)
     f->st = g_new0(struct stat, 1);
   memcpy(f->st, &st, sizeof(struct stat));
   cache_touch(f);
+  pthread_mutex_unlock(&f->lock);
 
   return result;
 }

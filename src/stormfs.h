@@ -23,6 +23,7 @@ struct file {
 
 GList *add_optional_headers(GList *headers);
 char *get_path(const char *path, const char *name);
+const char *get_mime_type(const char *filename);
 char *stormfs_virtual_url(char *url, char *bucket);
 void free_file(struct file *f);
 int stormfs_getattr_multi(const char *path, GList *files);
