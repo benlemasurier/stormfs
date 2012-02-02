@@ -170,6 +170,95 @@ s3_release(const char *path, int fd, struct stat *st)
   return result;
 }
 
+static int
+s3_rename_file(const char *from, const char *to, struct stat *st)
+{
+  int result;
+  GList *headers = NULL;
+
+  headers = stat_to_headers(headers, *st);
+
+  /* files >= 5GB must be renamed via the multipart interface */
+  if(st->st_size < FIVE_GB) {
+    headers = add_header(headers, copy_meta_header());
+    headers = add_header(headers, copy_source_header(from));
+
+    result = stormfs_curl_put(to, headers);
+  } else {
+    headers = add_header(headers, content_header(get_mime_type(from)));
+    result  = copy_multipart(from, to, headers, st->st_size);
+  }
+
+  free_headers(headers);
+
+  return stormfs_unlink(from);
+}
+
+static int
+s3_rename_directory(const char *from, const char *to, struct stat *st)
+{
+  int result;
+  char *xml = NULL, *start_p = NULL;
+
+  result = stormfs_curl_list_bucket(from, &xml);
+  if(result != 0) {
+    free(xml);
+    return -EIO;
+  }
+
+  if(strstr(xml, "xml") == NULL)
+    return -EIO;
+
+  if((start_p = strstr(xml, "<Key>")) != NULL)
+    start_p += strlen("<Key>");
+
+  while(start_p != NULL) {
+    char *name, *tmp, *file_from, *file_to;
+    char *end_p = strstr(start_p, "</Key>");
+    struct stat stbuf;
+
+    tmp = g_strndup(start_p, end_p - start_p);
+    name = basename(tmp);
+    file_from = get_path(from, name);
+    file_to   = get_path(to, name);
+
+    if((result = stormfs_getattr(file_from, &stbuf)) != 0)
+      return -result;
+
+    if(S_ISDIR(stbuf.st_mode)) {
+      if((result = s3_rename_directory(file_from, file_to, &stbuf)) != 0)
+        return result;
+    } else {
+      if((result = s3_rename_file(file_from, file_to, &stbuf)) != 0)
+        return result;
+    }
+
+    free(tmp);
+    free(file_to);
+    free(file_from);
+
+    if((start_p = strstr(end_p, "<Key>")) != NULL)
+      start_p += strlen("<Key>");
+  }
+
+  free(xml);
+
+  return s3_rename_file(from, to, st);
+}
+
+int
+s3_rename(const char *from, const char *to, struct stat *st)
+{
+  int result;
+
+  if(S_ISDIR(st->st_mode))
+    result = s3_rename_directory(from, to, st);
+  else
+    result = s3_rename_file(from, to, st);
+
+  return result;
+}
+
 int
 s3_rmdir(const char *path)
 {

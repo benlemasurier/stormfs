@@ -591,7 +591,7 @@ add_optional_headers(GList *headers)
   return headers;
 }
 
-static int
+int
 stormfs_getattr(const char *path, struct stat *stbuf)
 {
   int result;
@@ -630,7 +630,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
   return 0;
 }
 
-static int
+int
 stormfs_unlink(const char *path)
 {
   int result;
@@ -1131,91 +1131,6 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
 }
 
 static int
-stormfs_rename_file(const char *from, const char *to)
-{
-  int result;
-  struct stat st;
-  GList *headers = NULL;
-
-  DEBUG("rename file: %s -> %s\n", from, to);
-
-  if((result = stormfs_curl_head(from, &headers)) != 0)
-    return result;
-
-  if((result = headers_to_stat(headers, &st)) != 0)
-    return result;
-
-  /* files >= 5GB must be renamed via the multipart interface */
-  if(st.st_size < FIVE_GB) {
-    headers = add_header(headers, copy_meta_header());
-    headers = add_header(headers, copy_source_header(from));
-
-    result = stormfs_curl_put(to, headers);
-  } else {
-    headers = add_header(headers, content_header(get_mime_type(from)));
-    result = copy_multipart(from, to, headers, st.st_size);
-  }
-
-  free_headers(headers);
-
-  return stormfs_unlink(from);
-}
-
-static int
-stormfs_rename_directory(const char *from, const char *to)
-{
-  int result;
-  char *xml = NULL, *start_p = NULL;
-
-  DEBUG("rename directory: %s -> %s\n", from, to);
-
-  result = stormfs_curl_list_bucket(from, &xml);
-  if(result != 0) {
-    free(xml);
-    return -EIO;
-  }
-
-  if(strstr(xml, "xml") == NULL)
-    return -EIO;
-
-  if((start_p = strstr(xml, "<Key>")) != NULL)
-    start_p += strlen("<Key>");
-
-  while(start_p != NULL) {
-    char *name, *tmp, *file_from, *file_to;
-    char *end_p = strstr(start_p, "</Key>");
-    struct stat st;
-
-    tmp = g_strndup(start_p, end_p - start_p);
-    name = basename(tmp);
-    file_from = get_path(from, name);
-    file_to   = get_path(to, name);
-
-    if((result = stormfs_getattr(file_from, &st)) != 0)
-      return -result;
-
-    if(S_ISDIR(st.st_mode)) {
-      if((result = stormfs_rename_directory(file_from, file_to)) != 0)
-        return result;
-    } else {
-      if((result = stormfs_rename_file(file_from, file_to)) != 0)
-        return result;
-    }
-
-    free(tmp);
-    free(file_to);
-    free(file_from);
-
-    if((start_p = strstr(end_p, "<Key>")) != NULL)
-      start_p += strlen("<Key>");
-  }
-
-  free(xml);
-
-  return stormfs_rename_file(from, to);
-}
-
-static int
 stormfs_rename(const char *from, const char *to)
 {
   int result;
@@ -1231,10 +1146,8 @@ stormfs_rename(const char *from, const char *to)
   if((result = stormfs_getattr(from, &st)) != 0)
     return result;
 
-  if(S_ISDIR(st.st_mode))
-    result = stormfs_rename_directory(from, to);
-  else
-    result = stormfs_rename_file(from, to);
+  if((result = s3_rename(from, to, &st)) != 0)
+    return result;
 
   // FIXME: cache_rename
   cache_invalidate_dir(from);
