@@ -144,6 +144,24 @@ s3_mknod(const char *path, struct stat *st)
 }
 
 int
+s3_release(const char *path, int fd, struct stat *st)
+{
+  int result;
+  GList *headers = NULL;
+
+  headers = stat_to_headers(headers, *st);
+  headers = add_header(headers, content_header(get_mime_type(path)));
+  headers = add_header(headers, mtime_header(time(NULL)));
+  headers = add_optional_headers(headers);
+
+  result = stormfs_curl_upload(path, headers, fd);
+
+  free_headers(headers);
+
+  return result;
+}
+
+int
 s3_unlink(const char *path)
 {
   return stormfs_curl_delete(path);

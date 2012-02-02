@@ -1110,7 +1110,6 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
 {
   int result = 0;
   struct stat st;
-  GList *headers = NULL;
 
   DEBUG("release: %s\n", path);
 
@@ -1123,13 +1122,7 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     if((result = stormfs_getattr(path, &st)) != 0)
       return -result;
 
-    headers = stat_to_headers(headers, st);
-    headers = add_header(headers, content_header(get_mime_type(path)));
-    headers = add_header(headers, mtime_header(time(NULL)));
-    headers = add_optional_headers(headers);
-
-    result = stormfs_curl_upload(path, headers, fi->fh);
-    free_headers(headers);
+    result = s3_release(path, fi->fh, &st);
   }
 
   if(close(fi->fh) != 0) {
