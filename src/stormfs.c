@@ -723,21 +723,20 @@ stormfs_open(const char *path, struct fuse_file_info *fi)
   if((fp = fdopen(fd, "a+")) == NULL)
     return -errno;
 
-  if((result = stormfs_curl_get_file(path, fp)) != 0) {
+  if((result = s3_open(path, fp)) != 0) {
     fclose(fp);
     return result;
   }
 
   fi->fh = fd;
 
-  return 0;
+  return result;
 }
 
 static int
 stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
   int result;
-  int fd;
   struct stat st;
   struct file *f;
 
@@ -749,9 +748,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   cache_invalidate_dir(path);
 
   f = cache_get(path);
-  fd = cache_create_file(f);
-
-  fi->fh = fd;
+  fi->fh = cache_create_file(f);
 
   st.st_gid = getgid();
   st.st_uid = getuid();

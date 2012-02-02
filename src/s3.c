@@ -147,6 +147,12 @@ s3_mknod(const char *path, struct stat *st)
 }
 
 int
+s3_open(const char *path, FILE *f)
+{
+  return stormfs_curl_get_file(path, f);
+}
+
+int
 s3_release(const char *path, int fd, struct stat *st)
 {
   int result;
