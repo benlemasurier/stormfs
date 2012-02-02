@@ -1189,10 +1189,8 @@ stormfs_statfs(const char *path, struct statvfs *buf)
 static int
 stormfs_symlink(const char *from, const char *to)
 {
-  int fd;
   int result;
-  mode_t mode = S_IFLNK;
-  GList *headers = NULL;
+  struct stat st;
 
   DEBUG("symlink: %s -> %s\n", from, to);
 
@@ -1201,23 +1199,12 @@ stormfs_symlink(const char *from, const char *to)
   if((result = valid_path(to)) != 0)
     return result;
 
+  st.st_mode = S_IFLNK;
+  st.st_mtime = time(NULL);
+  if((result = s3_symlink(from, to, &st)) != 0)
+    return result;
+
   cache_invalidate_dir(to);
-
-  if((fd = fileno(tmpfile())) == -1)
-    return -errno;
-
-  if(pwrite(fd, from, strlen(from), 0) == -1) {
-    close(fd);
-    return -errno;
-  }
-
-  headers = add_header(headers, mode_header(mode));
-  headers = add_header(headers, mtime_header(time(NULL)));
-  result = stormfs_curl_upload(to, headers, fd);
-  free_headers(headers);
-
-  if(close(fd) != 0)
-    return -errno;
 
   return result;
 }

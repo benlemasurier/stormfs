@@ -22,6 +22,7 @@ int s3_open(const char *path, FILE *f);
 int s3_release(const char *path, int fd, struct stat *st);
 int s3_rename(const char *from, const char *to, struct stat *st);
 int s3_rmdir(const char *path);
+int s3_symlink(const char *from, const char *to, struct stat *st);
 int s3_unlink(const char *path);
 int s3_utimens(const char *path, struct stat *st);
 

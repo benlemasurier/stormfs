@@ -281,6 +281,32 @@ s3_rmdir(const char *path)
 }
 
 int
+s3_symlink(const char *from, const char *to, struct stat *st)
+{
+  int result, fd;
+  GList *headers = NULL;
+
+  if((fd = fileno(tmpfile())) == -1)
+    return -errno;
+
+  if(pwrite(fd, from, strlen(from), 0) == -1) {
+    close(fd);
+    return -errno;
+  }
+
+  headers = add_header(headers, mode_header(st->st_mode));
+  headers = add_header(headers, mtime_header(st->st_mtime));
+
+  result = stormfs_curl_upload(to, headers, fd);
+
+  free_headers(headers);
+  if(close(fd) != 0)
+    return -errno;
+
+  return result;
+}
+
+int
 s3_unlink(const char *path)
 {
   return stormfs_curl_delete(path);
