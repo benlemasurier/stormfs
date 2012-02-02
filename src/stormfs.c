@@ -29,6 +29,7 @@
 #include <pthread.h>
 #include <glib.h>
 #include "stormfs.h"
+#include "proxy.h"
 #include "s3.h"
 #include "curl.h"
 
@@ -596,7 +597,7 @@ stormfs_getattr(const char *path, struct stat *stbuf)
     return 0;
   }
 
-  if((result = s3_getattr(path, stbuf)) != 0)
+  if((result = proxy_getattr(path, stbuf)) != 0)
     return result;
 
   stbuf->st_nlink = 1;
@@ -623,7 +624,7 @@ stormfs_unlink(const char *path)
   if((result = valid_path(path)) != 0)
     return result;
 
-  if((result = s3_unlink(path)) != 0)
+  if((result = proxy_unlink(path)) != 0)
     return result;
 
   cache_invalidate_dir(path);
@@ -706,7 +707,7 @@ stormfs_open(const char *path, struct fuse_file_info *fi)
   if((fp = fdopen(fd, "a+")) == NULL)
     return -errno;
 
-  if((result = s3_open(path, fp)) != 0) {
+  if((result = proxy_open(path, fp)) != 0) {
     fclose(fp);
     return result;
   }
@@ -739,7 +740,7 @@ stormfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   st.st_ctime = time(NULL);
   st.st_mtime = time(NULL);
 
-  if((result = s3_create(path, &st)) != 0)
+  if((result = proxy_create(path, &st)) != 0)
     return result;
 
   pthread_mutex_lock(&f->lock);
@@ -771,7 +772,7 @@ stormfs_chmod(const char *path, mode_t mode)
   st.st_ctime = time(NULL);
   st.st_mtime = time(NULL);
 
-  if((result = s3_chmod(path, &st)) != 0)
+  if((result = proxy_chmod(path, &st)) != 0)
     return result;
 
   f = cache_get(path);
@@ -807,7 +808,7 @@ stormfs_chown(const char *path, uid_t uid, gid_t gid)
   st.st_ctime = time(NULL);
   st.st_mtime = time(NULL);
 
-  if((result = s3_chown(path, &st)) != 0)
+  if((result = proxy_chown(path, &st)) != 0)
     return result;
 
   f = cache_get(path);
@@ -843,7 +844,7 @@ stormfs_mkdir(const char *path, mode_t mode)
   st.st_ctime = time(NULL);
   st.st_mtime = time(NULL);
 
-  return s3_mkdir(path, &st);
+  return proxy_mkdir(path, &st);
 }
 
 static int
@@ -871,7 +872,7 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
   st.st_ctime = time(NULL);
   st.st_mtime = time(NULL);
 
-  if((result = s3_mknod(path, &st)) != 0)
+  if((result = proxy_mknod(path, &st)) != 0)
     return result;
 
   pthread_mutex_lock(&f->lock);
@@ -923,10 +924,10 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
   }
 
-  if((result = s3_readdir(path, &files)) != 0)
+  if((result = proxy_readdir(path, &files)) != 0)
     return result;
 
-  result = s3_getattr_multi(path, files);
+  result = proxy_getattr_multi(path, files);
 
   pthread_mutex_lock(&dir->lock);
   head = g_list_first(files);
@@ -996,7 +997,7 @@ stormfs_readlink(const char *path, char *buf, size_t size)
     if((fp = fdopen(fd, "a+")) == NULL)
       return -errno;
 
-    if((result = s3_open(path, fp)) != 0) {
+    if((result = proxy_open(path, fp)) != 0) {
       fclose(fp);
       return result;
     }
@@ -1039,7 +1040,7 @@ stormfs_release(const char *path, struct fuse_file_info *fi)
     if((result = stormfs_getattr(path, &st)) != 0)
       return -result;
 
-    result = s3_release(path, fi->fh, &st);
+    result = proxy_release(path, fi->fh, &st);
   }
 
   if(close(fi->fh) != 0) {
@@ -1066,7 +1067,7 @@ stormfs_rename(const char *from, const char *to)
   if((result = stormfs_getattr(from, &st)) != 0)
     return result;
 
-  if((result = s3_rename(from, to, &st)) != 0)
+  if((result = proxy_rename(from, to, &st)) != 0)
     return result;
 
   // FIXME: cache_rename
@@ -1086,7 +1087,7 @@ stormfs_rmdir(const char *path)
   if((result = valid_path(path)) != 0)
     return result;
 
-  if((result = s3_rmdir(path)) != 0)
+  if((result = proxy_rmdir(path)) != 0)
     return result;
 
   cache_invalidate_dir(path);
@@ -1121,7 +1122,7 @@ stormfs_symlink(const char *from, const char *to)
 
   st.st_mode = S_IFLNK;
   st.st_mtime = time(NULL);
-  if((result = s3_symlink(from, to, &st)) != 0)
+  if((result = proxy_symlink(from, to, &st)) != 0)
     return result;
 
   cache_invalidate_dir(to);
@@ -1146,7 +1147,7 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
 
   st.st_mtime = ts[1].tv_sec;
 
-  if((result = s3_utimens(path, &st)) != 0)
+  if((result = proxy_utimens(path, &st)) != 0)
     return result;
 
   f = cache_get(path);
@@ -1377,8 +1378,8 @@ stormfs_init(struct fuse_conn_info *conn)
   cache_mime_types();
   show_debug_header();
 
-  if(s3_init(&stormfs) != 0) {
-    fprintf(stderr, "%s: unable to initialize s3\n", stormfs.progname);
+  if(proxy_init(&stormfs) != 0) {
+    fprintf(stderr, "%s: unable to initialize service\n", stormfs.progname);
     exit(EXIT_FAILURE);
   }
 
@@ -1394,7 +1395,7 @@ static void
 stormfs_destroy(void *data)
 {
   cache_destroy();
-  s3_destroy();
+  proxy_destroy();
   free(stormfs.bucket);
   free(stormfs.mountpoint);
   free(stormfs.access_key);
@@ -1520,6 +1521,7 @@ main(int argc, char *argv[])
 
   memset(&stormfs, 0, sizeof(struct stormfs));
   stormfs.progname = argv[0];
+  stormfs.service = AMAZON;
   set_defaults();
 
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {

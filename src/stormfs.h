@@ -11,7 +11,12 @@
 
 #define FIVE_GB 5368709120LL
 
+enum service {
+  AMAZON
+};
+
 struct stormfs {
+  enum service service;
   bool ssl;
   bool rrs;
   int encryption;
