@@ -1335,7 +1335,6 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
   int result;
   struct file *f;
   struct stat st;
-  GList *headers = NULL;
 
   DEBUG("utimens: %s\n", path);
 
@@ -1346,14 +1345,8 @@ stormfs_utimens(const char *path, const struct timespec ts[2])
     return result;
 
   st.st_mtime = ts[1].tv_sec;
-  headers = stat_to_headers(headers, st);
-  headers = add_header(headers, replace_header());
-  headers = add_header(headers, copy_source_header(path));
 
-  result = stormfs_curl_put(path, headers);
-
-  free_headers(headers);
-  if(result != 0)
+  if((result = s3_utimens(path, &st)) != 0)
     return result;
 
   f = cache_get(path);

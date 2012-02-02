@@ -132,3 +132,19 @@ s3_unlink(const char *path)
 {
   return stormfs_curl_delete(path);
 }
+
+int
+s3_utimens(const char *path, struct stat *st)
+{
+  int result;
+  GList *headers = NULL;
+
+  headers = stat_to_headers(headers, *st);
+  headers = add_header(headers, replace_header());
+  headers = add_header(headers, copy_source_header(path));
+
+  result = stormfs_curl_put(path, headers);
+  free_headers(headers);
+
+  return result;
+}
