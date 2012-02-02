@@ -253,23 +253,6 @@ free_files(GList *files)
   g_list_free(files);
 }
 
-GList *
-add_file_to_list(GList *list, const char *path, struct stat *st)
-{
-  struct file *f = g_new0(struct file, 1);
-  struct stat *stbuf = g_new0(struct stat, 1);
-
-  f->path = strdup(path);
-  f->name = strdup(basename(f->path));
-
-  if(st != NULL)
-    memcpy(stbuf, st, sizeof(struct stat));
-
-  f->st = stbuf;
-
-  return g_list_append(list, f);
-}
-
 static int
 cache_init(void)
 {
@@ -901,34 +884,6 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
   return result;
 }
 
-int
-stormfs_getattr_multi(const char *path, GList *files)
-{
-  DEBUG("getattr_multi: %s\n", path);
-
-  int result;
-  GList *head = NULL, *next = NULL;
-  result = stormfs_curl_head_multi(path, files);
-
-  head = g_list_first(files);
-  while(head != NULL) {
-    next = head->next;
-
-    struct file *f = head->data;
-    GList *headers = f->headers;
-    struct stat *stbuf = f->st;
-    if((result = headers_to_stat(headers, stbuf)) != 0)
-      return result;
-
-    if(S_ISREG(stbuf->st_mode))
-      stbuf->st_blocks = get_blocks(stbuf->st_size);
-
-    head = next;
-  }
-
-  return result;
-}
-
 static int
 stormfs_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
@@ -938,42 +893,11 @@ stormfs_read(const char *path, char *buf, size_t size, off_t offset,
   return pread(fi->fh, buf, size, offset);
 }
 
-static GList *
-xml_to_files(const char *path, char *xml)
-{
-  char *start_p = NULL;
-  GList *files = NULL;
-
-  if(strstr(xml, "xml") == NULL)
-    return files;
-
-  if((start_p = strstr(xml, "<Key>")) != NULL)
-    start_p += strlen("<Key>");
-
-  while(start_p != NULL) {
-    char *name;
-    char *fullpath;
-    char *end_p = strstr(start_p, "</Key>");
-
-    name = g_strndup(start_p, end_p - start_p);
-    fullpath = get_path(path, name);
-    files = add_file_to_list(files, fullpath, NULL);
-    free(name);
-    free(fullpath);
-
-    if((start_p = strstr(end_p, "<Key>")) != NULL)
-      start_p += strlen("<Key>");
-  }
-
-  return files;
-}
-
 static int
 stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
   int result;
-  char *xml = NULL;
   struct file *dir;
   GList *files = NULL, *head = NULL, *next = NULL;
 
@@ -999,13 +923,10 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return 0;
   }
 
-  if((result = stormfs_curl_list_bucket(path, &xml)) != 0) {
-    free(xml);
-    return -EIO;
-  }
+  if((result = s3_readdir(path, &files)) != 0)
+    return result;
 
-  files = xml_to_files(path, xml);
-  result = stormfs_getattr_multi(path, files);
+  result = s3_getattr_multi(path, files);
 
   pthread_mutex_lock(&dir->lock);
   head = g_list_first(files);
@@ -1034,7 +955,6 @@ stormfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   pthread_mutex_unlock(&dir->lock);
 
   free_files(files);
-  free(xml);
 
   return result;
 }

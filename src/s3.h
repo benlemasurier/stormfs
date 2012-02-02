@@ -12,6 +12,7 @@
 #define s3_H
 
 int s3_getattr(const char *path, struct stat *st);
+int s3_getattr_multi(const char *path, GList *files);
 int s3_chmod(const char *path, struct stat *st);
 int s3_chown(const char *path, struct stat *st);
 int s3_create(const char *path, struct stat *st);
@@ -20,6 +21,7 @@ int s3_mkdir(const char *path, struct stat *st);
 int s3_mknod(const char *path, struct stat *st);
 int s3_open(const char *path, FILE *f);
 int s3_release(const char *path, int fd, struct stat *st);
+int s3_readdir(const char *path, GList **files);
 int s3_rename(const char *from, const char *to, struct stat *st);
 int s3_rmdir(const char *path);
 int s3_symlink(const char *from, const char *to, struct stat *st);
