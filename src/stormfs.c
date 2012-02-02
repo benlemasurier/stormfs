@@ -1076,7 +1076,7 @@ stormfs_readlink(const char *path, char *buf, size_t size)
     if((fp = fdopen(fd, "a+")) == NULL)
       return -errno;
 
-    if((result = stormfs_curl_get_file(path, fp)) != 0) {
+    if((result = s3_open(path, fp)) != 0) {
       fclose(fp);
       return result;
     }
