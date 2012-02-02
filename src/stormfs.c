@@ -873,7 +873,6 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
   int fd;
   struct file *f;
   struct stat st;
-  GList *headers = NULL;
 
   DEBUG("mknod: %s\n", path);
 
@@ -892,17 +891,15 @@ stormfs_mknod(const char *path, mode_t mode, dev_t rdev)
   st.st_ctime = time(NULL);
   st.st_mtime = time(NULL);
 
-  headers = stat_to_headers(headers, st);
-  headers = add_optional_headers(headers);
+  if((result = s3_mknod(path, &st)) != 0)
+    return result;
 
-  result = stormfs_curl_put(path, headers);
-
-  free_headers(headers);
-
+  pthread_mutex_lock(&f->lock);
   if(f->st == NULL)
     f->st = g_new0(struct stat, 1);
   memcpy(f->st, &st, sizeof(struct stat));
   cache_touch(f);
+  pthread_mutex_unlock(&f->lock);
 
   return result;
 }

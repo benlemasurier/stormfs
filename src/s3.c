@@ -128,6 +128,22 @@ s3_mkdir(const char *path, struct stat *st)
 }
 
 int
+s3_mknod(const char *path, struct stat *st)
+{
+  int result;
+  GList *headers = NULL;
+
+  headers = stat_to_headers(headers, *st);
+  headers = add_optional_headers(headers);
+
+  result = stormfs_curl_put(path, headers);
+
+  free_headers(headers);
+
+  return result;
+}
+
+int
 s3_unlink(const char *path)
 {
   return stormfs_curl_delete(path);
