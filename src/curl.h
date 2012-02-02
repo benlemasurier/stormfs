@@ -44,7 +44,7 @@ GList *add_header(GList *headers, HTTP_HEADER *h);
 GList *strip_header(GList *headers, const char *key);
 void free_header(HTTP_HEADER *h);
 void free_headers(GList *headers);
-GList *stat_to_headers(GList *headers, struct stat st);
+GList *stat_to_headers(GList *headers, struct stat *st);
 int headers_to_stat(GList *headers, struct stat *stbuf);
 
 int stormfs_curl_delete(const char *path);

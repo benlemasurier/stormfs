@@ -193,14 +193,14 @@ add_header(GList *headers, HTTP_HEADER *h)
 }
 
 GList *
-stat_to_headers(GList *headers, struct stat st)
+stat_to_headers(GList *headers, struct stat *st)
 {
-  headers = add_header(headers, gid_header(st.st_gid));
-  headers = add_header(headers, uid_header(st.st_uid));
-  headers = add_header(headers, mode_header(st.st_mode));
-  headers = add_header(headers, ctime_header(st.st_ctime));
-  headers = add_header(headers, mtime_header(st.st_mtime));
-  headers = add_header(headers, rdev_header(st.st_rdev));
+  headers = add_header(headers, gid_header(st->st_gid));
+  headers = add_header(headers, uid_header(st->st_uid));
+  headers = add_header(headers, mode_header(st->st_mode));
+  headers = add_header(headers, ctime_header(st->st_ctime));
+  headers = add_header(headers, mtime_header(st->st_mtime));
+  headers = add_header(headers, rdev_header(st->st_rdev));
 
   return headers;
 }

@@ -125,7 +125,7 @@ s3_chmod(const char *path, struct stat *st)
   int result;
   GList *headers = NULL;
 
-  headers = stat_to_headers(headers, *st);
+  headers = stat_to_headers(headers, st);
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
 
@@ -141,7 +141,7 @@ s3_chown(const char *path, struct stat *st)
   int result;
   GList *headers = NULL;
 
-  headers = stat_to_headers(headers, *st);
+  headers = stat_to_headers(headers, st);
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
 
@@ -157,7 +157,7 @@ s3_create(const char *path, struct stat *st)
   int result;
   GList *headers = NULL;
 
-  headers = stat_to_headers(headers, *st);
+  headers = stat_to_headers(headers, st);
   headers = add_header(headers, content_header(get_mime_type(path)));
   headers = add_optional_headers(headers);
 
@@ -189,7 +189,7 @@ s3_mkdir(const char *path, struct stat *st)
   if((fd = fileno(f)) == -1)
     return -errno;
 
-  headers = stat_to_headers(headers, *st);
+  headers = stat_to_headers(headers, st);
   headers = add_header(headers, acl_header(s3.stormfs->acl));
   headers = add_header(headers, content_header("application/x-directory"));
   headers = add_optional_headers(headers);
@@ -209,7 +209,7 @@ s3_mknod(const char *path, struct stat *st)
   int result;
   GList *headers = NULL;
 
-  headers = stat_to_headers(headers, *st);
+  headers = stat_to_headers(headers, st);
   headers = add_optional_headers(headers);
 
   result = stormfs_curl_put(path, headers);
@@ -248,7 +248,7 @@ s3_release(const char *path, int fd, struct stat *st)
   int result;
   GList *headers = NULL;
 
-  headers = stat_to_headers(headers, *st);
+  headers = stat_to_headers(headers, st);
   headers = add_header(headers, content_header(get_mime_type(path)));
   headers = add_header(headers, mtime_header(time(NULL)));
   headers = add_optional_headers(headers);
@@ -266,7 +266,7 @@ s3_rename_file(const char *from, const char *to, struct stat *st)
   int result;
   GList *headers = NULL;
 
-  headers = stat_to_headers(headers, *st);
+  headers = stat_to_headers(headers, st);
 
   /* files >= 5GB must be renamed via the multipart interface */
   if(st->st_size < FIVE_GB) {
@@ -408,7 +408,7 @@ s3_utimens(const char *path, struct stat *st)
   int result;
   GList *headers = NULL;
 
-  headers = stat_to_headers(headers, *st);
+  headers = stat_to_headers(headers, st);
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
 
