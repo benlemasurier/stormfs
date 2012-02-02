@@ -11,6 +11,7 @@
 #ifndef s3_H
 #define s3_H
 
+void s3_destroy(void);
 int s3_getattr(const char *path, struct stat *st);
 int s3_getattr_multi(const char *path, GList *files);
 int s3_chmod(const char *path, struct stat *st);

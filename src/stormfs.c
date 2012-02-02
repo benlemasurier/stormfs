@@ -1382,14 +1382,6 @@ stormfs_init(struct fuse_conn_info *conn)
     exit(EXIT_FAILURE);
   }
 
-  if(stormfs_curl_init(stormfs.bucket, stormfs.virtual_url) != 0) {
-    fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs.progname);
-    exit(EXIT_FAILURE);
-  }
-
-  stormfs_curl_set_auth(stormfs.access_key, stormfs.secret_key);
-  stormfs_curl_verify_ssl(stormfs.verify_ssl);
-
   if(cache_init() != 0) {
     fprintf(stderr, "%s: unable to initialize cache\n", stormfs.progname);
     exit(EXIT_FAILURE);
@@ -1402,7 +1394,7 @@ static void
 stormfs_destroy(void *data)
 {
   cache_destroy();
-  stormfs_curl_destroy();
+  s3_destroy();
   free(stormfs.bucket);
   free(stormfs.mountpoint);
   free(stormfs.access_key);

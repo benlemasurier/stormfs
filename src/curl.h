@@ -53,13 +53,11 @@ int stormfs_curl_get(const char *path, char **data);
 int stormfs_curl_get_file(const char *path, FILE *f);
 int stormfs_curl_head(const char *path, GList **meta);
 int stormfs_curl_head_multi(const char *path, GList *files);
-int stormfs_curl_init(const char *bucket, const char *url);
+int stormfs_curl_init(struct stormfs *stormfs);
 int stormfs_curl_list_bucket(const char *path, char **xml);
 int stormfs_curl_put(const char *path, GList *headers);
 int stormfs_curl_rename(const char *from, const char *to);
-int stormfs_curl_set_auth(const char *access_key, const char *secret_key);
 int stormfs_curl_upload(const char *path, GList *headers, int fd);
-int stormfs_curl_verify_ssl(int verify);
 int copy_multipart(const char *from, const char *to, GList *headers, off_t size);
 
 #endif // stormfs_curl_H

@@ -1967,7 +1967,7 @@ stormfs_curl_put(const char *path, GList *headers)
   return result;
 }
 
-int
+static int
 stormfs_curl_set_auth(const char *access_key, const char *secret_key)
 {
   curl.access_key = access_key;
@@ -1976,7 +1976,7 @@ stormfs_curl_set_auth(const char *access_key, const char *secret_key)
   return 0;
 }
 
-int
+static int
 stormfs_curl_verify_ssl(int verify)
 {
   if(verify == 0)
@@ -2025,12 +2025,15 @@ share_init()
 }
 
 int
-stormfs_curl_init(const char *bucket, const char *url)
+stormfs_curl_init(struct stormfs *stormfs)
 {
   CURLcode result;
-  curl.url = url;
-  curl.bucket = bucket;
+  curl.url = stormfs->virtual_url;
+  curl.bucket = stormfs->bucket;
   curl.verify_ssl = 1;
+
+  stormfs_curl_set_auth(stormfs->access_key, stormfs->secret_key);
+  stormfs_curl_verify_ssl(stormfs->verify_ssl);
 
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)
     return -1;

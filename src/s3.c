@@ -76,6 +76,12 @@ xml_to_files(const char *path, char *xml)
   return files;
 }
 
+void
+s3_destroy(void)
+{
+  stormfs_curl_destroy();
+}
+
 int
 s3_getattr(const char *path, struct stat *st)
 {
@@ -172,6 +178,11 @@ int
 s3_init(struct stormfs *stormfs)
 {
   s3.stormfs = stormfs;
+
+  if(stormfs_curl_init(stormfs) != 0) {
+    fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs->progname);
+    exit(EXIT_FAILURE);
+  }
 
   return 0;
 }
