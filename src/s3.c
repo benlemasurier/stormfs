@@ -6,6 +6,8 @@
  * See the file COPYING.
  */
 
+#define _GNU_SOURCE
+
 #include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +17,7 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <glib.h>
@@ -165,17 +168,17 @@ int
 s3_rmdir(const char *path)
 {
   int result;
-  char *data = NULL;
+  char *xml = NULL;
 
-  if((result = stormfs_curl_get(path, &data)) != 0) {
-    free(data);
+  if((result = stormfs_curl_list_bucket(path, &xml)) != 0) {
+    free(xml);
     return result;
   }
 
-  if(strstr(data, "ETag") != NULL)
+  if(strstr(xml, "ETag") != NULL)
     result = -ENOTEMPTY;
 
-  free(data);
+  free(xml);
   if(result != 0)
     return result;
 
