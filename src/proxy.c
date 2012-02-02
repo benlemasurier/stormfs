@@ -14,12 +14,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include <string.h>
 #include <errno.h>
-#include <pthread.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <glib.h>
 #include "stormfs.h"
 #include "s3.h"
