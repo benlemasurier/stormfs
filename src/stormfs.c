@@ -640,9 +640,12 @@ stormfs_unlink(const char *path)
   if((result = valid_path(path)) != 0)
     return result;
 
+  if((result = s3_unlink(path)) != 0)
+    return result;
+
   cache_invalidate_dir(path);
 
-  return s3_unlink(path);
+  return result;
 }
 
 static int
