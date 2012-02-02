@@ -30,7 +30,6 @@
 #include <glib.h>
 #include "stormfs.h"
 #include "proxy.h"
-#include "s3.h"
 #include "curl.h"
 
 #define CONFIG SYSCONFDIR "/stormfs.conf"

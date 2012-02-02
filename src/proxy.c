@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <glib.h>
 #include "stormfs.h"
+#include "cloudfiles.h"
 #include "s3.h"
 
 struct proxy {
