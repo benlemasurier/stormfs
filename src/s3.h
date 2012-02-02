@@ -19,6 +19,7 @@ int s3_init(struct stormfs *stormfs);
 int s3_mkdir(const char *path, struct stat *st);
 int s3_mknod(const char *path, struct stat *st);
 int s3_release(const char *path, int fd, struct stat *st);
+int s3_rmdir(const char *path);
 int s3_unlink(const char *path);
 int s3_utimens(const char *path, struct stat *st);
 

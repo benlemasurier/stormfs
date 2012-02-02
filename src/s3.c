@@ -162,6 +162,27 @@ s3_release(const char *path, int fd, struct stat *st)
 }
 
 int
+s3_rmdir(const char *path)
+{
+  int result;
+  char *data = NULL;
+
+  if((result = stormfs_curl_get(path, &data)) != 0) {
+    free(data);
+    return result;
+  }
+
+  if(strstr(data, "ETag") != NULL)
+    result = -ENOTEMPTY;
+
+  free(data);
+  if(result != 0)
+    return result;
+
+  return stormfs_curl_delete(path);
+}
+
+int
 s3_unlink(const char *path)
 {
   return stormfs_curl_delete(path);

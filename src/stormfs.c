@@ -1232,7 +1232,7 @@ stormfs_rename(const char *from, const char *to)
     return result;
 
   if((result = stormfs_getattr(from, &st)) != 0)
-    return -result;
+    return result;
 
   if(S_ISDIR(st.st_mode))
     result = stormfs_rename_directory(from, to);
@@ -1250,28 +1250,18 @@ static int
 stormfs_rmdir(const char *path)
 {
   int result = 0;
-  char *data = NULL;
 
   DEBUG("rmdir: %s\n", path);
 
   if((result = valid_path(path)) != 0)
     return result;
 
+  if((result = s3_rmdir(path)) != 0)
+    return result;
+
   cache_invalidate_dir(path);
 
-  if((result = stormfs_curl_get(path, &data)) != 0) {
-    free(data);
-    return result;
-  }
-
-  if(strstr(data, "ETag") != NULL) {
-    free(data);
-    return -ENOTEMPTY;
-  }
-
-  free(data);
-
-  return stormfs_curl_delete(path);
+  return result;
 }
 
 static int
