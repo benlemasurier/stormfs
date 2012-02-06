@@ -23,6 +23,7 @@
 #include <glib.h>
 #include "stormfs.h"
 #include "curl.h"
+#include "s3-curl.h"
 #include "s3.h"
 
 struct s3 {
@@ -92,7 +93,7 @@ xml_to_files(const char *path, char *xml)
 void
 s3_destroy(void)
 {
-  stormfs_curl_destroy();
+  s3_curl_destroy();
 }
 
 int
@@ -192,7 +193,7 @@ s3_init(struct stormfs *stormfs)
 {
   s3.stormfs = stormfs;
 
-  if(stormfs_curl_init(stormfs) != 0) {
+  if(s3_curl_init(stormfs) != 0) {
     fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs->progname);
     exit(EXIT_FAILURE);
   }

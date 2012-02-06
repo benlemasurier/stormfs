@@ -9,4 +9,7 @@
 #ifndef s3_curl_H
 #define s3_curl_H
 
+void s3_curl_destroy(void);
+int  s3_curl_init(struct stormfs *stormfs);
+
 #endif // s3_curl_H

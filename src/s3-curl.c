@@ -23,3 +23,21 @@
 #include <glib.h>
 #include "stormfs.h"
 #include "curl.h"
+
+struct s3_curl {
+  struct stormfs *stormfs;
+} s3_curl;
+
+int
+s3_curl_init(struct stormfs *stormfs)
+{
+  s3_curl.stormfs = stormfs;
+
+  return stormfs_curl_init(stormfs);
+}
+
+void
+s3_curl_destroy(void)
+{
+  stormfs_curl_destroy();
+}
