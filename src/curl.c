@@ -71,20 +71,6 @@ typedef struct {
   bool in_use;
 } CURL_HANDLE;
 
-typedef struct {
-  char   *memory;
-  size_t size;
-} HTTP_RESPONSE;
-
-typedef struct {
-  CURL *c;
-  char *url;
-  char *path;
-  bool done;
-  HTTP_RESPONSE response;
-  struct curl_slist *headers;
-} HTTP_REQUEST;
-
 struct post_data {
   const char *readptr;
   int remaining;
@@ -132,7 +118,7 @@ get_size(const char *s)
   return (off_t) strtoul(s, (char **) NULL, 10);
 }
 
-static char *
+char *
 gid_to_s(gid_t gid)
 {
   char s[100];
@@ -141,25 +127,7 @@ gid_to_s(gid_t gid)
   return strdup(s);
 }
 
-static char *
-rdev_to_s(dev_t rdev)
-{
-  char s[100];
-  snprintf(s, 100, "%lu", (unsigned long) rdev);
-
-  return strdup(s);
-}
-
-static char *
-uid_to_s(uid_t uid)
-{
-  char s[100];
-  snprintf(s, 100, "%lu", (unsigned long) uid);
-
-  return strdup(s);
-}
-
-static char *
+char *
 mode_to_s(mode_t mode)
 {
   char s[100];
@@ -168,11 +136,29 @@ mode_to_s(mode_t mode)
   return strdup(s);
 }
 
-static char *
+char *
+rdev_to_s(dev_t rdev)
+{
+  char s[100];
+  snprintf(s, 100, "%lu", (unsigned long) rdev);
+
+  return strdup(s);
+}
+
+char *
 time_to_s(time_t t)
 {
   char s[100];
   snprintf(s, 100, "%ld", (long) t);
+
+  return strdup(s);
+}
+
+char *
+uid_to_s(uid_t uid)
+{
+  char s[100];
+  snprintf(s, 100, "%lu", (unsigned long) uid);
 
   return strdup(s);
 }

@@ -6,6 +6,10 @@
  * See the file COPYING.
  */
 
+#include <curl/curl.h>
+#include <curl/types.h>
+#include <curl/easy.h>
+
 #ifndef stormfs_curl_H
 #define stormfs_curl_H
 
@@ -16,6 +20,20 @@ typedef struct {
   char *value;
 } HTTP_HEADER;
 
+typedef struct {
+  char   *memory;
+  size_t size;
+} HTTP_RESPONSE;
+
+typedef struct {
+  CURL *c;
+  char *url;
+  char *path;
+  bool done;
+  HTTP_RESPONSE response;
+  struct curl_slist *headers;
+} HTTP_REQUEST;
+
 uid_t get_uid(const char *s);
 gid_t get_gid(const char *s);
 mode_t get_mode(const char *s);
@@ -23,6 +41,13 @@ time_t get_ctime(const char *s);
 time_t get_mtime(const char *s);
 dev_t get_rdev(const char *s);
 off_t get_size(const char *s);
+
+char *gid_to_s(gid_t gid);
+char *mode_to_s(mode_t mode);
+char *rdev_to_s(dev_t rdev);
+char *time_to_s(time_t t);
+char *uid_to_s(uid_t uid);
+char *url_encode(char *s);
 
 HTTP_HEADER *acl_header(const char *acl);
 HTTP_HEADER *content_header(const char *type);
