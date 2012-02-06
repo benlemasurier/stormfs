@@ -2,6 +2,7 @@ bin_PROGRAMS = stormfs
 
 stormfs_SOURCES = proxy.h proxy.c \
                   s3.h s3.c \
+                  s3-curl.h s3-curl.c \
                   cloudfiles.h cloudfiles.c \
                   cloudfiles-curl.h cloudfiles-curl.c \
                   curl.h curl.c \
