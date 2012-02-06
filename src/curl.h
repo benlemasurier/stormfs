@@ -23,7 +23,6 @@ time_t get_ctime(const char *s);
 time_t get_mtime(const char *s);
 dev_t get_rdev(const char *s);
 off_t get_size(const char *s);
-blkcnt_t get_blocks(off_t size);
 
 HTTP_HEADER *acl_header(const char *acl);
 HTTP_HEADER *content_header(const char *type);

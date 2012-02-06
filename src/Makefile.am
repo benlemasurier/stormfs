@@ -3,6 +3,7 @@ bin_PROGRAMS = stormfs
 stormfs_SOURCES = proxy.h proxy.c \
                   s3.h s3.c \
                   cloudfiles.h cloudfiles.c \
+                  cloudfiles-curl.h cloudfiles-curl.c \
                   curl.h curl.c \
                   stormfs.h stormfs.c
 stormfs_CFLAGS = -D_REENTRANT \

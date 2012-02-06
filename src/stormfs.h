@@ -52,7 +52,7 @@ struct file {
   pthread_mutex_t lock; /* file-level lock */
 };
 
-GList *add_optional_headers(GList *headers);
+blkcnt_t get_blocks(off_t size);
 char *get_path(const char *path, const char *name);
 const char *get_mime_type(const char *filename);
 char *stormfs_virtual_url(char *url, char *bucket);

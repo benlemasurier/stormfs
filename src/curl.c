@@ -132,12 +132,6 @@ get_size(const char *s)
   return (off_t) strtoul(s, (char **) NULL, 10);
 }
 
-blkcnt_t
-get_blocks(off_t size)
-{
-  return size / 512 + 1;
-}
-
 static char *
 gid_to_s(gid_t gid)
 {

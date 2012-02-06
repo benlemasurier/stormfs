@@ -83,6 +83,12 @@ static struct fuse_opt stormfs_opts[] = {
   FUSE_OPT_END
 };
 
+blkcnt_t
+get_blocks(off_t size)
+{
+  return size / 512 + 1;
+}
+
 static int
 valid_path(const char *path)
 {
@@ -559,19 +565,6 @@ get_path(const char *path, const char *name)
   strncat(fullpath, name, strlen(name));
 
   return fullpath;
-}
-
-GList *
-add_optional_headers(GList *headers)
-{
-  headers = add_header(headers, storage_header(stormfs.storage_class));
-  headers = add_header(headers, acl_header(stormfs.acl));
-  if(stormfs.encryption)
-    headers = add_header(headers, encryption_header());
-  if(stormfs.expires != NULL)
-    headers = add_header(headers, expires_header(stormfs.expires));
-
-  return headers;
 }
 
 int

@@ -30,6 +30,19 @@ struct s3 {
 } s3;
 
 static GList *
+add_optional_headers(GList *headers)
+{
+  headers = add_header(headers, storage_header(s3.stormfs->storage_class));
+  headers = add_header(headers, acl_header(s3.stormfs->acl));
+  if(s3.stormfs->encryption)
+    headers = add_header(headers, encryption_header());
+  if(s3.stormfs->expires != NULL)
+    headers = add_header(headers, expires_header(s3.stormfs->expires));
+
+  return headers;
+}
+
+static GList *
 add_file_to_list(GList *list, const char *path, struct stat *st)
 {
   struct file *f = g_new0(struct file, 1);
