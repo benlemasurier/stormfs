@@ -543,6 +543,9 @@ new_request(const char *path)
 int
 free_request(HTTP_REQUEST *request)
 {
+  if(request == NULL)
+    return 0;
+
   free(request->response.memory);
   release_pooled_handle(request->c);
   free(request->url);
@@ -661,23 +664,16 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
 }
 
 int
-stormfs_curl_put(const char *path, GList *headers)
+stormfs_curl_put(HTTP_REQUEST *request)
 {
-  int result;
-  HTTP_REQUEST *request = new_request(path);
-  request->headers = headers_to_curl_slist(headers);
-
   sign_request("PUT", &request->headers, request->path);
   curl_easy_setopt(request->c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
   curl_easy_setopt(request->c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
   curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
   curl_easy_setopt(request->c, CURLOPT_WRITEDATA, (void *) &request->response);
   curl_easy_setopt(request->c, CURLOPT_WRITEFUNCTION, write_memory_cb);
-  result = stormfs_curl_easy_perform(request->c);
 
-  free_request(request);
-
-  return result;
+  return stormfs_curl_easy_perform(request->c);
 }
 
 static int

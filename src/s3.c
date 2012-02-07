@@ -153,13 +153,17 @@ s3_chmod(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
+  HTTP_REQUEST *request = new_request(path);
 
   headers = stat_to_headers(headers, st);
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
+  request->headers = headers_to_curl_slist(headers);
 
-  result = stormfs_curl_put(path, headers);
+  result = stormfs_curl_put(request);
+
   free_headers(headers);
+  free_request(request);
 
   return result;
 }
@@ -169,13 +173,17 @@ s3_chown(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
+  HTTP_REQUEST *request = new_request(path);
 
   headers = stat_to_headers(headers, st);
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
+  request->headers = headers_to_curl_slist(headers);
 
-  result = stormfs_curl_put(path, headers);
+  result = stormfs_curl_put(request);
+
   free_headers(headers);
+  free_request(request);
 
   return result;
 }
@@ -185,14 +193,17 @@ s3_create(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
+  HTTP_REQUEST *request = new_request(path);
 
   headers = stat_to_headers(headers, st);
   headers = add_header(headers, content_header(get_mime_type(path)));
   headers = add_optional_headers(headers);
+  request->headers = headers_to_curl_slist(headers);
 
-  result = stormfs_curl_put(path, headers);
+  result = stormfs_curl_put(request);
 
   free_headers(headers);
+  free_request(request);
 
   return result;
 }
@@ -242,13 +253,16 @@ s3_mknod(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
+  HTTP_REQUEST *request = new_request(path);
 
   headers = stat_to_headers(headers, st);
   headers = add_optional_headers(headers);
+  request->headers = headers_to_curl_slist(headers);
 
-  result = stormfs_curl_put(path, headers);
+  result = stormfs_curl_put(request);
 
   free_headers(headers);
+  free_request(request);
 
   return result;
 }
@@ -299,21 +313,25 @@ s3_rename_file(const char *from, const char *to, struct stat *st)
 {
   int result;
   GList *headers = NULL;
+  HTTP_REQUEST *request = NULL;
 
   headers = stat_to_headers(headers, st);
 
   /* files >= 5GB must be renamed via the multipart interface */
   if(st->st_size < FIVE_GB) {
+    request = new_request(to);
     headers = add_header(headers, copy_meta_header());
     headers = add_header(headers, copy_source_header(from));
+    request->headers = headers_to_curl_slist(headers);
 
-    result = stormfs_curl_put(to, headers);
+    result = stormfs_curl_put(request);
   } else {
     headers = add_header(headers, content_header(get_mime_type(from)));
     result  = copy_multipart(from, to, headers, st->st_size);
   }
 
   free_headers(headers);
+  free_request(request);
 
   return stormfs_unlink(from);
 }
@@ -441,13 +459,17 @@ s3_utimens(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
+  HTTP_REQUEST *request = new_request(path);
 
   headers = stat_to_headers(headers, st);
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
+  request->headers = headers_to_curl_slist(headers);
 
-  result = stormfs_curl_put(path, headers);
+  result = stormfs_curl_put(request);
+
   free_headers(headers);
+  free_request(request);
 
   return result;
 }
