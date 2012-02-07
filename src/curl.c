@@ -40,9 +40,6 @@ static pthread_mutex_t shared_lock = PTHREAD_MUTEX_INITIALIZER;
 struct stormfs_curl {
   int verify_ssl;
   const char *url;
-  const char *bucket;
-  const char *access_key;
-  const char *secret_key;
   GList *pool;
   GList *marker;
   bool pool_full;
@@ -147,19 +144,6 @@ add_header(GList *headers, HTTP_HEADER *h)
 {
   headers = strip_header(headers, h->key);
   headers = g_list_append(headers, h);
-
-  return headers;
-}
-
-GList *
-stat_to_headers(GList *headers, struct stat *st)
-{
-  headers = add_header(headers, gid_header(st->st_gid));
-  headers = add_header(headers, uid_header(st->st_uid));
-  headers = add_header(headers, mode_header(st->st_mode));
-  headers = add_header(headers, ctime_header(st->st_ctime));
-  headers = add_header(headers, mtime_header(st->st_mtime));
-  headers = add_header(headers, rdev_header(st->st_rdev));
 
   return headers;
 }
@@ -558,19 +542,12 @@ free_request(HTTP_REQUEST *request)
 }
 
 int
-stormfs_curl_delete(const char *path)
+stormfs_curl_delete(HTTP_REQUEST *request)
 {
-  int result;
-  HTTP_REQUEST *request = new_request(path);
-
-  sign_request("DELETE", &request->headers, request->path);
   curl_easy_setopt(request->c, CURLOPT_CUSTOMREQUEST, "DELETE");
   curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
 
-  result = stormfs_curl_easy_perform(request->c);
-  free_request(request);
-
-  return result;
+  return stormfs_curl_easy_perform(request->c);
 }
 
 int
@@ -592,18 +569,15 @@ stormfs_curl_get(const char *path, char **data)
 }
 
 int
-stormfs_curl_get_file(const char *path, FILE *f)
+stormfs_curl_get_file(HTTP_REQUEST *request, FILE *f)
 {
   int result;
-  HTTP_REQUEST *request = new_request(path);
 
-  sign_request("GET", &request->headers, path);
   curl_easy_setopt(request->c, CURLOPT_WRITEDATA, f);
   curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
-  result = stormfs_curl_easy_perform(request->c);
 
+  result = stormfs_curl_easy_perform(request->c);
   rewind(f);
-  free_request(request);
 
   return result;
 }
@@ -631,15 +605,6 @@ stormfs_curl_put(HTTP_REQUEST *request)
   curl_easy_setopt(request->c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
   return stormfs_curl_easy_perform(request->c);
-}
-
-static int
-stormfs_curl_set_auth(const char *access_key, const char *secret_key)
-{
-  curl.access_key = access_key;
-  curl.secret_key = secret_key;
-
-  return 0;
 }
 
 static int
@@ -694,11 +659,9 @@ int
 stormfs_curl_init(struct stormfs *stormfs)
 {
   CURLcode result;
-  curl.url = stormfs->virtual_url;
-  curl.bucket = stormfs->bucket;
+  curl.url    = stormfs->virtual_url;
   curl.verify_ssl = 1;
 
-  stormfs_curl_set_auth(stormfs->access_key, stormfs->secret_key);
   stormfs_curl_verify_ssl(stormfs->verify_ssl);
 
   if((result = curl_global_init(CURL_GLOBAL_ALL)) != CURLE_OK)

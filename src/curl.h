@@ -66,7 +66,6 @@ GList *add_header(GList *headers, HTTP_HEADER *h);
 GList *strip_header(GList *headers, const char *key);
 void free_header(HTTP_HEADER *h);
 void free_headers(GList *headers);
-GList *stat_to_headers(GList *headers, struct stat *st);
 
 size_t read_callback(void *ptr, size_t size, size_t nmemb, void *userp);
 size_t write_memory_cb(void *ptr, size_t size, size_t nmemb, void *data);
@@ -75,10 +74,10 @@ CURL *get_pooled_handle(const char *url);
 void release_pooled_handle(CURL *c);
 int stormfs_curl_easy_perform(CURL *c);
 
-int stormfs_curl_delete(const char *path);
+int stormfs_curl_delete(HTTP_REQUEST *request);
 void stormfs_curl_destroy();
 int stormfs_curl_get(const char *path, char **data);
-int stormfs_curl_get_file(const char *path, FILE *f);
+int stormfs_curl_get_file(HTTP_REQUEST *request, FILE *f);
 int stormfs_curl_head(HTTP_REQUEST *request);
 int stormfs_curl_init(struct stormfs *stormfs);
 int stormfs_curl_put(HTTP_REQUEST *request);

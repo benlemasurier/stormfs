@@ -30,6 +30,8 @@
 #define MAX_REQUESTS    100
 
 struct s3_curl {
+  const char *access_key;
+  const char *secret_key;
   struct stormfs *stormfs;
 } s3_curl;
 
@@ -627,10 +629,10 @@ sign_request(const char *method,
     exit(EXIT_FAILURE);
   }
 
-  signature = hmac_sha1(s3_curl.stormfs->secret_key, to_sign);
+  signature = hmac_sha1(s3_curl.secret_key, to_sign);
 
   if(asprintf(&authorization, "Authorization: AWS %s:%s",
-      s3_curl.stormfs->access_key, signature) == -1) {
+      s3_curl.access_key, signature) == -1) {
     fprintf(stderr, "unable to allocate memory\n");
     exit(EXIT_FAILURE);
   }
@@ -658,6 +660,8 @@ int
 s3_curl_init(struct stormfs *stormfs)
 {
   s3_curl.stormfs = stormfs;
+  s3_curl.access_key = stormfs->access_key;
+  s3_curl.secret_key = stormfs->secret_key;
 
   return stormfs_curl_init(stormfs);
 }
@@ -1291,6 +1295,32 @@ s3_curl_head_multi(const char *path, GList *files)
   g_free(requests);
 
   return 0;
+}
+
+int
+s3_curl_delete(const char *path)
+{
+  int result;
+  HTTP_REQUEST *request = new_request(path);
+  sign_request("DELETE", &request->headers, request->path);
+
+  result = stormfs_curl_delete(request);
+
+  free_request(request);
+  return result;
+}
+
+int
+s3_curl_get_file(const char *path, FILE *f)
+{
+  int result;
+  HTTP_REQUEST *request = new_request(path);
+
+  sign_request("GET", &request->headers, path);
+  result = stormfs_curl_get_file(request, f);
+  free_request(request);
+
+  return result;
 }
 
 int

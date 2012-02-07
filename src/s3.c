@@ -31,6 +31,19 @@ struct s3 {
 } s3;
 
 static GList *
+stat_to_headers(GList *headers, struct stat *st)
+{
+  headers = add_header(headers, gid_header(st->st_gid));
+  headers = add_header(headers, uid_header(st->st_uid));
+  headers = add_header(headers, mode_header(st->st_mode));
+  headers = add_header(headers, ctime_header(st->st_ctime));
+  headers = add_header(headers, mtime_header(st->st_mtime));
+  headers = add_header(headers, rdev_header(st->st_rdev));
+
+  return headers;
+}
+
+static GList *
 add_optional_headers(GList *headers)
 {
   headers = add_header(headers, storage_header(s3.stormfs->storage_class));
@@ -249,7 +262,7 @@ s3_mknod(const char *path, struct stat *st)
 int
 s3_open(const char *path, FILE *f)
 {
-  return stormfs_curl_get_file(path, f);
+  return s3_curl_get_file(path, f);
 }
 
 int
@@ -394,7 +407,7 @@ s3_rmdir(const char *path)
   if(result != 0)
     return result;
 
-  return stormfs_curl_delete(path);
+  return s3_curl_delete(path);
 }
 
 int
@@ -426,7 +439,7 @@ s3_symlink(const char *from, const char *to, struct stat *st)
 int
 s3_unlink(const char *path)
 {
-  return stormfs_curl_delete(path);
+  return s3_curl_delete(path);
 }
 
 int
