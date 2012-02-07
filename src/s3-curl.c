@@ -27,6 +27,7 @@
 
 #define SHA1_BLOCK_SIZE 64
 #define SHA1_LENGTH     20
+#define MAX_REQUESTS    100
 
 struct s3_curl {
   struct stormfs *stormfs;
@@ -359,7 +360,7 @@ get_url(const char *path)
   char *url;
   char *encoded_path = url_encode((char *) path);
 
-  if(asprintf(&url, "%s%s?delimiter=/", s3_curl.stormfs->url, encoded_path) == -1) {
+  if(asprintf(&url, "%s%s?delimiter=/", s3_curl.stormfs->virtual_url, encoded_path) == -1) {
     fprintf(stderr, "unable to allocate memory\n");
     exit(EXIT_FAILURE);
   }
@@ -374,7 +375,7 @@ get_multipart_url(const char *path)
   char *url;
   char *encoded_path = url_encode((char *) path);
 
-  if(asprintf(&url, "%s%s?uploads", s3_curl.stormfs->url, encoded_path) == -1) {
+  if(asprintf(&url, "%s%s?uploads", s3_curl.stormfs->virtual_url, encoded_path) == -1) {
     fprintf(stderr, "unable to allocate memory\n");
     exit(EXIT_FAILURE);
   }
@@ -390,7 +391,7 @@ get_upload_part_url(const char *path, FILE_PART *fp)
   char *encoded_path = url_encode((char *) path);
 
   if(asprintf(&url, "%s%s?partNumber=%d&uploadId=%s",
-      s3_curl.stormfs->url, encoded_path, fp->part_num, fp->upload_id) == -1) {
+      s3_curl.stormfs->virtual_url, encoded_path, fp->part_num, fp->upload_id) == -1) {
     fprintf(stderr, "unable to allocate memory\n");
     exit(EXIT_FAILURE);
   }
@@ -406,7 +407,7 @@ get_complete_multipart_url(const char *path, char *upload_id)
   char *encoded_path = url_encode((char *) path);
 
   if(asprintf(&url, "%s%s?uploadId=%s",
-      s3_curl.stormfs->url, encoded_path, upload_id) == -1) {
+      s3_curl.stormfs->virtual_url, encoded_path, upload_id) == -1) {
     fprintf(stderr, "unable to allocate memory\n");
     exit(EXIT_FAILURE);
   }
@@ -424,10 +425,10 @@ get_list_bucket_url(const char *path, const char *next_marker)
 
   if(strlen(path) > 1)
     result = asprintf(&url, "%s?delimiter=/&marker=%s&prefix=%s/",
-        s3_curl.stormfs->url, next_marker, encoded_path + 1);
+        s3_curl.stormfs->virtual_url, next_marker, encoded_path + 1);
   else
     result = asprintf(&url, "%s?delimiter=/&marker=%s&prefix=",
-        s3_curl.stormfs->url, next_marker);
+        s3_curl.stormfs->virtual_url, next_marker);
 
   if(result == -1) {
     fprintf(stderr, "unable to allocate memory\n");
@@ -625,6 +626,10 @@ sign_request(const char *method,
     fprintf(stderr, "unable to allocate memory\n");
     exit(EXIT_FAILURE);
   }
+
+  printf("----------------------------------TO SIGN:\n");
+  printf("%s\n", to_sign);
+  printf("----------------------------------\n");
 
   signature = hmac_sha1(s3_curl.stormfs->secret_key, to_sign);
 
@@ -1154,4 +1159,140 @@ free_parts(GList *parts)
 {
   g_list_foreach(parts, (GFunc) free_part, NULL);
   g_list_free(parts);
+}
+
+int
+s3_curl_head_multi(const char *path, GList *files)
+{
+  int running_handles;
+  size_t i, n_running, last_req_idx = 0;
+  size_t n_files = g_list_length(files);
+  HTTP_REQUEST *requests = g_new0(HTTP_REQUEST, n_files);
+  GList *head = NULL, *next = NULL;
+  CURLM *multi = get_multi_handle();
+
+  i = 0;
+  n_running = 0;
+  head = g_list_first(files);
+  while(head != NULL) {
+    next = head->next;
+    struct file *f = head->data;
+
+    CURLMcode err;
+    requests[i].headers = NULL;
+    requests[i].response.memory = g_malloc0(1);
+    requests[i].response.size = 0;
+    requests[i].path = get_path(path, f->name);
+    requests[i].done = false;
+
+    if(n_running < MAX_REQUESTS && n_running < n_files) {
+      char *url = get_url(requests[i].path);
+      requests[i].c = get_pooled_handle(url);
+      sign_request("HEAD", &requests[i].headers, requests[i].path);
+      curl_easy_setopt(requests[i].c, CURLOPT_NOBODY, 1L);    // HEAD
+      curl_easy_setopt(requests[i].c, CURLOPT_FILETIME, 1L);  // Last-Modified
+      curl_easy_setopt(requests[i].c, CURLOPT_HTTPHEADER, requests[i].headers);
+      curl_easy_setopt(requests[i].c, CURLOPT_HEADERDATA, (void *) &requests[i].response);
+      curl_easy_setopt(requests[i].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+      g_free(url);
+
+      if((err = curl_multi_add_handle(multi, requests[i].c)) != CURLM_OK)
+        return -EIO;
+
+      n_running++;
+      last_req_idx = i;
+    }
+
+    i++;
+    head = next;
+  }
+
+  curl_multi_perform(multi, &running_handles);
+  while(running_handles) {
+    if(running_handles) {
+      int max_fd = -1;
+      long curl_timeout = -1;
+      struct timeval timeout;
+      CURLMcode err;
+
+      fd_set fd_r;
+      fd_set fd_w;
+      fd_set fd_e;
+      FD_ZERO(&fd_r);
+      FD_ZERO(&fd_w);
+      FD_ZERO(&fd_e);
+      timeout.tv_sec  = 1;
+      timeout.tv_usec = 0;
+
+      curl_multi_timeout(multi, &curl_timeout);
+      if(curl_timeout >= 0) {
+        timeout.tv_sec = curl_timeout / 1000;
+        if(timeout.tv_sec > 1)
+          timeout.tv_sec = 1;
+        else
+          timeout.tv_usec = (curl_timeout % 1000) * 1000;
+      }
+
+      err = curl_multi_fdset(multi, &fd_r, &fd_w, &fd_e, &max_fd);
+      if(err != CURLM_OK)
+        return -EIO;
+
+      if(select(max_fd + 1, &fd_r, &fd_w, &fd_e, &timeout) == -1)
+        return -errno;
+    }
+
+    curl_multi_perform(multi, &running_handles);
+
+    CURLMsg *msg;
+    int remaining;
+    while((msg = curl_multi_info_read(multi, &remaining))) {
+      if(msg->msg != CURLMSG_DONE)
+        continue;
+
+      for(i = 0; i < n_files; i++) {
+        // requests *might* share the same handle out of the pool,
+        // make sure the request hasn't also been marked as completed
+        if(msg->easy_handle == requests[i].c && !requests[i].done)
+          break;
+      }
+
+      struct file *f = g_list_nth_data(files, i);
+      extract_meta(requests[i].response.memory, &(f->headers));
+      g_free(requests[i].response.memory);
+      curl_slist_free_all(requests[i].headers);
+      curl_multi_remove_handle(multi, requests[i].c);
+      release_pooled_handle(requests[i].c);
+      requests[i].done = true;
+      n_running--;
+
+      if(n_running < MAX_REQUESTS && last_req_idx < (n_files - 1)) {
+        CURLMcode err;
+        last_req_idx++;;
+
+        char *url = get_url(requests[last_req_idx].path);
+        requests[last_req_idx].c = get_pooled_handle(url);
+        sign_request("HEAD", &requests[last_req_idx].headers, requests[last_req_idx].path);
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_NOBODY, 1L);    // HEAD
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_FILETIME, 1L);  // Last-Modified
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HTTPHEADER, requests[last_req_idx].headers);
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HEADERDATA, (void *) &requests[last_req_idx].response);
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+        g_free(url);
+
+        if((err = curl_multi_add_handle(multi, requests[last_req_idx].c)) != CURLM_OK)
+          return -EIO;
+
+        n_running++;
+      }
+    }
+  }
+
+  for(i = 0; i < n_files; i++) {
+    if(requests[i].c != NULL)
+      release_pooled_handle(requests[i].c);
+    g_free(requests[i].path);
+  }
+  g_free(requests);
+
+  return 0;
 }

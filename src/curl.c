@@ -32,7 +32,6 @@
 #include "s3-curl.h" // fixme: temp.
 
 #define CURL_RETRIES 3
-#define MAX_REQUESTS 100
 #define POOL_SIZE 100
 
 static pthread_mutex_t lock        = PTHREAD_MUTEX_INITIALIZER;
@@ -262,6 +261,12 @@ rfc2822_timestamp(void)
   return date;
 }
 
+CURLM *
+get_multi_handle(void)
+{
+  return curl.multi;
+}
+
 static int
 http_response_errno(CURLcode response_code, CURL *handle)
 {
@@ -353,7 +358,7 @@ set_curl_defaults(CURL *c)
   curl_easy_setopt(c, CURLOPT_SHARE, curl.share);
 
   // curl_easy_setopt(c, CURLOPT_TCP_NODELAY, 1);
-  // curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
+   curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
   // curl_easy_setopt(c, CURLOPT_FORBID_REUSE, 1);
 
   return 0;
@@ -415,7 +420,7 @@ destroy_curl_handle(CURL *c)
   return 0;
 }
 
-CURL_HANDLE *
+static CURL_HANDLE *
 create_pooled_handle(const char *url)
 {
   CURL_HANDLE *ch = g_new0(CURL_HANDLE, 1);
@@ -617,141 +622,6 @@ stormfs_curl_head(const char *path, GList **headers)
   free_request(request);
 
   return result;
-}
-
-int
-stormfs_curl_head_multi(const char *path, GList *files)
-{
-  int running_handles;
-  size_t i, n_running, last_req_idx = 0;
-  size_t n_files = g_list_length(files);
-  HTTP_REQUEST *requests = g_new0(HTTP_REQUEST, n_files);
-  GList *head = NULL, *next = NULL;
-
-  i = 0;
-  n_running = 0;
-  head = g_list_first(files);
-  while(head != NULL) {
-    next = head->next;
-    struct file *f = head->data;
-
-    CURLMcode err;
-    requests[i].headers = NULL;
-    requests[i].response.memory = g_malloc0(1);
-    requests[i].response.size = 0;
-    requests[i].path = get_path(path, f->name);
-    requests[i].done = false;
-
-    if(n_running < MAX_REQUESTS && n_running < n_files) {
-      char *url = get_url(requests[i].path);
-      requests[i].c = get_pooled_handle(url);
-      sign_request("HEAD", &requests[i].headers, requests[i].path);
-      curl_easy_setopt(requests[i].c, CURLOPT_NOBODY, 1L);    // HEAD
-      curl_easy_setopt(requests[i].c, CURLOPT_FILETIME, 1L);  // Last-Modified
-      curl_easy_setopt(requests[i].c, CURLOPT_HTTPHEADER, requests[i].headers);
-      curl_easy_setopt(requests[i].c, CURLOPT_HEADERDATA, (void *) &requests[i].response);
-      curl_easy_setopt(requests[i].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
-      g_free(url);
-
-      if((err = curl_multi_add_handle(curl.multi, requests[i].c)) != CURLM_OK)
-        return -EIO;
-
-      n_running++;
-      last_req_idx = i;
-    }
-
-    i++;
-    head = next;
-  }
-
-  curl_multi_perform(curl.multi, &running_handles);
-  while(running_handles) {
-    if(running_handles) {
-      int max_fd = -1;
-      long curl_timeout = -1;
-      struct timeval timeout;
-      CURLMcode err;
-
-      fd_set fd_r;
-      fd_set fd_w;
-      fd_set fd_e;
-      FD_ZERO(&fd_r);
-      FD_ZERO(&fd_w);
-      FD_ZERO(&fd_e);
-      timeout.tv_sec  = 1;
-      timeout.tv_usec = 0;
-
-      curl_multi_timeout(curl.multi, &curl_timeout);
-      if(curl_timeout >= 0) {
-        timeout.tv_sec = curl_timeout / 1000;
-        if(timeout.tv_sec > 1)
-          timeout.tv_sec = 1;
-        else
-          timeout.tv_usec = (curl_timeout % 1000) * 1000;
-      }
-
-      err = curl_multi_fdset(curl.multi, &fd_r, &fd_w, &fd_e, &max_fd);
-      if(err != CURLM_OK)
-        return -EIO;
-
-      if(select(max_fd + 1, &fd_r, &fd_w, &fd_e, &timeout) == -1)
-        return -errno;
-    }
-
-    curl_multi_perform(curl.multi, &running_handles);
-
-    CURLMsg *msg;
-    int remaining;
-    while((msg = curl_multi_info_read(curl.multi, &remaining))) {
-      if(msg->msg != CURLMSG_DONE)
-        continue;
-
-      for(i = 0; i < n_files; i++) {
-        // requests *might* share the same handle out of the pool,
-        // make sure the request hasn't also been marked as completed
-        if(msg->easy_handle == requests[i].c && !requests[i].done)
-          break;
-      }
-
-      struct file *f = g_list_nth_data(files, i);
-      extract_meta(requests[i].response.memory, &(f->headers));
-      g_free(requests[i].response.memory);
-      curl_slist_free_all(requests[i].headers);
-      curl_multi_remove_handle(curl.multi, requests[i].c);
-      release_pooled_handle(requests[i].c);
-      requests[i].done = true;
-      n_running--;
-
-      if(n_running < MAX_REQUESTS && last_req_idx < (n_files - 1)) {
-        CURLMcode err;
-        last_req_idx++;;
-
-        char *url = get_url(requests[last_req_idx].path);
-        requests[last_req_idx].c = get_pooled_handle(url);
-        sign_request("HEAD", &requests[last_req_idx].headers, requests[last_req_idx].path);
-        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_NOBODY, 1L);    // HEAD
-        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_FILETIME, 1L);  // Last-Modified
-        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HTTPHEADER, requests[last_req_idx].headers);
-        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HEADERDATA, (void *) &requests[last_req_idx].response);
-        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
-        g_free(url);
-
-        if((err = curl_multi_add_handle(curl.multi, requests[last_req_idx].c)) != CURLM_OK)
-          return -EIO;
-
-        n_running++;
-      }
-    }
-  }
-
-  for(i = 0; i < n_files; i++) {
-    if(requests[i].c != NULL)
-      release_pooled_handle(requests[i].c);
-    g_free(requests[i].path);
-  }
-  g_free(requests);
-
-  return 0;
 }
 
 int

@@ -72,5 +72,6 @@ int headers_to_stat(GList *headers, struct stat *stbuf);
 void s3_curl_destroy(void);
 int  s3_curl_init(struct stormfs *stormfs);
 int  s3_curl_list_bucket(const char *path, char **xml);
+int  s3_curl_head_multi(const char *path, GList *files);
 
 #endif // s3_curl_H

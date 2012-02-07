@@ -118,7 +118,7 @@ s3_getattr_multi(const char *path, GList *files)
 {
   int result;
   GList *head = NULL, *next = NULL;
-  result = stormfs_curl_head_multi(path, files);
+  result = s3_curl_head_multi(path, files);
 
   head = g_list_first(files);
   while(head != NULL) {
