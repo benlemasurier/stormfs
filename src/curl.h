@@ -78,7 +78,7 @@ int stormfs_curl_delete(const char *path);
 void stormfs_curl_destroy();
 int stormfs_curl_get(const char *path, char **data);
 int stormfs_curl_get_file(const char *path, FILE *f);
-int stormfs_curl_head(const char *path, GList **meta);
+int stormfs_curl_head(HTTP_REQUEST *request);
 int stormfs_curl_init(struct stormfs *stormfs);
 int stormfs_curl_put(const char *path, GList *headers);
 int stormfs_curl_rename(const char *from, const char *to);

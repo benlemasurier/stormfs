@@ -101,14 +101,23 @@ s3_getattr(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
+  HTTP_REQUEST *request;
 
-  if((result = stormfs_curl_head(path, &headers)) != 0)
+  request = new_request(path);
+  sign_request("HEAD", &request->headers, request->path);
+
+  if((result = stormfs_curl_head(request)) != 0) {
+    free_request(request);
     return result;
+  }
+
+  extract_meta(request->response.memory, &headers);
 
   if((result = headers_to_stat(headers, st)) != 0)
     return result;
 
   free_headers(headers);
+  free_request(request);
 
   return result;
 }

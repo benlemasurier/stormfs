@@ -358,7 +358,7 @@ set_curl_defaults(CURL *c)
   curl_easy_setopt(c, CURLOPT_SHARE, curl.share);
 
   // curl_easy_setopt(c, CURLOPT_TCP_NODELAY, 1);
-   curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
+  // curl_easy_setopt(c, CURLOPT_VERBOSE, 1L);
   // curl_easy_setopt(c, CURLOPT_FORBID_REUSE, 1);
 
   return 0;
@@ -605,23 +605,15 @@ stormfs_curl_get_file(const char *path, FILE *f)
 }
 
 int
-stormfs_curl_head(const char *path, GList **headers)
+stormfs_curl_head(HTTP_REQUEST *request)
 {
-  int result;
-  HTTP_REQUEST *request = new_request(path);
-
-  sign_request("HEAD", &request->headers, request->path);
   curl_easy_setopt(request->c, CURLOPT_NOBODY, 1L);    // HEAD
   curl_easy_setopt(request->c, CURLOPT_FILETIME, 1L);  // Last-Modified
   curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
   curl_easy_setopt(request->c, CURLOPT_HEADERDATA, (void *) &request->response);
   curl_easy_setopt(request->c, CURLOPT_HEADERFUNCTION, write_memory_cb);
-  result = stormfs_curl_easy_perform(request->c);
 
-  extract_meta(request->response.memory, &(*headers));
-  free_request(request);
-
-  return result;
+  return stormfs_curl_easy_perform(request->c);
 }
 
 int
