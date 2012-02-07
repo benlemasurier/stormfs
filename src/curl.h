@@ -14,6 +14,7 @@
 #define stormfs_curl_H
 
 #define FIVE_GB 5368709120LL
+#define DEFAULT_MIME_TYPE   "application/octet-stream"
 
 typedef struct {
   char *key;
@@ -49,21 +50,6 @@ char *time_to_s(time_t t);
 char *uid_to_s(uid_t uid);
 char *url_encode(char *s);
 
-HTTP_HEADER *acl_header(const char *acl);
-HTTP_HEADER *content_header(const char *type);
-HTTP_HEADER *copy_source_header(const char *path);
-HTTP_HEADER *copy_source_range_header(off_t first, off_t last);
-HTTP_HEADER *copy_meta_header();
-HTTP_HEADER *ctime_header(time_t t);
-HTTP_HEADER *expires_header(const char *expires);
-HTTP_HEADER *encryption_header(void);
-HTTP_HEADER *gid_header(gid_t gid);
-HTTP_HEADER *rdev_header(dev_t dev);
-HTTP_HEADER *uid_header(uid_t uid);
-HTTP_HEADER *mode_header(mode_t mode);
-HTTP_HEADER *mtime_header(time_t t);
-HTTP_HEADER *replace_header();
-HTTP_HEADER *storage_header(const char *class);
 GList *add_header(GList *headers, HTTP_HEADER *h);
 GList *strip_header(GList *headers, const char *key);
 void free_header(HTTP_HEADER *h);
