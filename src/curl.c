@@ -357,7 +357,7 @@ read_callback(void *ptr, size_t size, size_t nmemb, void *userp)
     return 0;
 
   if(pd->remaining) {
-    *(char *)ptr = pd->readptr[0];
+    *(char *) ptr = pd->readptr[0];
     pd->readptr++;
     pd->remaining--;
     return 1;
@@ -386,12 +386,11 @@ write_memory_cb(void *ptr, size_t size, size_t nmemb, void *data)
 }
 
 static CURL *
-get_curl_handle(const char *url)
+create_curl_handle(void)
 {
   CURL *c;
   c = curl_easy_init();
   set_curl_defaults(c);
-  curl_easy_setopt(c, CURLOPT_URL, url);
 
   return c;
 }
@@ -405,10 +404,10 @@ destroy_curl_handle(CURL *c)
 }
 
 static CURL_HANDLE *
-create_pooled_handle(const char *url)
+create_pooled_handle(void)
 {
   CURL_HANDLE *ch = g_new0(CURL_HANDLE, 1);
-  ch->c = get_curl_handle(url);
+  ch->c = create_curl_handle();
   ch->in_use = false;
 
   return ch;
@@ -437,7 +436,7 @@ pool_init(void)
 {
   curl.pool_full = false;
   for(uint8_t i = 0; i < POOL_SIZE; i++)
-    curl.pool = g_list_append(curl.pool, create_pooled_handle(curl.url));
+    curl.pool = g_list_append(curl.pool, create_pooled_handle());
 
   return 0;
 }
@@ -480,7 +479,7 @@ get_pooled_handle(const char *url)
   pthread_mutex_unlock(&lock);
 
   // no handles available in the pool, create a new one.
-  return get_curl_handle(url);
+  return create_curl_handle();
 }
 
 void
