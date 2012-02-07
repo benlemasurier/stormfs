@@ -101,23 +101,14 @@ s3_getattr(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
-  HTTP_REQUEST *request;
 
-  request = new_request(path);
-  sign_request("HEAD", &request->headers, request->path);
-
-  if((result = stormfs_curl_head(request)) != 0) {
-    free_request(request);
+  if((result = s3_curl_head(path, &headers)) != 0) {
+    free_headers(headers);
     return result;
   }
 
-  extract_meta(request->response.memory, &headers);
-
-  if((result = headers_to_stat(headers, st)) != 0)
-    return result;
-
+  result = headers_to_stat(headers, st);
   free_headers(headers);
-  free_request(request);
 
   return result;
 }
@@ -153,18 +144,14 @@ s3_chmod(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
-  HTTP_REQUEST *request = new_request(path);
 
   headers = stat_to_headers(headers, st);
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
-  request->headers = headers_to_curl_slist(headers);
-  sign_request("PUT", &request->headers, request->path);
 
-  result = stormfs_curl_put(request);
+  result = s3_curl_put(path, headers);
 
   free_headers(headers);
-  free_request(request);
 
   return result;
 }
@@ -174,18 +161,14 @@ s3_chown(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
-  HTTP_REQUEST *request = new_request(path);
 
   headers = stat_to_headers(headers, st);
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
-  request->headers = headers_to_curl_slist(headers);
-  sign_request("PUT", &request->headers, request->path);
 
-  result = stormfs_curl_put(request);
+  result = s3_curl_put(path, headers);
 
   free_headers(headers);
-  free_request(request);
 
   return result;
 }
@@ -195,18 +178,14 @@ s3_create(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
-  HTTP_REQUEST *request = new_request(path);
 
   headers = stat_to_headers(headers, st);
   headers = add_header(headers, content_header(get_mime_type(path)));
   headers = add_optional_headers(headers);
-  request->headers = headers_to_curl_slist(headers);
-  sign_request("PUT", &request->headers, request->path);
 
-  result = stormfs_curl_put(request);
+  result = s3_curl_put(path, headers);
 
   free_headers(headers);
-  free_request(request);
 
   return result;
 }
@@ -242,7 +221,7 @@ s3_mkdir(const char *path, struct stat *st)
   headers = add_header(headers, content_header("application/x-directory"));
   headers = add_optional_headers(headers);
 
-  result = stormfs_curl_upload(path, headers, fd);
+  result = s3_curl_upload(path, headers, fd);
   free_headers(headers);
 
   if(close(fd) != 0)
@@ -256,17 +235,13 @@ s3_mknod(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
-  HTTP_REQUEST *request = new_request(path);
 
   headers = stat_to_headers(headers, st);
   headers = add_optional_headers(headers);
-  request->headers = headers_to_curl_slist(headers);
-  sign_request("PUT", &request->headers, request->path);
 
-  result = stormfs_curl_put(request);
+  result = s3_curl_put(path, headers);
 
   free_headers(headers);
-  free_request(request);
 
   return result;
 }
@@ -305,7 +280,7 @@ s3_release(const char *path, int fd, struct stat *st)
   headers = add_header(headers, mtime_header(time(NULL)));
   headers = add_optional_headers(headers);
 
-  result = stormfs_curl_upload(path, headers, fd);
+  result = s3_curl_upload(path, headers, fd);
 
   free_headers(headers);
 
@@ -317,26 +292,21 @@ s3_rename_file(const char *from, const char *to, struct stat *st)
 {
   int result;
   GList *headers = NULL;
-  HTTP_REQUEST *request = NULL;
 
   headers = stat_to_headers(headers, st);
 
   /* files >= 5GB must be renamed via the multipart interface */
   if(st->st_size < FIVE_GB) {
-    request = new_request(to);
     headers = add_header(headers, copy_meta_header());
     headers = add_header(headers, copy_source_header(from));
-    request->headers = headers_to_curl_slist(headers);
-    sign_request("PUT", &request->headers, request->path);
 
-    result = stormfs_curl_put(request);
+    result = s3_curl_put(to, headers);
   } else {
     headers = add_header(headers, content_header(get_mime_type(from)));
     result  = copy_multipart(from, to, headers, st->st_size);
   }
 
   free_headers(headers);
-  free_request(request);
 
   return stormfs_unlink(from);
 }
@@ -444,7 +414,7 @@ s3_symlink(const char *from, const char *to, struct stat *st)
   headers = add_header(headers, mode_header(st->st_mode));
   headers = add_header(headers, mtime_header(st->st_mtime));
 
-  result = stormfs_curl_upload(to, headers, fd);
+  result = s3_curl_upload(to, headers, fd);
 
   free_headers(headers);
   if(close(fd) != 0)
@@ -464,18 +434,14 @@ s3_utimens(const char *path, struct stat *st)
 {
   int result;
   GList *headers = NULL;
-  HTTP_REQUEST *request = new_request(path);
 
   headers = stat_to_headers(headers, st);
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
-  request->headers = headers_to_curl_slist(headers);
-  sign_request("PUT", &request->headers, request->path);
 
-  result = stormfs_curl_put(request);
+  result = s3_curl_put(path, headers);
 
   free_headers(headers);
-  free_request(request);
 
   return result;
 }

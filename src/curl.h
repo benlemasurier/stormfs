@@ -30,6 +30,7 @@ typedef struct {
   CURL *c;
   char *url;
   char *path;
+  off_t size;
   bool done;
   HTTP_RESPONSE response;
   struct curl_slist *headers;
@@ -82,7 +83,6 @@ int stormfs_curl_head(HTTP_REQUEST *request);
 int stormfs_curl_init(struct stormfs *stormfs);
 int stormfs_curl_put(HTTP_REQUEST *request);
 int stormfs_curl_rename(const char *from, const char *to);
-int stormfs_curl_upload(const char *path, GList *headers, int fd);
 int copy_multipart(const char *from, const char *to, GList *headers, off_t size);
 
 #endif // stormfs_curl_H

@@ -533,6 +533,7 @@ new_request(const char *path)
   request->done = false;
   request->path = strdup(path);
   request->url = get_url(path);
+  request->size = 0;
   request->c = get_pooled_handle(request->url);
   request->response.memory = g_malloc0(1);
   request->response.size = 0;
@@ -620,54 +621,11 @@ stormfs_curl_head(HTTP_REQUEST *request)
 }
 
 int
-stormfs_curl_upload(const char *path, GList *headers, int fd)
-{
-  FILE *f;
-  int result;
-  struct stat st;
-  HTTP_REQUEST *request;
-
-  if(fstat(fd, &st) != 0) {
-    perror("fstat");
-    return -errno;
-  }
-
-  if(st.st_size >= MAX_FILE_SIZE)
-    return -EFBIG;
-
-  if(st.st_size >= MULTIPART_MIN)
-    return upload_multipart(path, headers, fd);
-
-  if(lseek(fd, 0, SEEK_SET) == -1) {
-    perror("lseek");
-    return -errno;
-  }
-
-  if((f = fdopen(fd, "rb")) == NULL) {
-    perror("fdopen");
-    return -errno;
-  }
-
-  request = new_request(path);
-  request->headers = headers_to_curl_slist(headers);
-
-  sign_request("PUT", &request->headers, request->path);
-  curl_easy_setopt(request->c, CURLOPT_INFILE, f);
-  curl_easy_setopt(request->c, CURLOPT_UPLOAD, 1L);
-  curl_easy_setopt(request->c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) st.st_size);
-  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
-  result = stormfs_curl_easy_perform(request->c);
-
-  free_request(request);
-
-  return result;
-}
-
-int
 stormfs_curl_put(HTTP_REQUEST *request)
 {
-  curl_easy_setopt(request->c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
-  curl_easy_setopt(request->c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
+  curl_easy_setopt(request->c, CURLOPT_UPLOAD, 1L); // HTTP PUT
+  curl_easy_setopt(request->c, CURLOPT_INFILESIZE, 0);
+  curl_easy_setopt(request->c, CURLOPT_INFILESIZE_LARGE, (curl_off_t) request->size); // Content-Length
   curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
   curl_easy_setopt(request->c, CURLOPT_WRITEDATA, (void *) &request->response);
   curl_easy_setopt(request->c, CURLOPT_WRITEFUNCTION, write_memory_cb);

@@ -1292,3 +1292,77 @@ s3_curl_head_multi(const char *path, GList *files)
 
   return 0;
 }
+
+int
+s3_curl_head(const char *path, GList **headers)
+{
+  int result;
+  HTTP_REQUEST *request = new_request(path);
+
+  request->headers = headers_to_curl_slist(*headers);
+  sign_request("HEAD", &request->headers, request->path);
+
+  result = stormfs_curl_head(request);
+
+  extract_meta(request->response.memory, headers);
+  free_request(request);
+
+  return result;
+}
+
+int
+s3_curl_put(const char *path, GList *headers)
+{
+  int result;
+  HTTP_REQUEST *request = new_request(path);
+
+  request->headers = headers_to_curl_slist(headers);
+  sign_request("PUT", &request->headers, request->path);
+
+  result = stormfs_curl_put(request);
+  free_request(request);
+
+  return result;
+}
+
+int
+s3_curl_upload(const char *path, GList *headers, int fd)
+{
+  int result;
+  FILE *f;
+  struct stat st;
+  HTTP_REQUEST *request;
+
+  if(fstat(fd, &st) != 0) {
+    perror("fstat");
+    return -errno;
+  }
+
+  if(st.st_size >= MAX_FILE_SIZE)
+    return -EFBIG;
+
+  if(st.st_size >= MULTIPART_MIN)
+    return upload_multipart(path, headers, fd);
+
+  if(lseek(fd, 0, SEEK_SET) == -1) {
+    perror("lseek");
+    return -errno;
+  }
+
+  if((f = fdopen(fd, "rb")) == NULL) {
+    perror("fdopen");
+    return -errno;
+  }
+
+  request = new_request(path);
+  request->size = st.st_size;
+  request->headers = headers_to_curl_slist(headers);
+  sign_request("PUT", &request->headers, request->path);
+
+  curl_easy_setopt(request->c, CURLOPT_INFILE, f);
+
+  result = stormfs_curl_put(request);
+  free_request(request);
+
+  return result;
+}
