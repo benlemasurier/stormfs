@@ -666,7 +666,6 @@ stormfs_curl_upload(const char *path, GList *headers, int fd)
 int
 stormfs_curl_put(HTTP_REQUEST *request)
 {
-  sign_request("PUT", &request->headers, request->path);
   curl_easy_setopt(request->c, CURLOPT_UPLOAD, 1L);    // HTTP PUT
   curl_easy_setopt(request->c, CURLOPT_INFILESIZE, 0); // Content-Length: 0
   curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);

@@ -159,6 +159,7 @@ s3_chmod(const char *path, struct stat *st)
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
   request->headers = headers_to_curl_slist(headers);
+  sign_request("PUT", &request->headers, request->path);
 
   result = stormfs_curl_put(request);
 
@@ -179,6 +180,7 @@ s3_chown(const char *path, struct stat *st)
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
   request->headers = headers_to_curl_slist(headers);
+  sign_request("PUT", &request->headers, request->path);
 
   result = stormfs_curl_put(request);
 
@@ -199,6 +201,7 @@ s3_create(const char *path, struct stat *st)
   headers = add_header(headers, content_header(get_mime_type(path)));
   headers = add_optional_headers(headers);
   request->headers = headers_to_curl_slist(headers);
+  sign_request("PUT", &request->headers, request->path);
 
   result = stormfs_curl_put(request);
 
@@ -258,6 +261,7 @@ s3_mknod(const char *path, struct stat *st)
   headers = stat_to_headers(headers, st);
   headers = add_optional_headers(headers);
   request->headers = headers_to_curl_slist(headers);
+  sign_request("PUT", &request->headers, request->path);
 
   result = stormfs_curl_put(request);
 
@@ -323,6 +327,7 @@ s3_rename_file(const char *from, const char *to, struct stat *st)
     headers = add_header(headers, copy_meta_header());
     headers = add_header(headers, copy_source_header(from));
     request->headers = headers_to_curl_slist(headers);
+    sign_request("PUT", &request->headers, request->path);
 
     result = stormfs_curl_put(request);
   } else {
@@ -465,6 +470,7 @@ s3_utimens(const char *path, struct stat *st)
   headers = add_header(headers, replace_header());
   headers = add_header(headers, copy_source_header(path));
   request->headers = headers_to_curl_slist(headers);
+  sign_request("PUT", &request->headers, request->path);
 
   result = stormfs_curl_put(request);
 
