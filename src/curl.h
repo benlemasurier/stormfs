@@ -76,7 +76,7 @@ int stormfs_curl_easy_perform(CURL *c);
 
 int stormfs_curl_delete(HTTP_REQUEST *request);
 void stormfs_curl_destroy();
-int stormfs_curl_get(const char *path, char **data);
+int stormfs_curl_get(HTTP_REQUEST *request);
 int stormfs_curl_get_file(HTTP_REQUEST *request, FILE *f);
 int stormfs_curl_head(HTTP_REQUEST *request);
 int stormfs_curl_init(struct stormfs *stormfs);

@@ -29,7 +29,6 @@
 #include <glib.h>
 #include "stormfs.h"
 #include "curl.h"
-#include "s3-curl.h" // fixme: temp.
 
 #define CURL_RETRIES 3
 #define POOL_SIZE 100
@@ -39,7 +38,6 @@ static pthread_mutex_t shared_lock = PTHREAD_MUTEX_INITIALIZER;
 
 struct stormfs_curl {
   int verify_ssl;
-  const char *url;
   GList *pool;
   GList *marker;
   bool pool_full;
@@ -395,14 +393,6 @@ create_curl_handle(void)
   return c;
 }
 
-static int
-destroy_curl_handle(CURL *c)
-{
-  curl_easy_cleanup(c);
-
-  return 0;
-}
-
 static CURL_HANDLE *
 create_pooled_handle(void)
 {
@@ -411,6 +401,14 @@ create_pooled_handle(void)
   ch->in_use = false;
 
   return ch;
+}
+
+static int
+destroy_curl_handle(CURL *c)
+{
+  curl_easy_cleanup(c);
+
+  return 0;
 }
 
 static int
@@ -515,7 +513,6 @@ new_request(const char *path)
 
   request->done = false;
   request->path = strdup(path);
-  request->url = get_url(path);
   request->size = 0;
   request->c = get_pooled_handle(request->url);
   request->response.memory = g_malloc0(1);
@@ -550,21 +547,13 @@ stormfs_curl_delete(HTTP_REQUEST *request)
 }
 
 int
-stormfs_curl_get(const char *path, char **data)
+stormfs_curl_get(HTTP_REQUEST *request)
 {
-  int result;
-  HTTP_REQUEST *request = new_request(path);
-
-  sign_request("GET", &request->headers, request->path);
   curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
   curl_easy_setopt(request->c, CURLOPT_WRITEDATA, (void *) &request->response);
   curl_easy_setopt(request->c, CURLOPT_WRITEFUNCTION, write_memory_cb);
-  result = stormfs_curl_easy_perform(request->c);
 
-  *data = strdup(request->response.memory);
-  free_request(request);
-
-  return result;
+  return stormfs_curl_easy_perform(request->c);
 }
 
 int
@@ -658,7 +647,6 @@ int
 stormfs_curl_init(struct stormfs *stormfs)
 {
   CURLcode result;
-  curl.url    = stormfs->virtual_url;
   curl.verify_ssl = 1;
 
   stormfs_curl_verify_ssl(stormfs->verify_ssl);

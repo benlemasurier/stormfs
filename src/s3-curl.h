@@ -68,6 +68,7 @@ int upload_multipart(const char *path, GList *headers, int fd);
 void free_parts(GList *parts);
 void free_part(FILE_PART *fp);
 
+HTTP_REQUEST *s3_request(const char *path);
 int headers_to_stat(GList *headers, struct stat *stbuf);
 void s3_curl_destroy(void);
 int  s3_curl_delete(const char *path);

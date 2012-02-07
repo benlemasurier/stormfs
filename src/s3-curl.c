@@ -35,6 +35,16 @@ struct s3_curl {
   struct stormfs *stormfs;
 } s3_curl;
 
+HTTP_REQUEST *
+s3_request(const char *path)
+{
+  HTTP_REQUEST *request = new_request(path);
+  request->url = get_url(path);
+  request->c = get_pooled_handle(request->url);
+
+  return request;
+}
+
 HTTP_HEADER *
 acl_header(const char *acl)
 {
@@ -1301,7 +1311,7 @@ int
 s3_curl_delete(const char *path)
 {
   int result;
-  HTTP_REQUEST *request = new_request(path);
+  HTTP_REQUEST *request = s3_request(path);
   sign_request("DELETE", &request->headers, request->path);
 
   result = stormfs_curl_delete(request);
@@ -1314,7 +1324,7 @@ int
 s3_curl_get_file(const char *path, FILE *f)
 {
   int result;
-  HTTP_REQUEST *request = new_request(path);
+  HTTP_REQUEST *request = s3_request(path);
 
   sign_request("GET", &request->headers, path);
   result = stormfs_curl_get_file(request, f);
@@ -1327,7 +1337,7 @@ int
 s3_curl_head(const char *path, GList **headers)
 {
   int result;
-  HTTP_REQUEST *request = new_request(path);
+  HTTP_REQUEST *request = s3_request(path);
 
   request->headers = headers_to_curl_slist(*headers);
   sign_request("HEAD", &request->headers, request->path);
@@ -1344,7 +1354,7 @@ int
 s3_curl_put(const char *path, GList *headers)
 {
   int result;
-  HTTP_REQUEST *request = new_request(path);
+  HTTP_REQUEST *request = s3_request(path);
 
   request->headers = headers_to_curl_slist(headers);
   sign_request("PUT", &request->headers, request->path);
@@ -1384,7 +1394,7 @@ s3_curl_upload(const char *path, GList *headers, int fd)
     return -errno;
   }
 
-  request = new_request(path);
+  request = s3_request(path);
   request->size = st.st_size;
   request->headers = headers_to_curl_slist(headers);
   sign_request("PUT", &request->headers, request->path);
