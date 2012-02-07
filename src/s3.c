@@ -256,7 +256,7 @@ s3_readdir(const char *path, GList **files)
   int result;
   char *xml = NULL;
 
-  if((result = stormfs_curl_list_bucket(path, &xml)) != 0) {
+  if((result = s3_curl_list_bucket(path, &xml)) != 0) {
     free(xml);
     return -EIO;
   }
@@ -315,7 +315,7 @@ s3_rename_directory(const char *from, const char *to, struct stat *st)
   int result;
   char *xml = NULL, *start_p = NULL;
 
-  result = stormfs_curl_list_bucket(from, &xml);
+  result = s3_curl_list_bucket(from, &xml);
   if(result != 0) {
     free(xml);
     return -EIO;
@@ -380,7 +380,7 @@ s3_rmdir(const char *path)
   int result;
   char *xml = NULL;
 
-  if((result = stormfs_curl_list_bucket(path, &xml)) != 0) {
+  if((result = s3_curl_list_bucket(path, &xml)) != 0) {
     free(xml);
     return result;
   }
