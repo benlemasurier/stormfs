@@ -627,10 +627,6 @@ sign_request(const char *method,
     exit(EXIT_FAILURE);
   }
 
-  printf("----------------------------------TO SIGN:\n");
-  printf("%s\n", to_sign);
-  printf("----------------------------------\n");
-
   signature = hmac_sha1(s3_curl.stormfs->secret_key, to_sign);
 
   if(asprintf(&authorization, "Authorization: AWS %s:%s",
