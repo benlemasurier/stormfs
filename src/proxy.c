@@ -30,7 +30,7 @@ void
 proxy_destroy(void)
 {
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       s3_destroy();
       break;
   }
@@ -42,7 +42,7 @@ proxy_getattr(const char *path, struct stat *st)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_getattr(path, st);
       break;
     default:
@@ -58,7 +58,7 @@ proxy_getattr_multi(const char *path, GList *files)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_getattr_multi(path, files);
       break;
     default:
@@ -74,7 +74,7 @@ proxy_chmod(const char *path, struct stat *st)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_chmod(path, st);
       break;
     default:
@@ -90,7 +90,7 @@ proxy_chown(const char *path, struct stat *st)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_chown(path, st);
       break;
     default:
@@ -106,7 +106,7 @@ proxy_create(const char *path, struct stat *st)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_create(path, st);
       break;
     default:
@@ -124,11 +124,10 @@ proxy_init(struct stormfs *stormfs)
   proxy.stormfs = stormfs;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_init(proxy.stormfs);
       break;
     default:
-      printf("SFDSLJSLDFJSDFJ\n");
       result = -EINVAL;
   }
 
@@ -141,7 +140,7 @@ proxy_mkdir(const char *path, struct stat *st)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_mkdir(path, st);
       break;
     default:
@@ -157,7 +156,7 @@ proxy_mknod(const char *path, struct stat *st)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_mknod(path, st);
       break;
     default:
@@ -173,7 +172,7 @@ proxy_open(const char *path, FILE *f)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_open(path, f);
       break;
     default:
@@ -189,7 +188,7 @@ proxy_readdir(const char *path, GList **files)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_readdir(path, files);
       break;
     default:
@@ -205,7 +204,7 @@ proxy_release(const char *path, int fd, struct stat *st)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_release(path, fd, st);
       break;
     default:
@@ -221,7 +220,7 @@ proxy_rename(const char *from, const char *to, struct stat *st)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_rename(from, to, st);
       break;
     default:
@@ -237,7 +236,7 @@ proxy_rmdir(const char *path)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_rmdir(path);
       break;
     default:
@@ -253,7 +252,7 @@ proxy_symlink(const char *from, const char *to, struct stat *st)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_symlink(from, to, st);
       break;
     default:
@@ -269,7 +268,7 @@ proxy_unlink(const char *path)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_unlink(path);
       break;
     default:
@@ -285,7 +284,7 @@ proxy_utimens(const char *path, struct stat *st)
   int result;
 
   switch(proxy.stormfs->service) {
-    case AMAZON:
+    case S3:
       result = s3_utimens(path, st);
       break;
     default:

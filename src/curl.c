@@ -476,7 +476,7 @@ get_pooled_handle(const char *url)
 
   pthread_mutex_unlock(&lock);
 
-  // no handles available in the pool, create a new one.
+  /* no handles available in the pool, create a new one. */
   return create_curl_handle();
 }
 
@@ -514,7 +514,6 @@ new_request(const char *path)
   request->done = false;
   request->path = strdup(path);
   request->size = 0;
-  request->c = get_pooled_handle(request->url);
   request->response.memory = g_malloc0(1);
   request->response.size = 0;
 

@@ -12,7 +12,8 @@
 #define FIVE_GB 5368709120LL
 
 enum service {
-  AMAZON
+  S3,
+  CLOUDFILES
 };
 
 struct stormfs {
@@ -24,6 +25,7 @@ struct stormfs {
   int foreground;
   int verify_ssl;
   char *acl;
+  char *api;
   char *url;
   char *bucket;
   char *config;

@@ -58,6 +58,7 @@ enum {
 };
 
 static struct fuse_opt stormfs_opts[] = {
+  STORMFS_OPT("service=%s",       api,           0),
   STORMFS_OPT("acl=%s",           acl,           0),
   STORMFS_OPT("config=%s",        config,        0),
   STORMFS_OPT("url=%s",           url,           0),
@@ -448,6 +449,22 @@ validate_mountpoint(const char *path, struct stat *stbuf)
   closedir(d);
 
   return 0;
+}
+
+bool
+valid_service(const char *service)
+{
+  bool valid = false;
+  const char *valid_services[] = {
+    "s3",
+    "cloudfiles"
+  };
+
+  for(uint8_t i = 0; i < 2; i++)
+    if(strcmp(service, valid_services[i]) == 0)
+      valid = true;
+
+  return valid;
 }
 
 bool
@@ -1205,6 +1222,7 @@ stormfs_virtual_url(char *url, char *bucket)
 static void
 set_defaults(void)
 {
+  stormfs.api = "s3";
   stormfs.cache = 1;
   stormfs.verify_ssl = 2;
   stormfs.acl = "private";
@@ -1230,6 +1248,12 @@ validate_config(void)
   if(!stormfs.mountpoint) {
     fprintf(stderr, "%s: missing MOUNTPOINT command-line option, see %s -h for usage\n",
         stormfs.progname, stormfs.progname);
+    valid = false;
+  }
+
+  if(!valid_service(stormfs.api)) {
+    fprintf(stderr, "%s: invalid service %s, see %s -h for usage\n",
+        stormfs.progname, stormfs.api, stormfs.progname);
     valid = false;
   }
 
@@ -1315,6 +1339,8 @@ parse_config(const char *path)
       continue;
     }
 
+    if(strstr(p, "service") != NULL)
+      stormfs.api = get_config_value(strstr(p, "=") + 1);
     if(strstr(p, "access_key") != NULL)
       stormfs.access_key = get_config_value(strstr(p, "=") + 1);
     if(strstr(p, "secret_key") != NULL)
@@ -1349,6 +1375,7 @@ static void
 show_debug_header(void)
 {
   DEBUG("STORMFS version:       %s\n", PACKAGE_VERSION);
+  DEBUG("STORMFS service:       %s\n", stormfs.api);
   DEBUG("STORMFS config:        %s\n", stormfs.config);
   DEBUG("STORMFS url:           %s\n", stormfs.url);
   DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
@@ -1356,6 +1383,15 @@ show_debug_header(void)
   DEBUG("STORMFS acl:           %s\n", stormfs.acl);
   DEBUG("STORMFS cache:         %s\n", (stormfs.cache) ? "on" : "off");
   DEBUG("STORMFS encryption:    %s\n", (stormfs.encryption) ? "on" : "off");
+}
+
+static void
+set_service(void)
+{
+  stormfs.service = S3;
+
+  if(strcasestr("cloudfiles", stormfs.api) != NULL)
+    stormfs.service = CLOUDFILES;
 }
 
 static void *
@@ -1367,6 +1403,7 @@ stormfs_init(struct fuse_conn_info *conn)
   if(conn->capable & FUSE_CAP_BIG_WRITES)
     conn->want |= FUSE_CAP_BIG_WRITES;
 
+  set_service();
   cache_mime_types();
   show_debug_header();
 
@@ -1513,7 +1550,6 @@ main(int argc, char *argv[])
 
   memset(&stormfs, 0, sizeof(struct stormfs));
   stormfs.progname = argv[0];
-  stormfs.service = AMAZON;
   set_defaults();
 
   if(fuse_opt_parse(&args, &stormfs, stormfs_opts, stormfs_opt_proc) == -1) {
