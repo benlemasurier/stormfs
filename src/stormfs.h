@@ -31,6 +31,7 @@ struct stormfs {
   char *config;
   char *debug;
   char *progname;
+  char *username;
   char *virtual_url;
   char *access_key;
   char *secret_key;

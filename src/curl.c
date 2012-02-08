@@ -556,6 +556,16 @@ stormfs_curl_get(HTTP_REQUEST *request)
 }
 
 int
+stormfs_curl_get_headers(HTTP_REQUEST *request)
+{
+  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
+  curl_easy_setopt(request->c, CURLOPT_HEADERDATA, (void *) &request->response);
+  curl_easy_setopt(request->c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+
+  return stormfs_curl_easy_perform(request->c);
+}
+
+int
 stormfs_curl_get_file(HTTP_REQUEST *request, FILE *f)
 {
   int result;

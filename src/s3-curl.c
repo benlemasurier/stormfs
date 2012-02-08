@@ -452,7 +452,7 @@ get_list_bucket_url(const char *path, const char *next_marker)
   return url;
 }
 
-struct curl_slist *
+static struct curl_slist *
 headers_to_curl_slist(GList *headers)
 {
   GList *head = NULL, *next = NULL;

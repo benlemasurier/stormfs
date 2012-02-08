@@ -54,7 +54,6 @@ char *get_upload_id(char *xml);
 bool is_truncated(char *xml);
 int  sign_request(const char *method, struct curl_slist **headers, const char *path);
 char *hmac_sha1(const char *key, const char *message);
-struct curl_slist *headers_to_curl_slist(GList *headers);
 int extract_meta(char *headers, GList **meta);
 int upload_part(const char *path, FILE_PART *fp);
 int copy_part(const char *from, const char *to, GList *headers, FILE_PART *fp);

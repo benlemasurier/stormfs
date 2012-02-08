@@ -62,6 +62,7 @@ static struct fuse_opt stormfs_opts[] = {
   STORMFS_OPT("acl=%s",           acl,           0),
   STORMFS_OPT("config=%s",        config,        0),
   STORMFS_OPT("url=%s",           url,           0),
+  STORMFS_OPT("username=%s",      username,      0),
   STORMFS_OPT("encryption",       encryption,    1),
   STORMFS_OPT("expires=%s",       expires,       0),
   STORMFS_OPT("use_ssl",          ssl,           true),
@@ -1347,6 +1348,8 @@ parse_config(const char *path)
       stormfs.secret_key = get_config_value(strstr(p, "=") + 1);
     if(strstr(p, "url") != NULL)
       stormfs.url = get_config_value(strstr(p, "=") + 1);
+    if(strstr(p, "username") != NULL)
+      stormfs.username = get_config_value(strstr(p, "=") + 1);
     if(strstr(p, "acl") != NULL)
       stormfs.acl = get_config_value(strstr(p, "=") + 1);
     if(strstr(p, "expires") != NULL)
@@ -1378,6 +1381,7 @@ show_debug_header(void)
   DEBUG("STORMFS service:       %s\n", stormfs.api);
   DEBUG("STORMFS config:        %s\n", stormfs.config);
   DEBUG("STORMFS url:           %s\n", stormfs.url);
+  DEBUG("STORMFS username:      %s\n", stormfs.username);
   DEBUG("STORMFS bucket:        %s\n", stormfs.bucket);
   DEBUG("STORMFS virtual url:   %s\n", stormfs.virtual_url);
   DEBUG("STORMFS acl:           %s\n", stormfs.acl);
@@ -1390,8 +1394,11 @@ set_service(void)
 {
   stormfs.service = S3;
 
-  if(strcasestr("cloudfiles", stormfs.api) != NULL)
+  if(strcasestr("cloudfiles", stormfs.api) != NULL) {
     stormfs.service = CLOUDFILES;
+    stormfs.url = "https://auth.api.rackspace.com/v1.0";
+    stormfs.ssl = true;
+  }
 }
 
 static void *

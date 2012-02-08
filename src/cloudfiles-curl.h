@@ -9,4 +9,6 @@
 #ifndef cloudfiles_curl_H
 #define cloudfiles_curl_H
 
+int cloudfiles_curl_init(struct stormfs *stormfs);
+
 #endif // cloudfiles_curl_H

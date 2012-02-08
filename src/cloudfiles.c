@@ -66,7 +66,14 @@ cloudfiles_create(const char *path, struct stat *st)
 int
 cloudfiles_init(struct stormfs *stormfs)
 {
-  return -ENOTSUP;
+  cloudfiles.stormfs = stormfs;
+
+  if(cloudfiles_curl_init(stormfs) != 0) {
+    fprintf(stderr, "%s: unable to initialize libcurl\n", stormfs->progname);
+    exit(EXIT_FAILURE);
+  }
+
+  return 0;
 }
 
 int

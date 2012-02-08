@@ -127,6 +127,9 @@ proxy_init(struct stormfs *stormfs)
     case S3:
       result = s3_init(proxy.stormfs);
       break;
+    case CLOUDFILES:
+      result = cloudfiles_init(proxy.stormfs);
+      break;
     default:
       result = -EINVAL;
   }
