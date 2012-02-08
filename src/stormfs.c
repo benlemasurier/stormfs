@@ -428,6 +428,23 @@ cache_file_valid(struct file *f)
   return true;
 }
 
+GList *
+add_file_to_list(GList *list, const char *path, struct stat *st)
+{
+  struct file *f = g_new0(struct file, 1);
+  struct stat *stbuf = g_new0(struct stat, 1);
+
+  f->path = strdup(path);
+  f->name = strdup(basename(f->path));
+
+  if(st != NULL)
+    memcpy(stbuf, st, sizeof(struct stat));
+
+  f->st = stbuf;
+
+  return g_list_append(list, f);
+}
+
 static int
 validate_mountpoint(const char *path, struct stat *stbuf)
 {

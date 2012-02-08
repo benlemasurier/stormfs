@@ -60,6 +60,7 @@ char *get_path(const char *path, const char *name);
 const char *get_mime_type(const char *filename);
 char *stormfs_virtual_url(char *url, char *bucket);
 void free_file(struct file *f);
+GList *add_file_to_list(GList *list, const char *path, struct stat *st);
 int stormfs_getattr(const char *path, struct stat *stbuf);
 int stormfs_unlink(const char *path);
 

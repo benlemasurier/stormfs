@@ -45,8 +45,11 @@ proxy_getattr(const char *path, struct stat *st)
     case S3:
       result = s3_getattr(path, st);
       break;
+    case CLOUDFILES:
+      result = cloudfiles_getattr(path, st);
+      break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -62,7 +65,7 @@ proxy_getattr_multi(const char *path, GList *files)
       result = s3_getattr_multi(path, files);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -78,7 +81,7 @@ proxy_chmod(const char *path, struct stat *st)
       result = s3_chmod(path, st);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -94,7 +97,7 @@ proxy_chown(const char *path, struct stat *st)
       result = s3_chown(path, st);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -110,7 +113,7 @@ proxy_create(const char *path, struct stat *st)
       result = s3_create(path, st);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -131,7 +134,7 @@ proxy_init(struct stormfs *stormfs)
       result = cloudfiles_init(proxy.stormfs);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -147,7 +150,7 @@ proxy_mkdir(const char *path, struct stat *st)
       result = s3_mkdir(path, st);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -163,7 +166,7 @@ proxy_mknod(const char *path, struct stat *st)
       result = s3_mknod(path, st);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -179,7 +182,7 @@ proxy_open(const char *path, FILE *f)
       result = s3_open(path, f);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -194,8 +197,11 @@ proxy_readdir(const char *path, GList **files)
     case S3:
       result = s3_readdir(path, files);
       break;
+    case CLOUDFILES:
+      result = cloudfiles_readdir(path, files);
+      break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -211,7 +217,7 @@ proxy_release(const char *path, int fd, struct stat *st)
       result = s3_release(path, fd, st);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -227,7 +233,7 @@ proxy_rename(const char *from, const char *to, struct stat *st)
       result = s3_rename(from, to, st);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -243,7 +249,7 @@ proxy_rmdir(const char *path)
       result = s3_rmdir(path);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -259,7 +265,7 @@ proxy_symlink(const char *from, const char *to, struct stat *st)
       result = s3_symlink(from, to, st);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -275,7 +281,7 @@ proxy_unlink(const char *path)
       result = s3_unlink(path);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;
@@ -291,7 +297,7 @@ proxy_utimens(const char *path, struct stat *st)
       result = s3_utimens(path, st);
       break;
     default:
-      result = -EINVAL;
+      result = -ENOTSUP;
   }
 
   return result;

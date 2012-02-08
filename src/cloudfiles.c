@@ -23,10 +23,75 @@
 #include <glib.h>
 #include "stormfs.h"
 #include "cloudfiles.h"
+#include "cloudfiles-curl.h"
+#include "curl.h"
 
 struct cloudfiles {
   struct stormfs *stormfs;
 } cloudfiles;
+
+static int
+headers_to_stat(GList *headers, struct stat *stbuf)
+{
+  GList *head = NULL,
+        *next = NULL;
+
+  head = g_list_first(headers);
+  while(head != NULL) {
+    next = head->next;
+    HTTP_HEADER *header = head->data;
+
+    // TODO: clean this up.
+    if(strcmp(header->key, "X-Object-Meta-uid") == 0)
+      stbuf->st_uid = get_uid(header->value);
+    else if(strcmp(header->key, "X-Object-Meta-gid") == 0)
+      stbuf->st_gid = get_gid(header->value);
+    else if(strcmp(header->key, "X-Object-Meta-ctime") == 0)
+      stbuf->st_ctime = get_ctime(header->value);
+    else if(strcmp(header->key, "X-Object-Meta-mtime") == 0)
+      stbuf->st_mtime = get_mtime(header->value);
+    else if(strcmp(header->key, "X-Object-Meta-rdev") == 0)
+      stbuf->st_rdev = get_rdev(header->value);
+    else if(strcmp(header->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
+      stbuf->st_mtime = get_mtime(header->value);
+    else if(strcmp(header->key, "X-Object-Meta-mode") == 0)
+      stbuf->st_mode = get_mode(header->value);
+    else if(strcmp(header->key, "Content-Length") == 0)
+      stbuf->st_size = get_size(header->value);
+    else if(strcmp(header->key, "Content-Type") == 0)
+      if(strstr(header->value, "x-directory"))
+        stbuf->st_mode |= S_IFDIR;
+
+    head = next;
+  }
+
+  return 0;
+}
+
+static GList *
+objectlist_to_files(const char *path, char *xml)
+{
+  GList *files = NULL;
+  char *tmp = strdup(xml), *p = NULL;
+
+  p = strtok(tmp, "\r\n");
+  while(p != NULL) {
+    char *name;
+    char *fullpath;
+
+    name = strdup(p);
+    fullpath = get_path(path, name);
+    files = add_file_to_list(files, fullpath, NULL);
+    free(name);
+    free(fullpath);
+
+    p = strtok(NULL, "\r\n");
+  }
+
+  free(tmp);
+
+  return files;
+}
 
 void
 cloudfiles_destroy(void)
@@ -36,7 +101,18 @@ cloudfiles_destroy(void)
 int
 cloudfiles_getattr(const char *path, struct stat *st)
 {
-  return -ENOTSUP;
+  int result;
+  GList *headers = NULL;
+
+  if((result = cloudfiles_curl_head(path, &headers)) != 0) {
+    free_headers(headers);
+    return result;
+  }
+
+  result = headers_to_stat(headers, st);
+  free_headers(headers);
+
+  return result;
 }
 
 int
@@ -97,7 +173,18 @@ cloudfiles_open(const char *path, FILE *f)
 int
 cloudfiles_readdir(const char *path, GList **files)
 {
-  return -ENOTSUP;
+  int result;
+  char *data = NULL;
+
+  if((result = cloudfiles_curl_list_objects(path, &data)) != 0) {
+    free(data);
+    return -EIO;
+  }
+
+  *files = objectlist_to_files(path, data);
+  free(data);
+
+  return result;
 }
 
 int
