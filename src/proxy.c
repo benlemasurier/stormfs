@@ -64,6 +64,9 @@ proxy_getattr_multi(const char *path, GList *files)
     case S3:
       result = s3_getattr_multi(path, files);
       break;
+    case CLOUDFILES:
+      result = cloudfiles_getattr_multi(path, files);
+      break;
     default:
       result = -ENOTSUP;
   }

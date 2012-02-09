@@ -167,13 +167,13 @@ extract_meta(char *headers, GList **meta)
     "Content-Type",
     "Content-Length",
     "Last-Modified",
-    "ETag",
-    "X-Object-Meta-gid",
-    "X-Object-Meta-uid",
-    "X-Object-Meta-rdev",
-    "X-Object-Meta-mode",
-    "X-Object-Meta-ctime",
-    "X-Object-Meta-mtime"
+    "Etag",
+    "X-Object-Meta-Gid",
+    "X-Object-Meta-Uid",
+    "X-Object-Meta-Rdev",
+    "X-Object-Meta-Mode",
+    "X-Object-Meta-Ctime",
+    "X-Object-Meta-Mtime"
   };
 
   p = strtok(headers, "\r\n");
@@ -188,7 +188,7 @@ extract_meta(char *headers, GList **meta)
       if(!strstr(p, key))
         continue;
 
-      h = g_malloc(sizeof(HTTP_HEADER));
+      h = malloc(sizeof(HTTP_HEADER));
       h->key = strdup(key);
 
       /* remove leading space */
@@ -288,6 +288,143 @@ cloudfiles_curl_head(const char *path, GList **headers)
   free_request(request);
 
   return result;
+}
+
+int
+cloudfiles_curl_head_multi(const char *path, GList *files)
+{
+  /* FIXME: s3_curl and cloudfiles_curl are duplicating this
+   * function, abstract out to main curl interface */
+  int running_handles;
+  size_t i, n_running, last_req_idx = 0;
+  size_t n_files = g_list_length(files);
+  HTTP_REQUEST *requests = g_new0(HTTP_REQUEST, n_files);
+  GList *head = NULL, *next = NULL, *headers = NULL;
+  CURLM *multi = get_multi_handle();
+  headers = add_header(headers, auth_token_header(cf_curl.auth_token));
+
+  i = 0;
+  n_running = 0;
+  head = g_list_first(files);
+  while(head != NULL) {
+    next = head->next;
+    struct file *f = head->data;
+
+    CURLMcode err;
+    requests[i].headers = headers_to_curl_slist(headers);
+    requests[i].response.memory = g_malloc0(1);
+    requests[i].response.size = 0;
+    requests[i].path = get_path(path, f->name);
+    requests[i].done = false;
+
+    if(n_running < MAX_REQUESTS && n_running < n_files) {
+      char *url = cloudfiles_url(requests[i].path);
+      requests[i].c = get_pooled_handle(url);
+      curl_easy_setopt(requests[i].c, CURLOPT_NOBODY, 1L);   // HEAD
+      curl_easy_setopt(requests[i].c, CURLOPT_FILETIME, 1L); // Last-Modified
+      curl_easy_setopt(requests[i].c, CURLOPT_HTTPHEADER, requests[i].headers);
+      curl_easy_setopt(requests[i].c, CURLOPT_HEADERDATA, (void *) &requests[i].response);
+      curl_easy_setopt(requests[i].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+      g_free(url);
+
+      if((err = curl_multi_add_handle(multi, requests[i].c)) != CURLM_OK)
+        return -EIO;
+
+      n_running++;
+      last_req_idx = i;
+    }
+
+    i++;
+    head = next;
+  }
+
+  curl_multi_perform(multi, &running_handles);
+  while(running_handles) {
+    if(running_handles) {
+      int max_fd = -1;
+      long curl_timeout = -1;
+      struct timeval timeout;
+      CURLMcode err;
+
+      fd_set fd_r;
+      fd_set fd_w;
+      fd_set fd_e;
+      FD_ZERO(&fd_r);
+      FD_ZERO(&fd_w);
+      FD_ZERO(&fd_e);
+      timeout.tv_sec  = 1;
+      timeout.tv_usec = 0;
+
+      curl_multi_timeout(multi, &curl_timeout);
+      if(curl_timeout >= 0) {
+        timeout.tv_sec = curl_timeout / 1000;
+        if(timeout.tv_sec > 1)
+          timeout.tv_sec = 1;
+        else
+          timeout.tv_usec = (curl_timeout % 1000) * 1000;
+      }
+
+      err = curl_multi_fdset(multi, &fd_r, &fd_w, &fd_e, &max_fd);
+      if(err != CURLM_OK)
+        return -EIO;
+
+      if(select(max_fd + 1, &fd_r, &fd_w, &fd_e, &timeout) == -1)
+        return -errno;
+    }
+
+    curl_multi_perform(multi, &running_handles);
+
+    CURLMsg *msg;
+    int remaining;
+    while((msg = curl_multi_info_read(multi, &remaining))) {
+      if(msg->msg != CURLMSG_DONE)
+        continue;
+
+      for(i = 0; i < n_files; i++) {
+        // requests *might* share the same handle out of the pool,
+        // make sure the request hasn't also been marked as completed
+        if(msg->easy_handle == requests[i].c && !requests[i].done)
+          break;
+      }
+
+      struct file *f = g_list_nth_data(files, i);
+      extract_meta(requests[i].response.memory, &(f->headers));
+      free(requests[i].response.memory);
+      curl_slist_free_all(requests[i].headers);
+      curl_multi_remove_handle(multi, requests[i].c);
+      release_pooled_handle(requests[i].c);
+      requests[i].done = true;
+      n_running--;
+
+      if(n_running < MAX_REQUESTS && last_req_idx < (n_files - 1)) {
+        CURLMcode err;
+        last_req_idx++;;
+
+        char *url = cloudfiles_url(requests[last_req_idx].path);
+        requests[last_req_idx].c = get_pooled_handle(url);
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_NOBODY, 1L);    // HEAD
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_FILETIME, 1L);  // Last-Modified
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HTTPHEADER, requests[last_req_idx].headers);
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HEADERDATA, (void *) &requests[last_req_idx].response);
+        curl_easy_setopt(requests[last_req_idx].c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+        g_free(url);
+
+        if((err = curl_multi_add_handle(multi, requests[last_req_idx].c)) != CURLM_OK)
+          return -EIO;
+
+        n_running++;
+      }
+    }
+  }
+
+  for(i = 0; i < n_files; i++) {
+    if(requests[i].c != NULL)
+      release_pooled_handle(requests[i].c);
+    free(requests[i].path);
+  }
+  free(requests);
+
+  return 0;
 }
 
 int

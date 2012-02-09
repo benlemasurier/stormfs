@@ -13,6 +13,7 @@
 #ifndef stormfs_curl_H
 #define stormfs_curl_H
 
+#define MAX_REQUESTS 100
 #define FIVE_GB 5368709120LL
 #define DEFAULT_MIME_TYPE   "application/octet-stream"
 

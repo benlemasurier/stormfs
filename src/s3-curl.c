@@ -27,7 +27,6 @@
 
 #define SHA1_BLOCK_SIZE 64
 #define SHA1_LENGTH     20
-#define MAX_REQUESTS    100
 
 struct s3_curl {
   const char *access_key;
@@ -1268,7 +1267,7 @@ s3_curl_head_multi(const char *path, GList *files)
 
       struct file *f = g_list_nth_data(files, i);
       extract_meta(requests[i].response.memory, &(f->headers));
-      g_free(requests[i].response.memory);
+      free(requests[i].response.memory);
       curl_slist_free_all(requests[i].headers);
       curl_multi_remove_handle(multi, requests[i].c);
       release_pooled_handle(requests[i].c);

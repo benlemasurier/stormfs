@@ -39,27 +39,27 @@ headers_to_stat(GList *headers, struct stat *stbuf)
   head = g_list_first(headers);
   while(head != NULL) {
     next = head->next;
-    HTTP_HEADER *header = head->data;
+    HTTP_HEADER *h = head->data;
 
     // TODO: clean this up.
-    if(strcmp(header->key, "X-Object-Meta-uid") == 0)
-      stbuf->st_uid = get_uid(header->value);
-    else if(strcmp(header->key, "X-Object-Meta-gid") == 0)
-      stbuf->st_gid = get_gid(header->value);
-    else if(strcmp(header->key, "X-Object-Meta-ctime") == 0)
-      stbuf->st_ctime = get_ctime(header->value);
-    else if(strcmp(header->key, "X-Object-Meta-mtime") == 0)
-      stbuf->st_mtime = get_mtime(header->value);
-    else if(strcmp(header->key, "X-Object-Meta-rdev") == 0)
-      stbuf->st_rdev = get_rdev(header->value);
-    else if(strcmp(header->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
-      stbuf->st_mtime = get_mtime(header->value);
-    else if(strcmp(header->key, "X-Object-Meta-mode") == 0)
-      stbuf->st_mode = get_mode(header->value);
-    else if(strcmp(header->key, "Content-Length") == 0)
-      stbuf->st_size = get_size(header->value);
-    else if(strcmp(header->key, "Content-Type") == 0)
-      if(strstr(header->value, "x-directory"))
+    if(strcmp(h->key, "X-Object-Meta-Uid") == 0)
+      stbuf->st_uid = get_uid(h->value);
+    else if(strcmp(h->key, "X-Object-Meta-Gid") == 0)
+      stbuf->st_gid = get_gid(h->value);
+    else if(strcmp(h->key, "X-Object-Meta-Ctime") == 0)
+      stbuf->st_ctime = get_ctime(h->value);
+    else if(strcmp(h->key, "X-Object-Meta-Mtime") == 0)
+      stbuf->st_mtime = get_mtime(h->value);
+    else if(strcmp(h->key, "X-Object-Meta-Rdev") == 0)
+      stbuf->st_rdev = get_rdev(h->value);
+    else if(strcmp(h->key, "Last-Modified") == 0 && stbuf->st_mtime == 0)
+      stbuf->st_mtime = get_mtime(h->value);
+    else if(strcmp(h->key, "X-Object-Meta-Mode") == 0)
+      stbuf->st_mode = get_mode(h->value);
+    else if(strcmp(h->key, "Content-Length") == 0)
+      stbuf->st_size = get_size(h->value);
+    else if(strcmp(h->key, "Content-Type") == 0)
+      if(strstr(h->value, "x-directory"))
         stbuf->st_mode |= S_IFDIR;
 
     head = next;
@@ -118,7 +118,27 @@ cloudfiles_getattr(const char *path, struct stat *st)
 int
 cloudfiles_getattr_multi(const char *path, GList *files)
 {
-  return -ENOTSUP;
+  int result;
+  GList *head = NULL, *next = NULL;
+  result = cloudfiles_curl_head_multi(path, files);
+
+  head = g_list_first(files);
+  while(head != NULL) {
+    next = head->next;
+
+    struct file *f = head->data;
+    GList *headers = f->headers;
+    struct stat *stbuf = f->st;
+    if((result = headers_to_stat(headers, stbuf)) != 0)
+      return result;
+
+    if(S_ISREG(stbuf->st_mode))
+      stbuf->st_blocks = get_blocks(stbuf->st_size);
+
+    head = next;
+  }
+
+  return result;
 }
 
 int
