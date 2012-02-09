@@ -309,7 +309,27 @@ cloudfiles_rmdir(const char *path)
 int
 cloudfiles_symlink(const char *from, const char *to, struct stat *st)
 {
-  return -ENOTSUP;
+  int result, fd;
+  GList *headers = NULL;
+
+  if((fd = fileno(tmpfile())) == -1)
+    return -errno;
+
+  if(pwrite(fd, from, strlen(from), 0) == -1) {
+    close(fd);
+    return -errno;
+  }
+
+  headers = add_header(headers, cf_mode_header(st->st_mode));
+  headers = add_header(headers, cf_mtime_header(st->st_mtime));
+
+  result = cloudfiles_curl_upload(to, headers, fd);
+
+  free_headers(headers);
+  if(close(fd) != 0)
+    return -errno;
+
+  return result;
 }
 
 int

@@ -282,6 +282,9 @@ proxy_symlink(const char *from, const char *to, struct stat *st)
     case S3:
       result = s3_symlink(from, to, st);
       break;
+    case CLOUDFILES:
+      result = cloudfiles_symlink(from, to, st);
+      break;
     default:
       result = -ENOTSUP;
   }
