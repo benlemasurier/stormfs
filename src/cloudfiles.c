@@ -118,6 +118,7 @@ objectlist_to_files(const char *path, char *xml)
 void
 cloudfiles_destroy(void)
 {
+  cloudfiles_curl_destroy();
 }
 
 int
@@ -268,7 +269,7 @@ cloudfiles_mknod(const char *path, struct stat *st)
 int
 cloudfiles_open(const char *path, FILE *f)
 {
-  return -ENOTSUP;
+  return cloudfiles_curl_get_file(path, f);
 }
 
 int

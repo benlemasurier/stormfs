@@ -33,6 +33,9 @@ proxy_destroy(void)
     case S3:
       s3_destroy();
       break;
+    case CLOUDFILES:
+      cloudfiles_destroy();
+      break;
   }
 }
 
@@ -198,6 +201,9 @@ proxy_open(const char *path, FILE *f)
   switch(proxy.stormfs->service) {
     case S3:
       result = s3_open(path, f);
+      break;
+    case CLOUDFILES:
+      result = cloudfiles_open(path, f);
       break;
     default:
       result = -ENOTSUP;

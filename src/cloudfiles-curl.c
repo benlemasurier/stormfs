@@ -358,16 +358,28 @@ cloudfiles_curl_delete(const char *path)
   return result;
 }
 
+void
+cloudfiles_curl_destroy(void)
+{
+  stormfs_curl_destroy();
+}
+
 int
-cloudfiles_curl_init(struct stormfs *stormfs)
+cloudfiles_curl_get_file(const char *path, FILE *f)
 {
   int result;
+  GList *headers = NULL;
 
-  cf_curl.stormfs = stormfs;
-  if((result = stormfs_curl_init(stormfs)) != 0)
-    return result;
+  HTTP_REQUEST *request = cloudfiles_request(path);
+  headers = add_header(headers, auth_token_header(cf_curl.auth_token));
+  request->headers = headers_to_curl_slist(headers);
 
-  return cloudfiles_curl_authenticate();
+  result = stormfs_curl_get_file(request, f);
+
+  free_request(request);
+  free_headers(headers);
+
+  return result;
 }
 
 int
@@ -522,6 +534,18 @@ cloudfiles_curl_head_multi(const char *path, GList *files)
   free(requests);
 
   return 0;
+}
+
+int
+cloudfiles_curl_init(struct stormfs *stormfs)
+{
+  int result;
+
+  cf_curl.stormfs = stormfs;
+  if((result = stormfs_curl_init(stormfs)) != 0)
+    return result;
+
+  return cloudfiles_curl_authenticate();
 }
 
 int

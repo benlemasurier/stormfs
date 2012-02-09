@@ -19,12 +19,14 @@ HTTP_HEADER *cf_mtime_header(time_t t);
 HTTP_HEADER *cf_rdev_header(dev_t rdev);
 HTTP_HEADER *cf_uid_header(uid_t uid);
 
-int cloudfiles_curl_init(struct stormfs *stormfs);
-int cloudfiles_curl_delete(const char *path);
-int cloudfiles_curl_head(const char *path, GList **headers);
-int cloudfiles_curl_head_multi(const char *path, GList *files);
-int cloudfiles_curl_list_objects(const char *path, char **data);
-int cloudfiles_curl_put(const char *path, GList *headers);
-int cloudfiles_curl_upload(const char *path, GList *headers, int fd);
+int  cloudfiles_curl_delete(const char *path);
+void cloudfiles_curl_destroy(void);
+int  cloudfiles_curl_get_file(const char *path, FILE *f);
+int  cloudfiles_curl_head(const char *path, GList **headers);
+int  cloudfiles_curl_head_multi(const char *path, GList *files);
+int  cloudfiles_curl_init(struct stormfs *stormfs);
+int  cloudfiles_curl_list_objects(const char *path, char **data);
+int  cloudfiles_curl_put(const char *path, GList *headers);
+int  cloudfiles_curl_upload(const char *path, GList *headers, int fd);
 
 #endif // cloudfiles_curl_H
