@@ -24,12 +24,10 @@ typedef struct {
 } FILE_PART;
 
 HTTP_HEADER *acl_header(const char *acl);
-HTTP_HEADER *content_header(const char *type);
 HTTP_HEADER *copy_source_header(const char *path);
 HTTP_HEADER *copy_source_range_header(off_t first, off_t last);
 HTTP_HEADER *copy_meta_header();
 HTTP_HEADER *ctime_header(time_t t);
-HTTP_HEADER *expires_header(const char *expires);
 HTTP_HEADER *encryption_header(void);
 HTTP_HEADER *gid_header(gid_t gid);
 HTTP_HEADER *mode_header(mode_t mode);

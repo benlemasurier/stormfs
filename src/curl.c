@@ -50,6 +50,31 @@ typedef struct {
   bool in_use;
 } CURL_HANDLE;
 
+HTTP_HEADER *
+content_header(const char *type)
+{
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key   = strdup("Content-Type");
+  if(type == NULL)
+    h->value = strdup(DEFAULT_MIME_TYPE);
+  else
+    h->value = strdup(type);
+
+  return h;
+}
+
+HTTP_HEADER *
+expires_header(const char *expires)
+{
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key = strdup("Expires");
+  h->value = strdup(expires);
+
+  return h;
+}
+
 uid_t
 get_uid(const char *s)
 {
@@ -587,6 +612,18 @@ stormfs_curl_head(HTTP_REQUEST *request)
   curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
   curl_easy_setopt(request->c, CURLOPT_HEADERDATA, (void *) &request->response);
   curl_easy_setopt(request->c, CURLOPT_HEADERFUNCTION, write_memory_cb);
+
+  return stormfs_curl_easy_perform(request->c);
+}
+
+int
+stormfs_curl_post_headers(HTTP_REQUEST *request)
+{
+  curl_easy_setopt(request->c, CURLOPT_HTTPHEADER, request->headers);
+  curl_easy_setopt(request->c, CURLOPT_POST, true);
+  curl_easy_setopt(request->c, CURLOPT_POSTFIELDSIZE, 0);
+  curl_easy_setopt(request->c, CURLOPT_WRITEDATA, (void *) &request->response);
+  curl_easy_setopt(request->c, CURLOPT_WRITEFUNCTION, write_memory_cb);
 
   return stormfs_curl_easy_perform(request->c);
 }

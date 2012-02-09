@@ -40,6 +40,89 @@ enum auth_endpoint
   AUTH_UK
 };
 
+HTTP_HEADER *
+cf_ctime_header(time_t t)
+{
+  char *s = time_to_s(t);
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key = strdup("X-Object-Meta-Ctime");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+cf_expires_header(const char *expires)
+{
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key = strdup("Expires");
+  h->value = strdup(expires);
+
+  return h;
+}
+
+HTTP_HEADER *
+cf_gid_header(gid_t gid)
+{
+  char *s = gid_to_s(gid);
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key   = strdup("X-Object-Meta-Gid");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+cf_mode_header(mode_t mode)
+{
+  char *s = mode_to_s(mode);
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key   = strdup("X-Object-Meta-Mode");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+cf_mtime_header(time_t t)
+{
+  char *s = time_to_s(t);
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key = strdup("X-Object-Meta-Mtime");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+cf_rdev_header(dev_t rdev)
+{
+  char *s = rdev_to_s(rdev);
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key   = strdup("X-Object-Meta-Rdev");
+  h->value = s;
+
+  return h;
+}
+
+HTTP_HEADER *
+cf_uid_header(uid_t uid)
+{
+  char *s = uid_to_s(uid);
+  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
+
+  h->key   = strdup("X-Object-Meta-Uid");
+  h->value = s;
+
+  return h;
+}
+
 char *
 auth_url(enum auth_endpoint endpoint)
 {
@@ -444,6 +527,37 @@ cloudfiles_curl_list_objects(const char *path, char **data)
     *data = strdup(request->response.memory);
 
   free_headers(headers);
+  free_request(request);
+
+  return result;
+}
+
+int
+cloudfiles_curl_post_headers(const char *path, GList *headers)
+{
+  int result;
+  HTTP_REQUEST *request = cloudfiles_request(path);
+
+  headers = add_header(headers, auth_token_header(cf_curl.auth_token));
+  request->headers = headers_to_curl_slist(headers);
+
+  result = stormfs_curl_post_headers(request);
+
+  free_request(request);
+
+  return result;
+}
+
+int
+cloudfiles_curl_put(const char *path, GList *headers)
+{
+  int result;
+  HTTP_REQUEST *request = cloudfiles_request(path);
+
+  headers = add_header(headers, auth_token_header(cf_curl.auth_token));
+  request->headers = headers_to_curl_slist(headers);
+
+  result = stormfs_curl_put(request);
   free_request(request);
 
   return result;

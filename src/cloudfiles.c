@@ -30,6 +30,28 @@ struct cloudfiles {
   struct stormfs *stormfs;
 } cloudfiles;
 
+static GList *
+stat_to_headers(GList *headers, struct stat *st)
+{
+  headers = add_header(headers, cf_gid_header(st->st_gid));
+  headers = add_header(headers, cf_uid_header(st->st_uid));
+  headers = add_header(headers, cf_mode_header(st->st_mode));
+  headers = add_header(headers, cf_ctime_header(st->st_ctime));
+  headers = add_header(headers, cf_mtime_header(st->st_mtime));
+  headers = add_header(headers, cf_rdev_header(st->st_rdev));
+
+  return headers;
+}
+
+static GList *
+optional_headers(GList *headers)
+{
+  if(cloudfiles.stormfs->expires != NULL)
+    headers = add_header(headers, expires_header(cloudfiles.stormfs->expires));
+
+  return headers;
+}
+
 static int
 headers_to_stat(GList *headers, struct stat *stbuf)
 {
@@ -156,7 +178,18 @@ cloudfiles_chown(const char *path, struct stat *st)
 int
 cloudfiles_create(const char *path, struct stat *st)
 {
-  return -ENOTSUP;
+  int result;
+  GList *headers = NULL;
+
+  headers = stat_to_headers(headers, st);
+  headers = add_header(headers, content_header(get_mime_type(path)));
+  headers = optional_headers(headers);
+
+  result = cloudfiles_curl_put(path, headers);
+
+  free_headers(headers);
+
+  return result;
 }
 
 int
@@ -240,5 +273,14 @@ cloudfiles_unlink(const char *path)
 int
 cloudfiles_utimens(const char *path, struct stat *st)
 {
-  return -ENOTSUP;
+  int result;
+  GList *headers = NULL;
+
+  headers = stat_to_headers(headers, st);
+
+  result = cloudfiles_curl_post_headers(path, headers);
+
+  free_headers(headers);
+
+  return result;
 }

@@ -56,20 +56,6 @@ acl_header(const char *acl)
 }
 
 HTTP_HEADER *
-content_header(const char *type)
-{
-  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
-
-  h->key   = strdup("Content-Type");
-  if(type == NULL)
-    h->value = strdup(DEFAULT_MIME_TYPE);
-  else
-    h->value = strdup(type);
-
-  return h;
-}
-
-HTTP_HEADER *
 copy_meta_header()
 {
   HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
@@ -123,17 +109,6 @@ encryption_header(void)
 
   h->key = strdup("x-amz-server-side-encryption");
   h->value = strdup("AES256");
-
-  return h;
-}
-
-HTTP_HEADER *
-expires_header(const char *expires)
-{
-  HTTP_HEADER *h = g_new0(HTTP_HEADER, 1);
-
-  h->key = strdup("Expires");
-  h->value = strdup(expires);
 
   return h;
 }

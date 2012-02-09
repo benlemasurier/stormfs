@@ -115,6 +115,9 @@ proxy_create(const char *path, struct stat *st)
     case S3:
       result = s3_create(path, st);
       break;
+    case CLOUDFILES:
+      result = cloudfiles_create(path, st);
+      break;
     default:
       result = -ENOTSUP;
   }
@@ -298,6 +301,9 @@ proxy_utimens(const char *path, struct stat *st)
   switch(proxy.stormfs->service) {
     case S3:
       result = s3_utimens(path, st);
+      break;
+    case CLOUDFILES:
+      result = cloudfiles_utimens(path, st);
       break;
     default:
       result = -ENOTSUP;

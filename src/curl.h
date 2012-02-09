@@ -60,6 +60,8 @@ char *time_to_s(time_t t);
 char *uid_to_s(uid_t uid);
 char *url_encode(char *s);
 
+HTTP_HEADER *content_header(const char *type);
+HTTP_HEADER *expires_header(const char *expires);
 HTTP_REQUEST *new_request(const char *path);
 CURLM *get_multi_handle(void);
 
@@ -82,6 +84,7 @@ int stormfs_curl_get_headers(HTTP_REQUEST *request);
 int stormfs_curl_get_file(HTTP_REQUEST *request, FILE *f);
 int stormfs_curl_head(HTTP_REQUEST *request);
 int stormfs_curl_init(struct stormfs *stormfs);
+int stormfs_curl_post_headers(HTTP_REQUEST *request);
 int stormfs_curl_put(HTTP_REQUEST *request);
 int stormfs_curl_rename(const char *from, const char *to);
 int copy_multipart(const char *from, const char *to, GList *headers, off_t size);
