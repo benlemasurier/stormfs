@@ -180,6 +180,9 @@ proxy_mknod(const char *path, struct stat *st)
     case S3:
       result = s3_mknod(path, st);
       break;
+    case CLOUDFILES:
+      result = cloudfiles_mknod(path, st);
+      break;
     default:
       result = -ENOTSUP;
   }
@@ -294,6 +297,9 @@ proxy_unlink(const char *path)
   switch(proxy.stormfs->service) {
     case S3:
       result = s3_unlink(path);
+      break;
+    case CLOUDFILES:
+      result = cloudfiles_unlink(path);
       break;
     default:
       result = -ENOTSUP;

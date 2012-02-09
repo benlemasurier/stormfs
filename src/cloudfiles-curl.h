@@ -20,6 +20,7 @@ HTTP_HEADER *cf_rdev_header(dev_t rdev);
 HTTP_HEADER *cf_uid_header(uid_t uid);
 
 int cloudfiles_curl_init(struct stormfs *stormfs);
+int cloudfiles_curl_delete(const char *path);
 int cloudfiles_curl_head(const char *path, GList **headers);
 int cloudfiles_curl_head_multi(const char *path, GList *files);
 int cloudfiles_curl_list_objects(const char *path, char **data);

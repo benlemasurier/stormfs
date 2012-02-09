@@ -252,7 +252,17 @@ cloudfiles_mkdir(const char *path, struct stat *st)
 int
 cloudfiles_mknod(const char *path, struct stat *st)
 {
-  return -ENOTSUP;
+  int result;
+  GList *headers = NULL;
+
+  headers = stat_to_headers(headers, st);
+  headers = optional_headers(headers);
+
+  result = cloudfiles_curl_put(path, headers);
+
+  free_headers(headers);
+
+  return result;
 }
 
 int
@@ -305,7 +315,7 @@ cloudfiles_symlink(const char *from, const char *to, struct stat *st)
 int
 cloudfiles_unlink(const char *path)
 {
-  return -ENOTSUP;
+  return cloudfiles_curl_delete(path);
 }
 
 int

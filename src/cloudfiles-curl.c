@@ -341,6 +341,24 @@ cloudfiles_curl_authenticate(void)
 }
 
 int
+cloudfiles_curl_delete(const char *path)
+{
+  int result;
+  GList *headers = NULL;
+
+  HTTP_REQUEST *request = cloudfiles_request(path);
+  headers = add_header(headers, auth_token_header(cf_curl.auth_token));
+  request->headers = headers_to_curl_slist(headers);
+
+  result = stormfs_curl_delete(request);
+
+  free_request(request);
+  free_headers(headers);
+
+  return result;
+}
+
+int
 cloudfiles_curl_init(struct stormfs *stormfs)
 {
   int result;
