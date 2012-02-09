@@ -23,7 +23,6 @@ int cloudfiles_curl_init(struct stormfs *stormfs);
 int cloudfiles_curl_head(const char *path, GList **headers);
 int cloudfiles_curl_head_multi(const char *path, GList *files);
 int cloudfiles_curl_list_objects(const char *path, char **data);
-int cloudfiles_curl_post_headers(const char *path, GList *headers);
 int cloudfiles_curl_put(const char *path, GList *headers);
 
 #endif // cloudfiles_curl_H

@@ -533,22 +533,6 @@ cloudfiles_curl_list_objects(const char *path, char **data)
 }
 
 int
-cloudfiles_curl_post_headers(const char *path, GList *headers)
-{
-  int result;
-  HTTP_REQUEST *request = cloudfiles_request(path);
-
-  headers = add_header(headers, auth_token_header(cf_curl.auth_token));
-  request->headers = headers_to_curl_slist(headers);
-
-  result = stormfs_curl_post_headers(request);
-
-  free_request(request);
-
-  return result;
-}
-
-int
 cloudfiles_curl_put(const char *path, GList *headers)
 {
   int result;

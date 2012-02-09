@@ -278,7 +278,7 @@ cloudfiles_utimens(const char *path, struct stat *st)
 
   headers = stat_to_headers(headers, st);
 
-  result = cloudfiles_curl_post_headers(path, headers);
+  result = cloudfiles_curl_put(path, headers);
 
   free_headers(headers);
 
