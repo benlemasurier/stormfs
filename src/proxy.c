@@ -234,6 +234,9 @@ proxy_release(const char *path, int fd, struct stat *st)
     case S3:
       result = s3_release(path, fd, st);
       break;
+    case CLOUDFILES:
+      result = cloudfiles_release(path, fd, st);
+      break;
     default:
       result = -ENOTSUP;
   }

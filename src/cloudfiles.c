@@ -291,7 +291,19 @@ cloudfiles_readdir(const char *path, GList **files)
 int
 cloudfiles_release(const char *path, int fd, struct stat *st)
 {
-  return -ENOTSUP;
+  int result;
+  GList *headers = NULL;
+
+  headers = stat_to_headers(headers, st);
+  headers = add_header(headers, content_header(get_mime_type(path)));
+  headers = add_header(headers, cf_mtime_header(time(NULL)));
+  headers = optional_headers(headers);
+
+  result = cloudfiles_curl_upload(path, headers, fd);
+
+  free_headers(headers);
+
+  return result;
 }
 
 int
