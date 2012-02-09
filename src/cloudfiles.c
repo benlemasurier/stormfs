@@ -166,13 +166,31 @@ cloudfiles_getattr_multi(const char *path, GList *files)
 int
 cloudfiles_chmod(const char *path, struct stat *st)
 {
-  return -ENOTSUP;
+  int result;
+  GList *headers = NULL;
+
+  headers = stat_to_headers(headers, st);
+
+  result = cloudfiles_curl_put(path, headers);
+
+  free_headers(headers);
+
+  return result;
 }
 
 int
 cloudfiles_chown(const char *path, struct stat *st)
 {
-  return -ENOTSUP;
+  int result;
+  GList *headers = NULL;
+
+  headers = stat_to_headers(headers, st);
+
+  result = cloudfiles_curl_put(path, headers);
+
+  free_headers(headers);
+
+  return result;
 }
 
 int

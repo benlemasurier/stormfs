@@ -83,6 +83,9 @@ proxy_chmod(const char *path, struct stat *st)
     case S3:
       result = s3_chmod(path, st);
       break;
+    case CLOUDFILES:
+      result = cloudfiles_chmod(path, st);
+      break;
     default:
       result = -ENOTSUP;
   }
@@ -98,6 +101,9 @@ proxy_chown(const char *path, struct stat *st)
   switch(proxy.stormfs->service) {
     case S3:
       result = s3_chown(path, st);
+      break;
+    case CLOUDFILES:
+      result = cloudfiles_chown(path, st);
       break;
     default:
       result = -ENOTSUP;
