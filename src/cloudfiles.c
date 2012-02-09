@@ -226,7 +226,27 @@ cloudfiles_init(struct stormfs *stormfs)
 int
 cloudfiles_mkdir(const char *path, struct stat *st)
 {
-  return -ENOTSUP;
+  int result, fd;
+  FILE *f;
+  GList *headers = NULL;
+
+  if((f = tmpfile()) == NULL)
+    return -errno;
+
+  if((fd = fileno(f)) == -1)
+    return -errno;
+
+  headers = stat_to_headers(headers, st);
+  headers = add_header(headers, content_header("application/x-directory"));
+  headers = optional_headers(headers);
+
+  result = cloudfiles_curl_upload(path, headers, fd);
+  free_headers(headers);
+
+  if(close(fd) != 0)
+    return -errno;
+
+  return result;
 }
 
 int

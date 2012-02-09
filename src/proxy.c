@@ -161,6 +161,9 @@ proxy_mkdir(const char *path, struct stat *st)
     case S3:
       result = s3_mkdir(path, st);
       break;
+    case CLOUDFILES:
+      result = cloudfiles_mkdir(path, st);
+      break;
     default:
       result = -ENOTSUP;
   }

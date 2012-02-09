@@ -159,12 +159,8 @@ list_objects_url(const char *path)
   char *url;
   char *encoded_path = url_encode((char *) path);
 
-  /*
-  if(asprintf(&url, "%s/%s?format=json&delimiter=/&path=%s", 
-        cf_curl.storage_url, cf_curl.stormfs->bucket, encoded_path) == -1) {
-        */
-  if(asprintf(&url, "%s/%s?delimiter=/", 
-        cf_curl.storage_url, cf_curl.stormfs->bucket) == -1) {
+  if(asprintf(&url, "%s/%s?delimiter=/&path=%s", 
+        cf_curl.storage_url, cf_curl.stormfs->bucket, (encoded_path + 1)) == -1) {
     fprintf(stderr, "unable to allocate memory\n");
     exit(EXIT_FAILURE);
   }
@@ -540,6 +536,46 @@ cloudfiles_curl_put(const char *path, GList *headers)
 
   headers = add_header(headers, auth_token_header(cf_curl.auth_token));
   request->headers = headers_to_curl_slist(headers);
+
+  result = stormfs_curl_put(request);
+  free_request(request);
+
+  return result;
+}
+
+int
+cloudfiles_curl_upload(const char *path, GList *headers, int fd)
+{
+  int result;
+  FILE *f;
+  struct stat st;
+  HTTP_REQUEST *request;
+
+  if(fstat(fd, &st) != 0) {
+    perror("fstat");
+    return -errno;
+  }
+
+  /* TODO: multipart uploads */
+  if(st.st_size >= FIVE_GB)
+    return -EFBIG;
+
+  if(lseek(fd, 0, SEEK_SET) == -1) {
+    perror("lseek");
+    return -errno;
+  }
+
+  if((f = fdopen(fd, "rb")) == NULL) {
+    perror("fdopen");
+    return -errno;
+  }
+
+  headers = add_header(headers, auth_token_header(cf_curl.auth_token));
+  request = cloudfiles_request(path);
+  request->size = st.st_size;
+  request->headers = headers_to_curl_slist(headers);
+
+  curl_easy_setopt(request->c, CURLOPT_INFILE, f);
 
   result = stormfs_curl_put(request);
   free_request(request);
