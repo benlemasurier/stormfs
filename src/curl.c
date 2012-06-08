@@ -563,12 +563,17 @@ get_etag_from_xml(char *xml)
   end_p   = strstr(xml, end_marker);
 
   tmp = g_strndup(start_p, end_p - start_p);
+  if (! tmp) {
+    perror("g_strndup");
+    exit(EXIT_FAILURE);
+  }
+
   if(asprintf(&etag, "\"%s\"", tmp) == -1) {
     fprintf(stderr, "unable to allocate memory\n");
     exit(EXIT_FAILURE);
   }
 
-  free(tmp);
+  g_free(tmp);
   return etag;
 }
 
@@ -819,16 +824,17 @@ static int
 sign_request(const char *method,
     struct curl_slist **headers, const char *path)
 {
-  char *signature;
-  char *to_sign;
-  char *date_header;
-  char *amz_headers;
-  char *content_type;
-  char *authorization;
+  char *signature = NULL;
+  char *to_sign = NULL;
+  char *date_header = NULL;
+  char *amz_headers = NULL;
+  char *content_type = NULL;
+  char *authorization = NULL;
   struct curl_slist *next = NULL;
   struct curl_slist *header = NULL;
   char *date = rfc2822_timestamp();
   char *resource = get_resource(path);
+  char *dummy = NULL;
 
   amz_headers  = g_malloc0(sizeof(char));
   content_type = g_malloc0(sizeof(char) * 2);
@@ -837,14 +843,27 @@ sign_request(const char *method,
     next = header->next;
 
     if(strstr(header->data, "x-amz") != NULL) {
-      amz_headers = realloc(amz_headers, sizeof(char) * strlen(amz_headers) +
+      dummy = realloc(amz_headers, sizeof(char) * strlen(amz_headers) +
                         strlen(header->data) + 2);
+      if (! dummy) {
+        perror("realloc");
+        exit(EXIT_FAILURE);
+      }
+
+      amz_headers = dummy;
       amz_headers = strncat(amz_headers, header->data, strlen(header->data));
       amz_headers = strncat(amz_headers, "\n", 1);
     } else if(strstr(header->data, "Content-Type") != NULL) {
       char *tmp = strstr(header->data, ":") + 1;
-      content_type = realloc(content_type, sizeof(char) * strlen(content_type) +
+
+      dummy = realloc(content_type, sizeof(char) * strlen(content_type) +
                         strlen(content_type) + strlen(tmp) + 2);
+      if (! dummy) {
+        perror("realloc");
+        exit(EXIT_FAILURE);
+      }
+
+      content_type = dummy;
       content_type = strncat(content_type, tmp, strlen(tmp));
     }
 
@@ -1433,9 +1452,12 @@ stormfs_curl_head_multi(const char *path, GList *files)
 int
 stormfs_curl_list_bucket(const char *path, char **xml)
 {
-  int result;
-  char *marker = g_strdup("");
+  int result = -1;
+  char *marker = strdup("");
   bool truncated = TRUE;
+
+  if (! marker)
+    return result;
 
   while(truncated) {
     char *url = get_list_bucket_url(path, marker);
@@ -1598,10 +1620,23 @@ complete_multipart_xml(GList *parts)
 {
   int result;
   GList *head = NULL, *next = NULL;
-  char *xml = strdup("<CompleteMultipartUpload>\n");
+  char *tmp = NULL;
+  char *xml = NULL;
 
-  xml = realloc(xml, sizeof(char) *
-      strlen(xml) + (g_list_length(parts) * 150));
+  xml = strdup("<CompleteMultipartUpload>\n");
+  if (! xml) {
+    perror("strdup");
+    exit(EXIT_FAILURE);
+  }
+
+  tmp = realloc(xml, sizeof(char) *
+                strlen(xml) + (g_list_length(parts) * 150));
+  if (! tmp) {
+    perror("realloc");
+    exit(EXIT_FAILURE);
+  }
+
+  xml = tmp;
 
   head = g_list_first(parts);
   while(head != NULL) {
@@ -1780,7 +1815,7 @@ create_file_parts(const char *path, char *upload_id, int fd)
   int part_num = 1;
   bytes_remaining = st.st_size;
   while(bytes_remaining > 0) {
-    char *buf;
+    char *buf = NULL;
     size_t nbytes;
     FILE *tmp_f;
     FILE_PART *fp = create_part(part_num, upload_id);
@@ -1797,6 +1832,7 @@ create_file_parts(const char *path, char *upload_id, int fd)
 
     if((tmp_f = fdopen(fp->fd, "wb")) == NULL) {
       perror("fdopen");
+      free(buf);
       return NULL;
     }
 

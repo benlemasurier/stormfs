@@ -89,14 +89,21 @@ valid_path(const char *path)
 {
   char *p = NULL;
   char *tmp = strdup(path);
+  if (! tmp)
+    return -ENOMEM;
 
-  if(strlen(path) > PATH_MAX)
+
+  if(strlen(path) > PATH_MAX)  {
+    free(tmp);
     return -ENAMETOOLONG;
+  }
 
   p = strtok(tmp, "/");
   while(p != NULL) {
-    if(strlen(p) > NAME_MAX)
+    if(strlen(p) > NAME_MAX) {
+      free(tmp);
       return -ENAMETOOLONG;
+    }
 
     p = strtok(NULL, "/");
   }
@@ -150,6 +157,8 @@ cache_mkpath(const char *path)
 
   tmp = g_malloc0(sizeof(char) *
       strlen(stormfs.cache_path) + strlen(dir) + 1);
+  if (! tmp)
+    return -ENOMEM;
 
   p = strtok(dir, "/");
   while(p != NULL) {
@@ -303,8 +312,13 @@ cache_invalidate_dir(const char *path)
       g_hash_table_remove(cache.files, "/");
     else {
       char *parent = g_strndup(path, s - path);
+      if (! parent) {
+        perror("g_strndup");
+        return;
+      }
+
       cache_invalidate(parent);
-      free(parent);
+      g_free(parent);
     }
   }
 }
@@ -523,7 +537,13 @@ get_mime_type(const char *filename)
 {
   char *type = NULL;
   char *p = NULL, *ext = NULL;
-  char *name = strdup(filename);
+  char *name = NULL;
+
+  name = strdup(filename);
+  if (! name) {
+    perror("strdup");
+    return NULL;
+  }
 
   p = strtok(name, ".");
   while(p != NULL) {
@@ -536,6 +556,7 @@ get_mime_type(const char *filename)
 
   if(strcmp(filename, ext) == 0) {
     free(name);
+    free(ext);
     return NULL;
   }
 
@@ -1292,6 +1313,10 @@ parse_config(const char *path)
   char *p = NULL;
   char buf[BUFSIZ + 1];
   struct stat *st = g_malloc0(sizeof(struct stat));
+  if (! st) {
+    perror("g_malloc0");
+    exit(EXIT_FAILURE);
+  }
 
   if(stat(path, st) == -1) {
     fprintf(stderr, "%s: missing configuration file %s\n",
