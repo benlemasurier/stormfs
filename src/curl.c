@@ -23,7 +23,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <curl/curl.h>
-#include <curl/types.h>
 #include <curl/easy.h>
 #include <pthread.h>
 #include <glib.h>
