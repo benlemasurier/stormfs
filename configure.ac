@@ -1,4 +1,4 @@
-AC_INIT(stormfs, [0.02])
+AC_INIT(stormfs, [0.03])
 AM_INIT_AUTOMAKE
 AC_CONFIG_HEADER(config.h)
 AC_CONFIG_SRCDIR(src/stormfs.c)
