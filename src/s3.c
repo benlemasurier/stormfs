@@ -64,9 +64,14 @@ xml_to_files(const char *path, char *xml)
     char *end_p = strstr(start_p, "</Key>");
 
     name = g_strndup(start_p, end_p - start_p);
+    if (! name) {
+      perror("g_strndup");
+      return NULL;
+    }
+
     fullpath = get_path(path, name);
     files = add_file_to_list(files, fullpath, NULL);
-    free(name);
+    g_free(name);
     free(fullpath);
 
     if((start_p = strstr(end_p, "<Key>")) != NULL)
@@ -319,6 +324,10 @@ s3_rename_directory(const char *from, const char *to, struct stat *st)
     struct stat stbuf;
 
     tmp = g_strndup(start_p, end_p - start_p);
+    if (! tmp) {
+      return -ENOMEM;
+    }
+
     name = basename(tmp);
     file_from = get_path(from, name);
     file_to   = get_path(to, name);
@@ -334,7 +343,7 @@ s3_rename_directory(const char *from, const char *to, struct stat *st)
         return result;
     }
 
-    free(tmp);
+    g_free(tmp);
     free(file_to);
     free(file_from);
 
